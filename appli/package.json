@@ -1,0 +1,19 @@
+{
+  "name": "pense-bete",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pense-bête : routines, clients et parcours, rappels et RDV",
+  "scripts": {},
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.3",
+    "@ebarooni/capacitor-calendar": "^8.9.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}

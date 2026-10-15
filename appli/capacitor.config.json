@@ -1,0 +1,14 @@
+{
+  "appId": "fr.oikos.pensebete",
+  "appName": "Pense-bête",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_pb",
+      "iconColor": "#2346d8"
+    }
+  }
+}

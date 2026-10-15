@@ -1,0 +1,24 @@
+# Données personnelles : JAMAIS sur GitHub
+appli/seed-export/
+appli/www/
+appli/android/app/src/main/assets/public/
+appli/android/app/src/main/assets/capacitor.config.json
+*.json.bak
+sauvegarde*.json
+pense-bete-sauvegarde-*.json
+rappel-*.ics
+
+# Clé de signature (elle reste dans C:\Users\houss\android-outils\cle-signature)
+*.jks
+*.keystore
+signature.properties
+
+# Fichiers fabriqués / téléchargés
+*.apk
+appli/node_modules/
+appli/android/build/
+appli/android/app/build/
+appli/android/.gradle/
+appli/android/local.properties
+appli/android/capacitor-cordova-android-plugins/
+appli/_test.html
