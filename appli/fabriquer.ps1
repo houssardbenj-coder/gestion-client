@@ -13,4 +13,5 @@ Set-Location android
 if ($LASTEXITCODE -ne 0) { throw "Echec fabrication Android (code $LASTEXITCODE)" }
 Copy-Item app\build\outputs\apk\release\app-release.apk ..\..\Pense-bete.apk -Force
 Copy-Item app\build\outputs\apk\release\app-release.apk "$env:USERPROFILE\Desktop\Pense-bete.apk" -Force
+Copy-Item app\build\outputs\apk\release\app-release.apk ..\..\docs\Pense-bete.apk -Force
 Write-Host "OK : Pense-bete.apk mis a jour (projet + Bureau)."

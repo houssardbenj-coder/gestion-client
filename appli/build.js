@@ -1,5 +1,7 @@
 // Assemble l'interface de l'appli à partir de ../pense-bete.html + src/ :
-//  - www/index.html  : version embarquée dans l'APK (avec les données de départ de seed-export/, jamais publiées)
+//  - www/index.html  : version embarquée dans l'APK (SANS données : l'APK est publié sur GitHub)
+//  - sauvegarde-depart.json : données de seed-export/ au format « Restaurer une sauvegarde » de l'appli
+//    (fichier privé, jamais publié, copié aussi sur le Bureau)
 //  - ../docs/app.html + ../docs/version.json : version publiée sur GitHub Pages, SANS aucune donnée,
 //    que l'appli télécharge toute seule (mise à jour automatique).
 // Numéro de version de l'interface : version-interface.txt (à augmenter à chaque mise à jour).
@@ -45,7 +47,13 @@ ${page}
 </body></html>`;
 
 fs.mkdirSync(path.join(here, "www"), { recursive: true });
-fs.writeFileSync(path.join(here, "www", "index.html"), html(true));
+fs.writeFileSync(path.join(here, "www", "index.html"), html(false));
+if (Object.keys(seed).length) {
+  const backup = JSON.stringify({ app: "pense-bete", version: 1, exportedAt: new Date().toISOString(), data: seed }, null, 1);
+  fs.writeFileSync(path.join(here, "sauvegarde-depart.json"), backup);
+  const desk = path.join(process.env.USERPROFILE || "", "Desktop");
+  if (fs.existsSync(desk)) fs.writeFileSync(path.join(desk, "pense-bete-mes-donnees.json"), backup);
+}
 
 const docs = path.join(here, "..", "docs");
 fs.mkdirSync(docs, { recursive: true });
@@ -55,6 +63,6 @@ for (const col of Object.keys(seed))
     if (id.length > 3 && pub.includes(id)) throw new Error("Donnée personnelle trouvée dans la version publique : " + col + "/" + id);
 fs.writeFileSync(path.join(docs, "app.html"), pub);
 fs.writeFileSync(path.join(docs, "version.json"), JSON.stringify({ version, notes }, null, 1) + "\n");
-fs.writeFileSync(path.join(docs, "index.html"), `<!doctype html><meta charset="utf-8"><title>Pense-bête</title><p>Fichiers de mise à jour de l'appli Pense-bête (version ${version}). Aucune donnée personnelle n'est stockée ici.</p>\n`);
+fs.writeFileSync(path.join(docs, "index.html"), read("src/telechargement.html").replace(/\{\{VERSION\}\}/g, String(version)));
 
-console.log(`Interface v${version} ; www/index.html ${Math.round(html(true).length / 1024)} Ko ; docs/app.html ${Math.round(pub.length / 1024)} Ko ; mise à jour : ${updateUrl || "(adresse non configurée)"}`);
+console.log(`Interface v${version} ; www/index.html ${Math.round(html(false).length / 1024)} Ko ; docs/app.html ${Math.round(pub.length / 1024)} Ko ; mise à jour : ${updateUrl || "(adresse non configurée)"}`);
