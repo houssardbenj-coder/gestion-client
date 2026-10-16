@@ -31,6 +31,7 @@ if (fs.existsSync(seedDir)) {
 const page = fs.readFileSync(path.join(here, "..", "pense-bete.html"), "utf8");
 const localdb = read("src/localdb.js");
 const native = read("src/native.js");
+const capCore = fs.readFileSync(path.join(here, "node_modules", "@capacitor", "core", "dist", "capacitor.js"), "utf8").replace(/\/\/# sourceMappingURL=.*$/m, "");
 const safe = s => s.replace(/<\/script/gi, "<\\/script");
 
 const html = withSeed => `<!doctype html><html lang="fr"><head><meta charset="utf-8">
@@ -41,6 +42,7 @@ body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transpa
 <script>window.PB_VERSION=${version};window.PB_UPDATE_URL=${JSON.stringify(updateUrl)};</script>
 <script>window.PB_SEED=${withSeed ? safe(JSON.stringify(seed)) : "{}"};</script>
 <script>${safe(localdb)}</script>
+<script>${safe(capCore)}</script>
 <script>${safe(native)}</script>
 </head><body>
 ${page}

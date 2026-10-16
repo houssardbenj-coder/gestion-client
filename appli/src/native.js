@@ -2,11 +2,14 @@
 (function(){
   const C=window.Capacitor;
   if(!C||!C.isNativePlatform||!C.isNativePlatform())return;
-  const LN=C.registerPlugin("LocalNotifications");
-  const CAL=C.registerPlugin("CapacitorCalendar");
-  const FS=C.registerPlugin("Filesystem");
-  const SH=C.registerPlugin("Share");
-  const APP=C.registerPlugin("App");
+  // registerPlugin vient du module Capacitor inclus dans la page (capacitorExports) ; le pont natif seul ne le fournit pas
+  const REG=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C.registerPlugin&&C.registerPlugin.bind(C));
+  if(!REG){console.error("Capacitor : registerPlugin introuvable");return}
+  const LN=REG("LocalNotifications");
+  const CAL=REG("CapacitorCalendar");
+  const FS=REG("Filesystem");
+  const SH=REG("Share");
+  const APP=REG("App");
   const pad=n=>String(n).padStart(2,"0");
   const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
   const dim=(y,m)=>new Date(y,m+1,0).getDate();
@@ -80,7 +83,7 @@
   // version.json : {"version": N, "notes": "..."} ; app.html : la nouvelle interface complète.
   // Elle est copiée dans le stockage de l'appli puis chargée à la place de celle d'origine
   // (même adresse interne, donc les données restent). Un nouvel APK installé reprend la main.
-  const WV=C.registerPlugin("WebView");
+  const WV=REG("WebView");
   let checking=false,lastCheck=0;
   async function checkUpdate(manual){
     const base=window.PB_UPDATE_URL;
