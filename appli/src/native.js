@@ -29,6 +29,7 @@
     else if(r.freq==="quarterly"){const qs=Math.floor(m/3)*3;
       for(let k=0;k<5;k++){const mo=qs+3*k+Number(r.monthOffset||0);const d=new Date(y,mo,1,hh,mm);d.setDate(Math.min(Number(r.day||1),dim(d.getFullYear(),d.getMonth())));
         const q=Math.floor((qs+3*k)%12/3)+1, qy=new Date(y,qs+3*k,1).getFullYear();out.push({at:d,key:qy+"-T"+q})}}
+    else if(r.freq==="yearly"){for(let k=0;k<3;k++){const yy=y+k,mo=Number(r.month||0);const d=new Date(yy,mo,Math.min(Number(r.day||1),dim(yy,mo)),hh,mm);out.push({at:d,key:String(yy)})}}
     else{for(let k=0;k<13;k++){const d=new Date(y,m+k,1,hh,mm);d.setDate(Math.min(Number(r.day||1),dim(d.getFullYear(),d.getMonth())));out.push({at:d,key:d.getFullYear()+"-"+pad(d.getMonth()+1)})}}
     return out;
   }
@@ -49,6 +50,10 @@
       if((l.status&&l.status!=="open")||!l.when)return;
       if(l.type==="rdv"){const at=l.when-3600e3;if(at>now)list.push({key:"l:"+id+":"+l.when,at:new Date(at),title:"📅 RDV dans 1 h : "+name(l),body:[l.address,l.phone].filter(Boolean).join(" · ")||"Rendez-vous"});}
       else if(l.when>now)list.push({key:"l:"+id+":"+l.when,at:new Date(l.when),title:"📞 À rappeler : "+name(l),body:[l.phone,l.reason].filter(Boolean).join(" · ")||"Rappel client"});
+    });
+    Object.entries(D.appts||{}).forEach(([id,a])=>{
+      if(a.done||!a.when)return;const at=a.when-3600e3;const c=a.customerId&&(D.customers||{})[a.customerId];const who=c?name(c):name(a);
+      if(at>now)list.push({key:"a:"+id+":"+a.when,at:new Date(at),title:"📅 RDV dans 1 h : "+who,body:[a.address||(c&&c.address),a.phone||(c&&c.phone)].filter(Boolean).join(" · ")||"Rendez-vous"});
     });
     Object.entries(D.projects||{}).forEach(([id,p])=>{
       if(!p.rdv)return;const at=p.rdv-3600e3;

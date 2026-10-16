@@ -1,1 +1,1 @@
-Correction : notifications, agenda et mises à jour automatiques
+RDV simples, tâches du jour, pause/archives, routine annuelle

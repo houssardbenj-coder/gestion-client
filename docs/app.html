@@ -3,19 +3,36 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=8;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=9;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
-// donc le Pense-bête fonctionne sans modification.
+// donc l'interface fonctionne sans modification.
+// Chaque collection est rangée sous sa propre clé (pb-c-<nom>) : une modification
+// ne réécrit que sa collection, ce qui reste rapide même avec des années de tâches.
 (function(){
-  const KEY="pb-data-v1";
+  const OLD_KEY="pb-data-v1", PREFIX="pb-c-";
   let data={};
-  try{data=JSON.parse(localStorage.getItem(KEY)||"null")||null}catch(e){data=null}
-  if(!data){data=JSON.parse(JSON.stringify(window.PB_SEED||{}));persist()}
+  const load=()=>{const out={};
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
+      if(k&&k.startsWith(PREFIX)){try{out[k.slice(PREFIX.length)]=JSON.parse(localStorage.getItem(k))||{}}catch(e){}}}
+    return out};
+  try{
+    data=load();
+    const old=localStorage.getItem(OLD_KEY);
+    if(old){ // ancien format (une seule clé) : on le découpe une fois
+      const o=JSON.parse(old)||{};
+      for(const c of Object.keys(o)){if(!data[c]){data[c]=o[c];localStorage.setItem(PREFIX+c,JSON.stringify(o[c]))}}
+      localStorage.removeItem(OLD_KEY);
+    }
+    if(!Object.keys(data).length&&window.PB_SEED&&Object.keys(window.PB_SEED).length){
+      data=JSON.parse(JSON.stringify(window.PB_SEED));Object.keys(data).forEach(persist);
+    }
+  }catch(e){console.error("Lecture des données impossible",e)}
   const subs={};
 
-  function persist(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){console.error("Sauvegarde locale impossible",e)}}
+  function persist(c){try{localStorage.setItem(PREFIX+c,JSON.stringify(data[c]||{}))}catch(e){console.error("Sauvegarde locale impossible",e);
+    const s=document.getElementById("status");if(s)s.textContent="⚠️ Mémoire de l'appli pleine : fais une sauvegarde puis contacte-moi.";}}
   function snap(c,order){
     let docs=Object.entries(data[c]||{}).map(([id,b])=>({id,exists:true,metadata:{fromCache:false,hasPendingWrites:false},data:()=>JSON.parse(JSON.stringify(b))}));
     if(order)docs.sort((a,b)=>{const x=a.data()[order],y=b.data()[order];return (x??Infinity)-(y??Infinity)});
@@ -37,19 +54,21 @@ body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transpa
       const [c,id]=path.split("/");
       return {id,path,
         async get(){const b=(data[c]||{})[id];return {id,exists:!!b,data:()=>b&&JSON.parse(JSON.stringify(b))}},
-        async set(body){(data[c]=data[c]||{})[id]=JSON.parse(JSON.stringify(body));persist();fire(c)},
-        async update(body){if(!(data[c]||{})[id])throw {code:"invalid_argument"};Object.assign(data[c][id],JSON.parse(JSON.stringify(body)));persist();fire(c)},
-        async delete(){if(data[c]){delete data[c][id];persist();fire(c)}}};
+        async set(body){(data[c]=data[c]||{})[id]=JSON.parse(JSON.stringify(body));persist(c);fire(c)},
+        async update(body){if(!(data[c]||{})[id])throw {code:"invalid_argument"};Object.assign(data[c][id],JSON.parse(JSON.stringify(body)));persist(c);fire(c)},
+        async delete(){if(data[c]){delete data[c][id];persist(c);fire(c)}}};
     }
   };
 
   window.PB_store={
     all:()=>data,
+    sizeKB:()=>{let n=0;for(const c of Object.keys(data))n+=(localStorage.getItem(PREFIX+c)||"").length;return Math.round(n*2/1024)},
     exportJSON:()=>JSON.stringify({app:"pense-bete",version:1,exportedAt:new Date().toISOString(),data},null,1),
     importJSON(text){
       const o=JSON.parse(text);
       if(!o||o.app!=="pense-bete"||typeof o.data!=="object")throw new Error("format");
-      data=o.data;persist();Object.keys(subs).forEach(fire);
+      Object.keys(data).forEach(c=>localStorage.removeItem(PREFIX+c));
+      data=o.data;Object.keys(data).forEach(persist);Object.keys(subs).forEach(fire);
     }
   };
   window.claude={use:async n=>n==="db"?db:null};
@@ -90,6 +109,7 @@ var capacitorExports=function(e){"use strict";var t;e.ExceptionCode=void 0,(t=e.
     else if(r.freq==="quarterly"){const qs=Math.floor(m/3)*3;
       for(let k=0;k<5;k++){const mo=qs+3*k+Number(r.monthOffset||0);const d=new Date(y,mo,1,hh,mm);d.setDate(Math.min(Number(r.day||1),dim(d.getFullYear(),d.getMonth())));
         const q=Math.floor((qs+3*k)%12/3)+1, qy=new Date(y,qs+3*k,1).getFullYear();out.push({at:d,key:qy+"-T"+q})}}
+    else if(r.freq==="yearly"){for(let k=0;k<3;k++){const yy=y+k,mo=Number(r.month||0);const d=new Date(yy,mo,Math.min(Number(r.day||1),dim(yy,mo)),hh,mm);out.push({at:d,key:String(yy)})}}
     else{for(let k=0;k<13;k++){const d=new Date(y,m+k,1,hh,mm);d.setDate(Math.min(Number(r.day||1),dim(d.getFullYear(),d.getMonth())));out.push({at:d,key:d.getFullYear()+"-"+pad(d.getMonth()+1)})}}
     return out;
   }
@@ -110,6 +130,10 @@ var capacitorExports=function(e){"use strict";var t;e.ExceptionCode=void 0,(t=e.
       if((l.status&&l.status!=="open")||!l.when)return;
       if(l.type==="rdv"){const at=l.when-3600e3;if(at>now)list.push({key:"l:"+id+":"+l.when,at:new Date(at),title:"📅 RDV dans 1 h : "+name(l),body:[l.address,l.phone].filter(Boolean).join(" · ")||"Rendez-vous"});}
       else if(l.when>now)list.push({key:"l:"+id+":"+l.when,at:new Date(l.when),title:"📞 À rappeler : "+name(l),body:[l.phone,l.reason].filter(Boolean).join(" · ")||"Rappel client"});
+    });
+    Object.entries(D.appts||{}).forEach(([id,a])=>{
+      if(a.done||!a.when)return;const at=a.when-3600e3;const c=a.customerId&&(D.customers||{})[a.customerId];const who=c?name(c):name(a);
+      if(at>now)list.push({key:"a:"+id+":"+a.when,at:new Date(at),title:"📅 RDV dans 1 h : "+who,body:[a.address||(c&&c.address),a.phone||(c&&c.phone)].filter(Boolean).join(" · ")||"Rendez-vous"});
     });
     Object.entries(D.projects||{}).forEach(([id,p])=>{
       if(!p.rdv)return;const at=p.rdv-3600e3;
@@ -425,6 +449,29 @@ label.btn{display:inline-flex;align-items:center}
 .achk input{width:18px;height:18px;accent-color:var(--ac)}
 .adot{width:14px;height:14px;border-radius:50%;background:var(--ac);flex:none;align-self:center}
 input[type=search],input[type=date]{font:500 1rem var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+.tlist{display:flex;flex-direction:column}
+.trow{display:flex;align-items:center;gap:10px;padding:9px 12px 9px 16px;border-top:1px solid var(--line)}
+.trow:first-child{border-top:0}
+.trow-t{width:48px;flex:none;font:600 .85rem var(--body);font-variant-numeric:tabular-nums}
+.trow.late .trow-t{color:var(--warn)}
+.trow-x{flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;font:inherit;color:var(--ink);cursor:pointer}
+.trow-x b{font-weight:600;overflow-wrap:anywhere}
+.trow-x span{font-size:.8rem;color:var(--muted);overflow-wrap:anywhere}
+.mini{flex:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--paper);display:grid;place-items:center;text-decoration:none;font-size:1rem;cursor:pointer;color:var(--ok)}
+details.wk>summary{cursor:pointer;padding:12px 16px;font:600 .9rem var(--body);list-style:none}
+details.wk>summary::-webkit-details-marker{display:none}
+.tk-add{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.tk-add input{flex:1 1 160px}
+.tk-add select{width:auto;flex:none}
+.tk-from{display:block;font-size:.75rem;color:var(--warn)}
+.tk-com{display:block!important;padding:0 16px 10px 54px!important;border-bottom:1px solid var(--line)}
+.tk-com textarea{min-height:60px}
+.ta-day{display:flex;flex-direction:column;gap:6px}
+.ta-row{display:flex;gap:10px;padding:6px 10px;border-radius:8px;background:var(--bg)}
+.ta-row>span{font-weight:700}
+.ta-row.ok>span{color:var(--ok)} .ta-row.ko>span{color:var(--warn)}
+.ta-row div{display:flex;flex-direction:column;min-width:0}
+.ta-row small{color:var(--muted);overflow-wrap:anywhere}
 .dayinfo{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .dayinfo:empty{display:none}
 .day-h{font:600 .8rem var(--body);color:var(--muted)}
@@ -467,11 +514,12 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
-const FREQ={monthly:"Chaque mois",weekly:"Chaque semaine",daily:"Chaque jour",quarterly:"Chaque trimestre"};
+const FREQ={monthly:"Chaque mois",weekly:"Chaque semaine",daily:"Chaque jour",quarterly:"Chaque trimestre",yearly:"Chaque année"};
 
 let db=null, routines=[], runs={}, tab="now", pending={};
 let projects=[], models=[], leads=[], projFilter="leads", openP=new Set();
 let customers=[], activities=[], custAct="all", custStatus="actif", custQ="";
+let appts=[], tasks=[], openTk=new Set();
 try{tab=localStorage.getItem("pb-tab")||"now";if(tab==="hist")tab="all";projFilter=localStorage.getItem("pb-pf")||"leads"}catch(e){}
 
 const pad=n=>String(n).padStart(2,"0");
@@ -494,6 +542,10 @@ function periodOf(r,ref){
     const due=new Date(y,fm,Math.min(Number(r.day||1),dim(y,fm)));
     return {key:y+"-T"+(q+1),due,label:"T"+(q+1)+" "+y};
   }
+  if(r.freq==="yearly"){
+    const mo=Number(r.month||0);const due=new Date(y,mo,Math.min(Number(r.day||1),dim(y,mo)));
+    return {key:String(y),due,label:"année "+y};
+  }
   const due=new Date(y,m,Math.min(Number(r.day||1),dim(y,m)));
   return {key:y+"-"+pad(m+1),due,label:MOIS[m]+" "+y};
 }
@@ -501,11 +553,13 @@ function prevRef(r,n){const d=new Date();d.setHours(12);
   if(r.freq==="daily")d.setDate(d.getDate()-n);
   else if(r.freq==="weekly")d.setDate(d.getDate()-7*n);
   else if(r.freq==="quarterly"){d.setDate(1);d.setMonth(d.getMonth()-3*n)}
+  else if(r.freq==="yearly"){d.setDate(1);d.setFullYear(d.getFullYear()-n)}
   else{d.setDate(1);d.setMonth(d.getMonth()-n)}
   return d}
 function whenText(r){
   if(r.freq==="daily")return "Chaque jour";
   if(r.freq==="weekly")return "Chaque "+JOURS[Number(r.weekday||1)%7];
+  if(r.freq==="yearly")return "Chaque année le "+(r.day==1?"1er":(r.day||1))+" "+MOIS[Number(r.month||0)];
   if(r.freq==="quarterly")return "Trimestre : le "+(r.day||1)+" du "+["1er","2e","3e"][Number(r.monthOffset||0)]+" mois";
   return "Le "+(r.day==1?"1er":r.day)+" de chaque mois";
 }
@@ -541,8 +595,7 @@ function render(){
   if(tab==="agenda"){v.innerHTML=renderAgenda();const n=v.querySelector(".ag-now")||v.querySelector(".ag-ev");if(n&&!agScrolled){agScrolled=true;n.scrollIntoView({block:"center"})}return}
   const today=new Date();today.setHours(0,0,0,0);
   if(tab==="now"){
-    const dueLeads=openLeads().filter(l=>!l.when||l.when<=endToday());
-    const leadsH=planningHTML()+(dueLeads.length?`<div class="section-label">Rappels et RDV du jour</div>`+dueLeads.map(leadCard).join(""):"");
+    const leadsH=todayHTML()+tasksHTML()+resumeHTML()+weekHTML();
     if(!routines.length){v.innerHTML=`<div style="display:flex;flex-direction:column;gap:14px">${leadsH}<div class="card empty"><strong>Aucune routine pour l'instant</strong>Crée ta première liste via « + Routine ».</div></div>`;return}
     const due=[],soon=[],done=[];
     routines.forEach(r=>{const p=periodOf(r);const {n,total}=progress(r,p);
@@ -585,6 +638,8 @@ function agItems(a,b){
     if((l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:fullName(l),sub:l.type==="rdv"?(l.address||"RDV"):"À rappeler"+(l.phone?" · "+l.phone:""),kind:l.type==="rdv"?"rdv":"call",ref:"lead:"+l.id})});
   projects.forEach(p=>{if(p.calId)mine.add(String(p.calId));
     if(p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:fullName(p),sub:p.address||"RDV client",kind:"rdv",ref:"proj:"+p.id})});
+  appts.forEach(x=>{if(x.calId)mine.add(String(x.calId));
+    if(!x.done&&x.when&&x.when>=a&&x.when<b)items.push({t:x.when,end:x.when+durOf("appts",x)*6e4,title:apptName(x),sub:x.address||x.note||"RDV",kind:"rdv",ref:"appt:"+x.id})});
   (agEvents||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;
     if(!mine.has(String(e.id))&&e.startDate<b&&end>a)items.push({t:e.startDate,end,title:e.title||"(sans titre)",sub:e.location||"",kind:"cal",allDay:e.isAllDay,ref:"cal:"+e.id})});
   routines.forEach(r=>{const p=periodOf(r);const {n,total}=progress(r,p);const t=p.due.getTime();
@@ -643,6 +698,8 @@ function busyItems(a,b,events,selfKind,selfId){
     if(!self&&(l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:(l.type==="rdv"?"RDV ":"Rappel ")+fullName(l),kind:l.type==="rdv"?"rdv":"call"})});
   projects.forEach(p=>{const self=selfKind==="projects"&&p.id===selfId;if(p.calId)mine.add(String(p.calId));
     if(!self&&p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:"RDV "+fullName(p),kind:"rdv"})});
+  appts.forEach(x=>{const self=selfKind==="appts"&&x.id===selfId;if(x.calId)mine.add(String(x.calId));
+    if(!self&&!x.done&&x.when&&x.when>=a&&x.when<b)items.push({t:x.when,end:x.when+durOf("appts",x)*6e4,title:"RDV "+apptName(x),kind:"rdv"})});
   (events||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;if(!mine.has(String(e.id))&&e.startDate<b&&end>a)items.push({t:e.startDate,end,title:e.title||"(sans titre)",kind:"cal",allDay:e.isAllDay})});
   return items.sort((x,y)=>x.t-y.t);
 }
@@ -698,7 +755,7 @@ function pkTap(e){
 function agTap(e){
   const grid=e.target.closest&&e.target.closest("#ag-grid");if(!grid||e.target.closest(".ag-ev"))return false;
   const r=grid.getBoundingClientRect();const mins=Number(grid.dataset.h0)*60+Math.floor((e.clientY-r.top)/AG_PX*2)*30;
-  openLeadSheet(null,{type:"rdv",when:agDay+mins*6e4});return true;
+  openApptSheet(null,{when:agDay+mins*6e4});return true;
 }
 
 // ===== Clients : demandes (rappel / RDV) et parcours types suivis sur un rail =====
@@ -706,6 +763,8 @@ const fmtD=ts=>{const d=new Date(ts);return d.getDate()+" "+MOIS[d.getMonth()]+(
 const fmtDT=ts=>{const d=new Date(ts);return JOURS[d.getDay()].slice(0,3)+". "+d.getDate()+" "+MOIS[d.getMonth()]+" à "+d.getHours()+"h"+pad(d.getMinutes())};
 const toLocalInput=ts=>{if(!ts)return "";const d=new Date(ts);return ymd(d)+"T"+pad(d.getHours())+":"+pad(d.getMinutes())};
 const fullName=x=>[x.firstName,x.lastName].filter(Boolean).join(" ")||x.title||"Sans nom";
+const apptName=a=>{const c=a.customerId&&customers.find(x=>x.id===a.customerId);return c?fullName(c):fullName(a)};
+const openAppts=()=>appts.filter(a=>!a.done);
 const telHref=t=>"tel:"+String(t||"").replace(/[^\d+]/g,"");
 const mapsHref=a=>"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(a);
 const LTYPE={rappel:"À rappeler",rdv:"RDV demandé"};
@@ -764,9 +823,10 @@ const NATIVE=window.PB_native||null;
 // Durée d'un RDV / rappel en minutes
 const DURS=[15,30,45,60,90,120,180,240];
 const durLabel=m=>m<60?m+" min":Math.floor(m/60)+" h"+(m%60?" "+pad(m%60):"");
-const durOf=(kind,x)=>kind==="leads"?Number(x.dur||(x.type==="rdv"?60:15)):Number(x.rdvDur||60);
+const durOf=(kind,x)=>kind==="leads"?Number(x.dur||(x.type==="rdv"?60:15)):kind==="appts"?Number(x.dur||60):Number(x.rdvDur||60);
+const whenOf=(kind,x)=>kind==="projects"?x.rdv:x.when;
 const durSelect=(id,val)=>`<select id="${id}">`+DURS.map(m=>`<option value="${m}" ${Number(val)===m?"selected":""}>${durLabel(m)}</option>`).join("")+`</select>`;
-const inAgenda=(kind,x)=>{const w=kind==="leads"?x.when:x.rdv;return !!(x.calId&&x.calAt===w&&Number(x.calDur||0)===durOf(kind,x))};
+const inAgenda=(kind,x)=>{const w=whenOf(kind,x);return !!(x.calId&&x.calAt===w&&Number(x.calDur||durOf(kind,x))===durOf(kind,x))};
 let agenda=null, agendaState="unknown";
 function calButton(kind,x,when){
   if(!NATIVE||!when||when<Date.now())return "";
@@ -775,11 +835,13 @@ function calButton(kind,x,when){
 }
 // Envoie (ou met à jour) l'événement dans l'agenda Google du téléphone
 async function pushToAgenda(kind,x){
-  const when=kind==="leads"?x.when:x.rdv;const isRdv=kind==="projects"||x.type==="rdv";
+  if(kind==="appts"){const c=x.customerId&&customers.find(o=>o.id===x.customerId);if(c)x={...c,...x,firstName:c.firstName,lastName:c.lastName,phone:x.phone||c.phone,address:x.address||c.address}}
+  const when=whenOf(kind,x);const isRdv=kind!=="leads"||x.type==="rdv";
   const desc=[x.phone?"Tél : "+x.phone:"",x.reason?"Motif : "+x.reason:"",x.note||"",x.model?"Parcours : "+x.model:""].filter(Boolean).join(" · ");
   try{
-    const calId=await NATIVE.addEvent({title:(isRdv?"RDV – ":"Rappeler – ")+fullName(x),start:when,end:when+durOf(kind,x)*6e4,minutes:isRdv?60:15,location:x.address||"",description:desc,calId:x.calId});
-    x.calId=String(calId||"ok");x.calAt=when;x.calDur=durOf(kind,x);writeDoc(kind+"/"+x.id,kind==="leads"?leadBody(x):projBody(x));
+    const calId=await NATIVE.addEvent({title:(isRdv?"RDV – ":"Rappeler – ")+(kind==="appts"?apptName(x):fullName(x)),start:when,end:when+durOf(kind,x)*6e4,minutes:isRdv?60:15,location:x.address||"",description:desc,calId:x.calId});
+    const orig=kind==="appts"?appts.find(o=>o.id===x.id)||x:x;
+    orig.calId=String(calId||"ok");orig.calAt=when;orig.calDur=durOf(kind,x);writeDoc(kind+"/"+x.id,kind==="leads"?leadBody(orig):kind==="appts"?apptBody(orig):projBody(orig));
     $("#status").textContent="📅 Ajouté à ton agenda.";render();loadAgenda();return true;
   }catch(err){$("#status").textContent=err&&err.message==="denied"?"Autorise l'accès à l'agenda : Réglages du téléphone → Applis → Pense intelligent → Autorisations → Agenda.":"Impossible d'ajouter à l'agenda.";return false}
 }
@@ -791,6 +853,8 @@ async function dayItems(when,selfKind,selfId){
     if(!self&&(l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:(l.type==="rdv"?"RDV – ":"Rappeler – ")+fullName(l)})});
   projects.forEach(p=>{const self=selfKind==="projects"&&p.id===selfId;if(p.calId)mine.add(String(p.calId));
     if(!self&&p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:"RDV – "+fullName(p)})});
+  appts.forEach(x=>{const self=selfKind==="appts"&&x.id===selfId;if(x.calId)mine.add(String(x.calId));
+    if(!self&&!x.done&&x.when&&x.when>=a&&x.when<b)items.push({t:x.when,end:x.when+durOf("appts",x)*6e4,title:"RDV – "+apptName(x)})});
   if(NATIVE&&agendaState==="granted"){try{(await NATIVE.listEvents(a,b)).forEach(e=>{if(!mine.has(String(e.id)))items.push({t:e.startDate,end:e.endDate||e.startDate+3600e3,title:e.title||"(sans titre)",allDay:e.isAllDay,phone:true})})}catch(e){}}
   return items.sort((x,y)=>x.t-y.t);
 }
@@ -829,7 +893,7 @@ function nativeToolsHTML(){
   if(!NATIVE)return "";
   return `<div class="section-label">Mes données et rappels</div><article class="card"><div class="pnote" style="padding-top:14px">Tout est enregistré sur ce téléphone. Fais une sauvegarde de temps en temps et garde-la sur ton Drive ou envoie-la-toi par mail.</div>
   <div class="adv"><button class="btn" data-backup="1">Sauvegarder mes données</button><label class="btn" for="restore-file">Restaurer une sauvegarde</label><input type="file" id="restore-file" accept="application/json,.json" hidden></div>
-  <div class="adv"><button class="iconbtn" data-calpick="1">Choisir l'agenda utilisé pour les RDV</button><button class="iconbtn" data-alarms="1">Réglages des alarmes et notifications</button></div><div class="adv"><span class="pnote" style="padding:0">Version ${NATIVE.version()}</span><button class="iconbtn" data-update="1">Vérifier les mises à jour</button></div></article>`;
+  <div class="adv"><button class="iconbtn" data-calpick="1">Choisir l'agenda utilisé pour les RDV</button><button class="iconbtn" data-alarms="1">Réglages des alarmes et notifications</button></div><div class="adv"><span class="pnote" style="padding:0">Version ${NATIVE.version()}${window.PB_store&&PB_store.sizeKB?" · données : "+PB_store.sizeKB()+" Ko":""}</span><button class="iconbtn" data-update="1">Vérifier les mises à jour</button></div></article>`;
 }
 async function openCalPicker(){
   const list=await NATIVE.calendars();const cur=NATIVE.chosenCalendarId();
@@ -880,14 +944,14 @@ document.addEventListener("toggle",e=>{const d=e.target;if(!d.matches||!d.matche
   const s=d.querySelector("summary");if(s)s.textContent=d.open?"Masquer les étapes":"Voir toutes les étapes"},true);
 
 // ===== Fichier clients actifs, avec onglets par activité =====
-const CSTAT={actif:"Actifs",pause:"En pause",termine:"Anciens"};
+const CSTAT={actif:"Actifs",pause:"En pause",termine:"Archivés"};
 const ACT_COLORS=["#2346d8","#1f8a4c","#c2410c","#8b3fd1","#0e7c86","#b8860b","#c0266d","#4b5563"];
 const actById=id=>activities.find(a=>a.id===id);
 const actNames=c=>(c.activities||[]).map(id=>(actById(id)||{}).name).filter(Boolean);
 const actColor=a=>ACT_COLORS[Math.max(0,activities.indexOf(a))%ACT_COLORS.length];
 function customerCard(c){
   const pills=(c.activities||[]).map(actById).filter(Boolean).map(a=>`<span class="pill act" style="--ac:${actColor(a)}">${esc(a.name)}</span>`).join("");
-  const st=c.status&&c.status!=="actif"?`<span class="pill">${esc(CSTAT[c.status]||c.status)}</span>`:"";
+  const st=c.status==="pause"?`<span class="pill due">En pause${c.pauseUntil?" · reprise le "+esc(fmtD(c.pauseUntil)):""}</span>`:c.status==="termine"?`<span class="pill">Archivé</span>`:"";
   const lines=[c.intervenant?`<div><span>Intervenant·e</span><b>${esc(c.intervenant)}</b></div>`:"",
     c.schedule?`<div><span>Planning</span><b>${esc(c.schedule)}</b></div>`:"",
     c.hoursMonth?`<div><span>Volume</span><b>${esc(c.hoursMonth)} h / mois</b></div>`:"",
@@ -897,7 +961,8 @@ function customerCard(c){
   ${contactBlock(c)}
   ${lines?`<div class="cinfo">${lines}</div>`:""}
   ${c.note?`<div class="pnote">${esc(c.note)}</div>`:""}
-  <div class="adv"><button class="btn" data-crdv="${esc(c.id)}">📅 Prendre un RDV</button></div></article>`;
+  ${custApptsHTML(c)}
+  <div class="adv"><button class="btn" data-crdv="${esc(c.id)}">📅 Prendre un RDV</button>${custQuick(c)}</div></article>`;
 }
 function renderCustomers(){
   const byStatus=customers.filter(c=>(c.status||"actif")===custStatus);
@@ -939,8 +1004,9 @@ function drawCustSheet(){
    <div class="field"><label for="cs-ad">Adresse</label><input type="text" id="cs-ad" autocomplete="off" placeholder="N°, rue, code postal, ville" value="${esc(d.address)}"></div>
    <div class="field"><label>Activités</label><div class="achks">${acts||`<span class="status">Aucune activité : crée-les ci-dessous.</span>`}</div>
      <div class="row"><input type="text" id="cs-newact" placeholder="Nouvelle activité (ex. Jardinage)"><button type="button" class="btn" id="cs-addact">+ Ajouter</button></div></div>
-   <div class="row"><div class="field"><label for="cs-st">Statut</label><select id="cs-st">${Object.entries({actif:"Actif",pause:"En pause",termine:"Ancien client"}).map(([k,l])=>`<option value="${k}" ${d.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
+   <div class="row"><div class="field"><label for="cs-st">Statut</label><select id="cs-st">${Object.entries({actif:"Actif",pause:"En pause (reviendra)",termine:"Archivé (ne prend plus)"}).map(([k,l])=>`<option value="${k}" ${d.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
    <div class="field"><label for="cs-hm">Heures / mois</label><input type="number" id="cs-hm" min="0" step="0.5" inputmode="decimal" value="${esc(d.hoursMonth)}"></div></div>
+   <div class="field" id="cs-pause-f" ${d.status==="pause"?"":"hidden"}><label for="cs-pu">Reprise prévue le (facultatif)</label><input type="date" id="cs-pu" value="${d.pauseUntil?ymd(new Date(d.pauseUntil)):""}"></div>
    <div class="field"><label for="cs-in">Intervenant·e</label><input type="text" id="cs-in" autocomplete="off" placeholder="Qui intervient chez ce client" value="${esc(d.intervenant)}"></div>
    <div class="field"><label for="cs-sc">Planning habituel</label><input type="text" id="cs-sc" placeholder="Ex. mardi et jeudi 9h–11h" value="${esc(d.schedule)}"></div>
    <div class="field"><label for="cs-sd">Client depuis</label><input type="date" id="cs-sd" value="${d.start?ymd(new Date(d.start)):""}"></div>
@@ -953,7 +1019,8 @@ function drawCustSheet(){
   s.addEventListener("click",ev=>{if(ev.target===s)closeCust()});
   const bind=(id,k)=>$(id).addEventListener("input",ev=>d[k]=ev.target.value);
   bind("#cs-fn","firstName");bind("#cs-ln","lastName");bind("#cs-ph","phone");bind("#cs-ad","address");bind("#cs-in","intervenant");bind("#cs-sc","schedule");bind("#cs-hm","hoursMonth");bind("#cs-em","email");bind("#cs-no","note");
-  $("#cs-st").addEventListener("change",ev=>d.status=ev.target.value);
+  $("#cs-st").addEventListener("change",ev=>{d.status=ev.target.value;$("#cs-pause-f").hidden=d.status!=="pause"});
+  $("#cs-pu").addEventListener("change",ev=>d.pauseUntil=ev.target.value?new Date(ev.target.value+"T09:00").getTime():null);
   $("#cs-sd").addEventListener("change",ev=>d.start=ev.target.value?new Date(ev.target.value+"T12:00").getTime():null);
   s.querySelectorAll("[data-act]").forEach(cb=>cb.addEventListener("change",()=>{const id=cb.dataset.act;d.activities=(d.activities||[]).filter(x=>x!==id);if(cb.checked)d.activities.push(id)}));
   $("#cs-addact").addEventListener("click",async()=>{const name=$("#cs-newact").value.trim();if(!name)return;
@@ -965,7 +1032,7 @@ function drawCustSheet(){
     $("#cs-save").disabled=true;
     const body={firstName:d.firstName.trim(),lastName:d.lastName.trim(),phone:(d.phone||"").trim(),address:(d.address||"").trim(),email:(d.email||"").trim(),
       activities:d.activities||[],status:d.status||"actif",intervenant:(d.intervenant||"").trim(),schedule:(d.schedule||"").trim(),hoursMonth:d.hoursMonth===""?"":Number(d.hoursMonth)||0,
-      start:d.start||null,note:d.note||"",projectId:d.projectId||"",createdAt:d.createdAt||Date.now()};
+      start:d.start||null,note:d.note||"",projectId:d.projectId||"",createdAt:d.createdAt||Date.now(),pauseUntil:d.status==="pause"?(d.pauseUntil||null):null};
     try{await db.doc("customers/"+d.id).set(body);
       if(d.isNew&&d.projectId){const p=projects.find(x=>x.id===d.projectId);if(p){p.customerId=d.id;writeDoc("projects/"+p.id,projBody(p))}}
       if(d.isNew){custStatus=body.status;tab="cust";try{localStorage.setItem("pb-tab",tab)}catch(_){}}
@@ -997,6 +1064,167 @@ function openActSheet(){
     const add=async()=>{const v=$("#ac-new").value.trim();if(!v)return;const id="a"+uid(),o=Date.now();await db.doc("activities/"+id).set({name:v,order:o});if(!actById(id))activities.push({id,name:v,order:o});draw();const n=$("#ac-new");if(n)n.focus()};
     $("#ac-add").addEventListener("click",add);$("#ac-new").addEventListener("keydown",ev=>{if(ev.key==="Enter")add()});
     $("#ac-close").addEventListener("click",()=>{root.innerHTML="";render()});
+  };draw();
+}
+
+// ===== RDV simples (agenda, clients actifs) : hors Suivi =====
+const apptBody=a=>({firstName:a.firstName||"",lastName:a.lastName||"",title:a.title||"",phone:a.phone||"",address:a.address||"",when:a.when||null,dur:durOf("appts",a),note:a.note||"",customerId:a.customerId||"",done:!!a.done,doneAt:a.doneAt||null,createdAt:a.createdAt||Date.now(),calId:a.calId||"",calAt:a.calAt||null,calDur:a.calDur||null});
+const custBody=c=>({firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",address:c.address||"",email:c.email||"",activities:c.activities||[],status:c.status||"actif",intervenant:c.intervenant||"",schedule:c.schedule||"",hoursMonth:c.hoursMonth??"",start:c.start||null,note:c.note||"",projectId:c.projectId||"",createdAt:c.createdAt||Date.now(),pauseUntil:c.status==="pause"?(c.pauseUntil||null):null});
+function custApptsHTML(c){
+  const now=Date.now();const mine=appts.filter(a=>a.customerId===c.id&&a.when);
+  const next=mine.filter(a=>!a.done&&a.when>=now).sort((a,b)=>a.when-b.when)[0];
+  const past=mine.filter(a=>a.done||a.when<now).length;
+  if(!next&&!past)return "";
+  return `<div class="cinfo" style="grid-template-columns:1fr">${next?`<div><span>Prochain RDV</span><b>${esc(fmtDT(next.when))} · ${durLabel(durOf("appts",next))}</b></div>`:""}${past?`<div><span>RDV passés</span><b>${past}</b></div>`:""}</div>`;
+}
+function custQuick(c){
+  const s=c.status||"actif";
+  if(s==="actif")return `<button class="iconbtn" data-cstatus="${esc(c.id)}:pause">⏸ Pause</button><button class="iconbtn" data-cstatus="${esc(c.id)}:termine">🗄 Archiver</button>`;
+  if(s==="pause")return `<button class="iconbtn" data-cstatus="${esc(c.id)}:actif">▶ Réactiver</button><button class="iconbtn" data-cstatus="${esc(c.id)}:termine">🗄 Archiver</button>`;
+  return `<button class="iconbtn" data-cstatus="${esc(c.id)}:actif">↩ Réactiver</button>`;
+}
+let ap=null, apConfirm=false;
+function openApptSheet(a,preset){
+  if(!db){$("#status").textContent="Connecte-toi pour créer des RDV.";return}
+  ap=a?{...JSON.parse(JSON.stringify(a)),isNew:false}:{id:"r"+uid(),isNew:true,firstName:"",lastName:"",title:"",phone:"",address:"",when:null,dur:60,note:"",customerId:"",...(preset||{})};
+  apConfirm=false;drawApptSheet();
+}
+function drawApptSheet(){
+  const d=ap,root=$("#sheet-root");if(!d){root.innerHTML="";return}
+  const opts=customers.filter(c=>(c.status||"actif")!=="termine").sort((a,b)=>fullName(a).localeCompare(fullName(b),"fr"));
+  const c=d.customerId&&customers.find(x=>x.id===d.customerId);
+  root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ap-h">
+   <h3 id="ap-h">${d.isNew?"Nouveau RDV":"Modifier le RDV"}</h3>
+   <div class="field"><label for="ap-cu">Avec un client</label><select id="ap-cu"><option value="">— Autre personne / sans client —</option>${opts.map(o=>`<option value="${esc(o.id)}" ${o.id===d.customerId?"selected":""}>${esc(fullName(o))}</option>`).join("")}</select></div>
+   ${c?`<div class="pnote" style="padding:0">${esc([c.phone,c.address].filter(Boolean).join(" · "))}</div>`:`
+   <div class="row"><div class="field"><label for="ap-fn">Prénom / objet</label><input type="text" id="ap-fn" autocomplete="off" placeholder="Ex. Réunion, comptable…" value="${esc(d.firstName||d.title)}"></div>
+   <div class="field"><label for="ap-ln">Nom</label><input type="text" id="ap-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
+   <div class="field"><label for="ap-ph">Téléphone</label><input type="tel" id="ap-ph" autocomplete="off" value="${esc(d.phone)}"></div>
+   <div class="field"><label for="ap-ad">Lieu / adresse</label><input type="text" id="ap-ad" autocomplete="off" value="${esc(d.address)}"></div>`}
+   <div class="field"><label for="ap-dur">Durée</label>${durSelect("ap-dur",durOf("appts",d))}</div>
+   <div class="field"><label>Choisis le créneau</label><div class="pk" id="ap-pk"></div>
+   <label for="ap-wh" class="pk-fine-l">ou heure précise</label><input type="datetime-local" id="ap-wh" value="${esc(toLocalInput(d.when))}"></div>
+   <div class="field"><label for="ap-no">Note</label><textarea id="ap-no">${esc(d.note)}</textarea></div>
+   ${agendaToggle("ap-cal",true)}
+   <div class="btns"><button class="btn primary" id="ap-save">Enregistrer</button><button class="btn" id="ap-cancel">Annuler</button>
+   ${d.isNew?"":`<button class="btn danger" id="ap-del">${apConfirm?"Confirmer la suppression":"Supprimer"}</button>`}</div>
+   ${!d.isNew&&!d.customerId?`<button class="iconbtn" id="ap-lead">→ Suivre comme prospect (dans Suivi)</button>`:""}
+   <div class="status" id="ap-msg"></div></div></div>`;
+  const s=$("#sheet-bg");
+  s.addEventListener("click",ev=>{if(ev.target===s)closeAppt()});
+  const bind=(id,k)=>{const el=$(id);if(el)el.addEventListener("input",ev=>d[k]=ev.target.value)};
+  bind("#ap-fn","firstName");bind("#ap-ln","lastName");bind("#ap-ph","phone");bind("#ap-ad","address");bind("#ap-no","note");
+  $("#ap-cu").addEventListener("change",ev=>{d.customerId=ev.target.value;drawApptSheet()});
+  $("#ap-dur").addEventListener("change",ev=>{d.dur=Number(ev.target.value);d._forced=false;pkRender()});
+  $("#ap-wh").addEventListener("input",ev=>d.when=ev.target.value?new Date(ev.target.value).getTime():null);
+  $("#ap-wh").addEventListener("change",()=>{d._forced=false;if(d.when&&pk)pk.day=dayStart(d.when);pkRender()});
+  pkStart({d,field:"when",dur:()=>durOf("appts",d)*6e4,kind:"appts",id:d.id,inputId:"ap-wh",boxId:"ap-pk",saveId:"ap-save"});
+  $("#ap-cancel").addEventListener("click",closeAppt);
+  $("#ap-save").addEventListener("click",async()=>{
+    if(!d.customerId&&!(d.firstName||"").trim()&&!(d.lastName||"").trim()){$("#ap-msg").textContent="Choisis un client ou indique avec qui / l'objet du RDV.";return}
+    if(!d.when){$("#ap-msg").textContent="Choisis le créneau du RDV.";return}
+    if(d._clash&&d._clash.length&&!d._forced){d._forced=true;$("#ap-msg").textContent="⚠️ Créneau déjà occupé. Touche encore « Enregistrer » pour confirmer quand même.";$("#ap-save").textContent="Enregistrer quand même";return}
+    const cb=$("#ap-cal");const wantCal=!!(cb&&cb.checked);
+    $("#ap-save").disabled=true;
+    try{const saved={...d,firstName:(d.firstName||"").trim(),lastName:(d.lastName||"").trim()};
+      await db.doc("appts/"+d.id).set(apptBody(saved));
+      if(wantCal&&saved.when>Date.now()&&!inAgenda("appts",saved))setTimeout(()=>{const x=appts.find(o=>o.id===d.id);if(x)pushToAgenda("appts",x)},300);
+      closeAppt();render();$("#status").textContent="✓ RDV enregistré.";}
+    catch(e){$("#ap-save").disabled=false;$("#ap-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
+  });
+  const del=$("#ap-del");if(del)del.addEventListener("click",async()=>{if(!apConfirm){apConfirm=true;drawApptSheet();return}
+    try{await db.doc("appts/"+d.id).delete();closeAppt()}catch(e){$("#ap-msg").textContent="Suppression impossible."}});
+  const tl=$("#ap-lead");if(tl)tl.addEventListener("click",async()=>{
+    const l={id:"l"+uid(),type:"rdv",firstName:d.firstName||"",lastName:d.lastName||"",phone:d.phone||"",address:d.address||"",when:d.when,dur:durOf("appts",d),reason:"",note:d.note||"",status:"open",createdAt:Date.now(),calId:d.calId||"",calAt:d.calAt||null,calDur:d.calDur||null};
+    await db.doc("leads/"+l.id).set(leadBody(l));await db.doc("appts/"+d.id).delete();closeAppt();projFilter="leads";tab="proj";render();$("#status").textContent="→ Ajouté au Suivi.";});
+}
+function closeAppt(){ap=null;pk=null;drawApptSheet()}
+
+// ===== À faire : vue compacte =====
+const hmOf=t=>{const d=new Date(t);return d.getHours()+"h"+pad(d.getMinutes())};
+function rowHTML(it){
+  const call=it.phone?`<a class="mini" href="${esc(telHref(it.phone))}" aria-label="Appeler">📞</a>`:"";
+  const done=it.done?`<button class="mini" ${it.done}="${esc(it.id)}" aria-label="Marquer comme fait">✓</button>`:"";
+  return `<div class="trow${it.late?" late":""}"><span class="trow-t">${it.time}</span><button class="trow-x" ${it.open||""}><b>${esc(it.title)}</b>${it.sub?`<span>${esc(it.sub)}</span>`:""}</button>${call}${done}</div>`;
+}
+function todayHTML(){
+  const a=dayStart(Date.now()),b=endToday()+1,now=Date.now();const rows=[],inCal=new Set();
+  leads.filter(l=>l.status==="open"||!l.status).forEach(l=>{if(l.calId)inCal.add(String(l.calId));
+    if(l.when&&l.when>=b)return;
+    rows.push({t:l.when||0,time:l.when?(l.when<a?"Retard":hmOf(l.when)):"—",late:l.when&&l.when<now,title:(l.type==="rdv"?"RDV ":"Rappeler ")+fullName(l),sub:l.reason||l.address||"",phone:l.phone,id:l.id,done:"data-ldone",open:`data-ledit="${esc(l.id)}"`})});
+  appts.filter(x=>!x.done&&x.when&&x.when<b).forEach(x=>{if(x.calId)inCal.add(String(x.calId));
+    const c=x.customerId&&customers.find(o=>o.id===x.customerId);
+    rows.push({t:x.when,time:x.when<a?"Retard":hmOf(x.when),late:x.when+durOf("appts",x)*6e4<now,title:apptName(x),sub:durLabel(durOf("appts",x))+((x.address||c&&c.address)?" · "+(x.address||c.address):""),phone:x.phone||c&&c.phone,id:x.id,done:"data-adone",open:`data-agref="appt:${esc(x.id)}"`})});
+  projects.filter(p=>p.rdv&&p.rdv>=a&&p.rdv<b).forEach(p=>{if(p.calId)inCal.add(String(p.calId));
+    rows.push({t:p.rdv,time:hmOf(p.rdv),title:"RDV "+fullName(p),sub:p.address||"",phone:p.phone,open:`data-editp="${esc(p.id)}"`})});
+  (agenda||[]).filter(e=>e.startDate>=a&&e.startDate<b&&!inCal.has(String(e.id))).forEach(e=>rows.push({t:e.startDate,time:e.isAllDay?"Journée":hmOf(e.startDate),title:e.title||"(sans titre)",sub:e.location||"agenda Google"}));
+  rows.sort((x,y)=>x.t-y.t);
+  const allow=NATIVE&&agendaState!=="granted"?`<button class="iconbtn" data-agenda-allow="1">+ Afficher aussi mon agenda Google</button>`:"";
+  return `<div class="section-label">Aujourd'hui</div><div class="card tlist">${rows.length?rows.map(rowHTML).join(""):`<div class="trow"><span class="trow-x" style="color:var(--muted)">Rien de prévu aujourd'hui.</span></div>`}${allow?`<div class="trow">${allow}</div>`:""}</div>`;
+}
+function weekHTML(){
+  const a=endToday()+1,b=dayStart(Date.now())+7*864e5;
+  const items=agItems(a,b).filter(it=>it.kind!=="todo");
+  if(!items.length)return "";
+  let out="",last="";
+  items.forEach(it=>{const d=new Date(it.t);const day=JOURS[d.getDay()]+" "+d.getDate();
+    if(day!==last){out+=`<div class="plan-day">${esc(day)}</div>`;last=day}
+    out+=`<div class="plan-row"><span class="plan-t">${it.allDay?"Journée":hmOf(it.t)}</span><span class="plan-x"><b>${esc(it.title)}</b>${it.sub?`<span>${esc(it.sub)}</span>`:""}</span></div>`});
+  return `<details class="card plan wk"><summary>Cette semaine · ${items.length} RDV</summary>${out}</details>`;
+}
+function resumeHTML(){
+  const due=customers.filter(c=>c.status==="pause"&&c.pauseUntil&&c.pauseUntil<=endToday());
+  if(!due.length)return "";
+  return `<div class="section-label">Reprises prévues</div><div class="card tlist">`+due.map(c=>`<div class="trow"><span class="trow-t">${esc(fmtD(c.pauseUntil))}</span><span class="trow-x"><b>${esc(fullName(c))}</b><span>Client en pause : reprise prévue</span></span>${c.phone?`<a class="mini" href="${esc(telHref(c.phone))}">📞</a>`:""}<button class="mini" data-cstatus="${esc(c.id)}:actif" aria-label="Réactiver">▶</button></div>`).join("")+`</div>`;
+}
+
+// ===== Tâches du jour (sans créneau), avec commentaire et archive =====
+const taskBody=k=>({text:k.text||"",day:k.day,done:!!k.done,doneAt:k.doneAt||null,comment:k.comment||"",createdAt:k.createdAt||Date.now()});
+const todayKey=()=>ymd(new Date());
+function taskRow(k,showDay){
+  const open=openTk.has(k.id);
+  const from=showDay&&k.day!==todayKey()?`<span class="tk-from">${k.day<todayKey()?"reportée du ":"prévue le "}${esc(fmtD(new Date(k.day+"T12:00").getTime()))}</span>`:"";
+  return `<li class="${k.done?"is-done":""}"><input type="checkbox" class="chk" id="tk-${esc(k.id)}" data-tk="${esc(k.id)}" ${k.done?"checked":""}>
+    <label class="t-label" for="tk-${esc(k.id)}"><span class="txt">${esc(k.text)}</span>${from}${k.comment&&!open?`<span class="t-note">💬 ${esc(k.comment)}</span>`:""}</label>
+    <button class="iconbtn" data-tkc="${esc(k.id)}" aria-label="Commentaire">💬</button><button class="iconbtn" data-tkdel="${esc(k.id)}" aria-label="Supprimer">✕</button></li>
+    ${open?`<li class="tk-com"><textarea id="tkc-${esc(k.id)}" data-tkid="${esc(k.id)}" placeholder="Commentaire (enregistré quand tu quittes le champ)">${esc(k.comment)}</textarea></li>`:""}`;
+}
+function tasksHTML(){
+  const td=todayKey();
+  const list=tasks.filter(k=>k.day===td||(k.day<td&&!k.done)).sort((a,b)=>(a.done-b.done)||(a.day<b.day?-1:a.day>b.day?1:0)||(a.createdAt-b.createdAt));
+  const tomorrow=tasks.filter(k=>k.day>td&&!k.done).length;
+  const n=list.filter(k=>k.done).length;
+  return `<div class="section-label">Mes tâches du jour${list.length?" · "+n+"/"+list.length:""}</div><article class="card">
+    ${list.length?`<ul class="tasks" style="border-top:0">${list.map(k=>taskRow(k,true)).join("")}</ul>`:""}
+    <div class="tk-add"><input type="text" id="tk-new" placeholder="Ajouter une tâche…" autocomplete="off"><select id="tk-day"><option value="0">Aujourd'hui</option><option value="1">Demain</option></select><button class="btn" data-tkadd="1">Ajouter</button></div>
+    <div class="adv" style="justify-content:space-between"><span class="pnote" style="padding:0">${tomorrow?tomorrow+" tâche"+(tomorrow>1?"s":"")+" prévue"+(tomorrow>1?"s":"")+" plus tard":""}</span><button class="iconbtn" data-tkarch="1">📚 Archive des tâches</button></div></article>`;
+}
+async function addTask(){
+  const i=$("#tk-new");if(!i)return;const text=i.value.trim();if(!text){i.focus();return}
+  const plus=Number(($("#tk-day")||{}).value||0);const d=new Date();d.setDate(d.getDate()+plus);
+  const k={id:"k"+uid(),text,day:ymd(d),done:false,comment:"",createdAt:Date.now()};
+  await db.doc("tasks/"+k.id).set(taskBody(k));
+  const n=$("#tk-new");if(n){n.value="";n.focus()}
+}
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target&&e.target.id==="tk-new"){e.preventDefault();addTask()}});
+document.addEventListener("change",e=>{const id=e.target&&e.target.dataset&&e.target.dataset.tkid;if(!id)return;
+  const k=tasks.find(x=>x.id===id);if(!k)return;k.comment=e.target.value.trim();openTk.delete(id);writeDoc("tasks/"+k.id,taskBody(k))});
+function openTaskArchive(){
+  const root=$("#sheet-root");let days=30,q="";
+  const draw=()=>{
+    const td=todayKey();
+    const past=tasks.filter(k=>k.day<td||k.done).filter(k=>!q||(k.text+" "+k.comment).toLowerCase().includes(q));
+    const byDay={};past.forEach(k=>{const key=k.done&&k.doneAt?ymd(new Date(k.doneAt)):k.day;(byDay[key]=byDay[key]||[]).push(k)});
+    const keys=Object.keys(byDay).sort().reverse();const shown=keys.slice(0,days);
+    root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ta-h"><h3 id="ta-h">Archive des tâches</h3>
+      <input type="search" id="ta-q" class="csearch" placeholder="Rechercher une tâche ou un commentaire…" value="${esc(q)}">
+      ${shown.length?shown.map(key=>{const d=new Date(key+"T12:00");return `<div class="ta-day"><div class="plan-day" style="padding:0">${esc(JOURS[d.getDay()]+" "+d.getDate()+" "+MOIS[d.getMonth()]+" "+d.getFullYear())}</div>${byDay[key].map(k=>`<div class="ta-row ${k.done?"ok":"ko"}"><span>${k.done?"✓":"✗"}</span><div><b>${esc(k.text)}</b>${k.comment?`<small>💬 ${esc(k.comment)}</small>`:""}</div></div>`).join("")}</div>`}).join(""):`<div class="status">Aucune tâche archivée pour l'instant.</div>`}
+      ${keys.length>days?`<button class="btn" id="ta-more">Voir plus</button>`:""}
+      <button class="btn primary" id="ta-close">Fermer</button></div></div>`;
+    const s=$("#sheet-bg");s.addEventListener("click",ev=>{if(ev.target===s)root.innerHTML=""});
+    $("#ta-close").addEventListener("click",()=>{root.innerHTML=""});
+    const m=$("#ta-more");if(m)m.addEventListener("click",()=>{days+=30;draw()});
+    $("#ta-q").addEventListener("change",ev=>{q=ev.target.value.trim().toLowerCase();draw()});
   };draw();
 }
 
@@ -1042,6 +1270,7 @@ document.addEventListener("click",e=>{
   if(g("[data-agtoday]")){agDay=dayStart(Date.now());agScrolled=false;render();return}
   if(t=g("[data-agref]")){const [k,id]=t.dataset.agref.split(":");
     if(k==="lead"){const l=leads.find(x=>x.id===id);if(l)openLeadSheet(l)}
+    else if(k==="appt"){const a=appts.find(x=>x.id===id);if(a)openApptSheet(a)}
     else if(k==="proj"){const p=projects.find(x=>x.id===id);if(p)openListSheet("project",p)}
     else if(k==="routine"){tab="now";render()}
     else{const ev=(agEvents||[]).find(x=>String(x.id)===id);if(ev){const d=new Date(ev.startDate);$("#status").textContent=(ev.title||"Événement")+" · "+(ev.isAllDay?"toute la journée":d.getHours()+"h"+pad(d.getMinutes()))+(ev.location?" · "+ev.location:"")+" (agenda Google)"}}
@@ -1050,7 +1279,14 @@ document.addEventListener("click",e=>{
   if(t=g("[data-cstat]")){custStatus=t.dataset.cstat;render();return}
   if(g("[data-newcust]")){openCustSheet(null);return}
   if(t=g("[data-cedit]")){openCustSheet(customers.find(c=>c.id===t.dataset.cedit));return}
-  if(t=g("[data-crdv]")){const c=customers.find(x=>x.id===t.dataset.crdv);if(c)openLeadSheet(null,{type:"rdv",dur:60,firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",address:c.address||"",reason:"Client actif"+(c.activities&&c.activities.length?" · "+actNames(c).join(", "):"")});return}
+  if(t=g("[data-crdv]")){const c=customers.find(x=>x.id===t.dataset.crdv);if(c)openApptSheet(null,{customerId:c.id});return}
+  if(t=g("[data-adone]")){const a=appts.find(x=>x.id===t.dataset.adone);if(a){a.done=true;a.doneAt=Date.now();writeDoc("appts/"+a.id,apptBody(a));render()}return}
+  if(t=g("[data-cstatus]")){const [id,st]=t.dataset.cstatus.split(":");const c=customers.find(x=>x.id===id);if(c){c.status=st;if(st!=="pause")c.pauseUntil=null;writeDoc("customers/"+c.id,custBody(c));$("#status").textContent=st==="actif"?"✓ Client réactivé.":st==="pause"?"⏸ Client mis en pause.":"🗄 Client archivé."}return}
+  if(t=g("[data-tk]")){const k=tasks.find(x=>x.id===t.dataset.tk);if(k){k.done=t.checked;k.doneAt=t.checked?Date.now():null;writeDoc("tasks/"+k.id,taskBody(k))}return}
+  if(t=g("[data-tkc]")){const id=t.dataset.tkc;if(openTk.has(id))openTk.delete(id);else openTk.add(id);render();const ta=document.getElementById("tkc-"+id);if(ta)ta.focus();return}
+  if(t=g("[data-tkdel]")){const id=t.dataset.tkdel;if(t.dataset.confirm!=="1"){t.dataset.confirm="1";t.textContent="Supprimer ?";return}db.doc("tasks/"+id).delete();return}
+  if(g("[data-tkadd]")){addTask();return}
+  if(g("[data-tkarch]")){openTaskArchive();return}
   if(t=g("[data-p2c]")){const p=projects.find(x=>x.id===t.dataset.p2c);if(p)openCustSheet(null,{firstName:p.firstName||"",lastName:p.lastName||(p.firstName?"":p.title||""),phone:p.phone||"",address:p.address||"",email:p.email||"",note:p.note||"",projectId:p.id});return}
   if(g("[data-actedit]")){openActSheet();return}
   if(t=g("[data-tab]")){tab=t.dataset.tab;try{localStorage.setItem("pb-tab",tab)}catch(_){}render();return}
@@ -1080,7 +1316,7 @@ document.addEventListener("click",e=>{
     try{navigator.clipboard.writeText(v).then(()=>{t.textContent="Copié"},()=>{$("#status").textContent="Copie impossible : appuie longuement sur le numéro."})}catch(_){$("#status").textContent="Copie impossible : appuie longuement sur le numéro."}
     return}
 });
-$("#fab").addEventListener("click",()=>tab==="agenda"?openLeadSheet(null,{type:"rdv",when:agDay+9*36e5}):tab==="cust"?openCustSheet(null):openSheet(null));
+$("#fab").addEventListener("click",()=>tab==="agenda"?openApptSheet(null,{when:agDay+9*36e5}):tab==="cust"?openCustSheet(null):openSheet(null));
 
 // Feuille demande (rappel / RDV)
 let lead=null, leadConfirm=false;
@@ -1237,6 +1473,7 @@ function drawSheet(){
   const whenFields = d.freq==="weekly" ? `<div class="field"><label for="f-wd">Jour</label><select id="f-wd">${[1,2,3,4,5,6,7].map(i=>`<option value="${i}" ${Number(d.weekday)===i?"selected":""}>${JOURS[i%7]}</option>`).join("")}</select></div>`
     : d.freq==="daily" ? "" :
     `<div class="field"><label for="f-day">Jour du mois</label><input type="number" id="f-day" min="1" max="31" value="${esc(d.day)}"></div>`+
+    (d.freq==="yearly"?`<div class="field"><label for="f-mon">Mois</label><select id="f-mon">${MOIS.map((l,i)=>`<option value="${i}" ${Number(d.month||0)===i?"selected":""}>${l}</option>`).join("")}</select></div>`:"")+
     (d.freq==="quarterly"?`<div class="field"><label for="f-mo">Mois du trimestre</label><select id="f-mo">${["1er","2e","3e"].map((l,i)=>`<option value="${i}" ${Number(d.monthOffset)===i?"selected":""}>${l} mois</option>`).join("")}</select></div>`:"");
   root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
    <h3 id="sheet-title">${d.isNew?"Nouvelle routine":"Modifier la routine"}</h3>
@@ -1260,6 +1497,7 @@ function drawSheet(){
   const fd=$("#f-day");if(fd)fd.addEventListener("input",ev=>d.day=Math.max(1,Math.min(31,Number(ev.target.value)||1)));
   const fw=$("#f-wd");if(fw)fw.addEventListener("change",ev=>d.weekday=Number(ev.target.value));
   const fm=$("#f-mo");if(fm)fm.addEventListener("change",ev=>d.monthOffset=Number(ev.target.value));
+  const fmon=$("#f-mon");if(fmon)fmon.addEventListener("change",ev=>d.month=Number(ev.target.value));
   s.querySelectorAll("[data-rm]").forEach(b=>b.addEventListener("click",()=>{d.tasks.splice(Number(b.dataset.rm),1);drawSheet()}));
   s.querySelectorAll("[data-up]").forEach(b=>b.addEventListener("click",()=>{const i=Number(b.dataset.up);if(i>0){[d.tasks[i-1],d.tasks[i]]=[d.tasks[i],d.tasks[i-1]];drawSheet()}}));
   $("#add-task").addEventListener("click",()=>{d.tasks.push({id:uid(),label:"",link:"",note:""});drawSheet();const last=d.tasks[d.tasks.length-1];const el=document.getElementById("tl-"+last.id);if(el)el.focus()});
@@ -1275,11 +1513,11 @@ async function saveSheet(){
   if(!d.title.trim()){$("#sheet-msg").textContent="Donne un nom à ta routine.";$("#f-title").focus();return}
   const tasks=d.tasks.filter(t=>t.label.trim()).map(t=>({id:t.id,label:t.label.trim(),link:(t.link||"").trim(),note:(t.note||"").trim()}));
   tasks.forEach(t=>{if(t.link&&!/^https?:\/\//i.test(t.link))t.link="https://"+t.link});
-  const body={title:d.title.trim(),freq:d.freq,day:Number(d.day)||1,weekday:Number(d.weekday)||1,monthOffset:Number(d.monthOffset)||0,time:d.time||"09:00",tasks,order:d.order||Date.now()};
+  const body={title:d.title.trim(),freq:d.freq,day:Number(d.day)||1,weekday:Number(d.weekday)||1,monthOffset:Number(d.monthOffset)||0,month:Number(d.month)||0,time:d.time||"09:00",tasks,order:d.order||Date.now()};
   $("#save").disabled=true;
   try{await db.doc("routines/"+d.id).set(body);closeSheet()}catch(e){$("#save").disabled=false;$("#sheet-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
 }
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(draft)closeSheet();else if(ld)closeList();else if(lead)closeLead();else if(cs)closeCust();else $("#sheet-root").innerHTML=""}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(draft)closeSheet();else if(ld)closeList();else if(lead)closeLead();else if(cs)closeCust();else if(ap)closeAppt();else $("#sheet-root").innerHTML=""}});
 
 // Date du jour + rafraîchissement à minuit
 function stamp(){const d=new Date();$("#today").textContent=JOURS[d.getDay()]+" "+d.getDate()+" "+MOIS[d.getMonth()]+" "+d.getFullYear()}
@@ -1294,6 +1532,8 @@ render();
   db.collection("routines").orderBy("order").onSnapshot(s=>{routines=s.docs.map(x=>({id:x.id,...x.data()}));render()},e=>{$("#status").textContent="Connexion perdue. Recharge la page."});
   db.collection("projects").onSnapshot(s=>{projects=s.docs.map(x=>{const b=x.data();return {id:x.id,...b,done:{...(b.done||{})},steps:(b.steps||[]).map(t=>({...t}))}});render()},()=>{});
   db.collection("leads").onSnapshot(s=>{leads=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
+  db.collection("appts").onSnapshot(s=>{appts=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
+  db.collection("tasks").onSnapshot(s=>{tasks=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
   db.collection("customers").onSnapshot(s=>{customers=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
   db.collection("activities").orderBy("order").onSnapshot(s=>{activities=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
   db.collection("models").orderBy("order").onSnapshot(s=>{models=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
