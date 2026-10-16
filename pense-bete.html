@@ -243,6 +243,46 @@ details.tk-later>summary{cursor:pointer;padding:10px 16px;font:600 .85rem var(--
 details.tk-later>summary::-webkit-details-marker{display:none}
 .k-task{background:color-mix(in srgb,var(--hi) 25%,var(--paper));border-color:var(--muted);color:var(--ink)}
 input[type=time]{font:500 1rem var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.seg{display:flex;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:3px;align-self:center}
+.seg button{border:0;background:none;color:var(--muted);font:600 .88rem var(--body);padding:7px 18px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.wk{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.wk-hd,.wk-ad{display:grid;grid-template-columns:var(--gut) repeat(7,1fr);border-bottom:1px solid var(--line)}
+.wk-day{border:0;background:none;padding:6px 0;display:flex;flex-direction:column;align-items:center;cursor:pointer;font-family:var(--body);color:var(--ink);min-width:0}
+.wk-day span{font-size:.62rem;text-transform:uppercase;color:var(--muted)}
+.wk-day b{font-size:.95rem;font-variant-numeric:tabular-nums}
+.wk-day.today b{background:var(--accent);color:#fff;border-radius:999px;padding:0 6px}
+.wk-ad>div{display:flex;flex-direction:column;gap:2px;padding:2px 1px;min-width:0}
+.wk-chip{border:0;border-radius:4px;font:600 .58rem var(--body);padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-align:left}
+.wk-body{position:relative;cursor:copy}
+.wk-hr{position:absolute;left:0;right:0;border-top:1px solid var(--line);pointer-events:none}
+.wk-hr:first-child{border-top:0}
+.wk-hr span{position:absolute;left:4px;top:1px;font-size:.62rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.wk-body::before{content:"";position:absolute;inset:0 0 0 var(--gut);background:repeating-linear-gradient(90deg,transparent 0,transparent calc((100%)/7 - 1px),var(--line) calc((100%)/7 - 1px),var(--line) calc(100%/7));pointer-events:none}
+.wk-ev{position:absolute;border:0;border-left:3px solid;border-radius:4px;padding:1px 3px;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;text-align:left;font-family:var(--body)}
+.wk-ev b{font-size:.6rem;font-weight:700;line-height:1.2}
+.wk-ev span{font-size:.58rem;line-height:1.15;overflow:hidden;word-break:break-word}
+.wk-now{position:absolute;height:2px;background:var(--warn);pointer-events:none}
+.tkc .tk-add{border-top:0;padding-bottom:6px}
+.tk-when{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 16px 12px}
+.tk-q{font:600 .75rem var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;width:100%}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:999px;padding:7px 12px;font:600 .85rem var(--body);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.tk-when input[type=date],.tk-when input[type=time]{width:auto;flex:0 1 170px;padding:7px 10px}
+.tk-hr{font-size:.82rem}
+.tk-grp{border-top:1px solid var(--line)}
+.tk-grp>summary{cursor:pointer;padding:9px 16px;font:600 .8rem var(--body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);list-style:none;display:flex;gap:8px;align-items:center}
+.tk-grp>summary::-webkit-details-marker{display:none}
+.tk-grp>summary span{background:var(--bg);border-radius:999px;padding:0 8px;font-size:.75rem}
+.tk-grp>summary::after{content:"▾";margin-left:auto;transition:transform .2s}
+.tk-grp:not([open])>summary::after{transform:rotate(-90deg)}
+.tk-late>summary{color:var(--warn)}
+.tk-grp .tasks{border-top:0}
+.tk-open{flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;font:inherit;color:var(--ink);cursor:pointer}
+li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
+.due{flex:none;font:600 .75rem var(--body);color:var(--muted);background:var(--bg);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.due.late{color:#fff;background:var(--warn)}
 .dayinfo{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .dayinfo:empty{display:none}
 .day-h{font:600 .8rem var(--body);color:var(--muted)}
@@ -418,7 +458,48 @@ function agItems(a,b){
     if(t>=a&&t<b&&n<total)items.push({t,end:t,title:r.title,sub:(total-n)+" tâche"+(total-n>1?"s":"")+" à faire",kind:"todo",allDay:true,ref:"routine:"+r.id})});
   return items.sort((x,y)=>x.t-y.t);
 }
+let agView="day";try{agView=localStorage.getItem("pb-agview")||"day"}catch(e){}
+const agToggle=()=>`<div class="seg" role="group" aria-label="Affichage"><button data-agview="day" aria-pressed="${agView==="day"}">Jour</button><button data-agview="week" aria-pressed="${agView==="week"}">Semaine</button></div>`;
+// Vue semaine : 7 colonnes, on voit toute la semaine d'un coup
+function renderAgendaWeek(){
+  const ws=weekStart(agDay);loadWeek();
+  const today=dayStart(Date.now()),PX=30,GUT=30;
+  const items=agItems(ws,addDays(ws,7));
+  const timed=items.filter(i=>!i.allDay),allDay=items.filter(i=>i.allDay);
+  let h0=7,h1=21;
+  timed.forEach(it=>{const s=new Date(it.t),e=new Date(Math.max(it.t,it.end-1));h0=Math.min(h0,s.getHours());h1=Math.max(h1,Math.min(24,e.getHours()+1))});
+  const a=new Date(ws),b=new Date(addDays(ws,6));
+  const title=a.getMonth()===b.getMonth()?`${a.getDate()} – ${b.getDate()} ${MOIS[b.getMonth()]}`:`${a.getDate()} ${MOISC[a.getMonth()]} – ${b.getDate()} ${MOISC[b.getMonth()]}`;
+  let out=`<div class="ag-head"><button class="iconbtn ag-nav" data-agnav="-7" aria-label="Semaine précédente">‹</button>
+    <div class="ag-title">${esc(title)}</div>
+    <button class="iconbtn ag-nav" data-agnav="7" aria-label="Semaine suivante">›</button>
+    ${weekStart(today)!==ws?`<button class="btn ag-today" data-agtoday="1">Aujourd'hui</button>`:""}</div>${agToggle()}`;
+  const days=[0,1,2,3,4,5,6].map(i=>addDays(ws,i));
+  out+=`<div class="wk"><div class="wk-hd" style="--gut:${GUT}px"><span></span>`+days.map(t=>{const d=new Date(t);return `<button class="wk-day${t===today?" today":""}" data-wkday="${t}"><span>${JOURS[d.getDay()].slice(0,3)}</span><b>${d.getDate()}</b></button>`}).join("")+`</div>`;
+  if(allDay.length)out+=`<div class="wk-ad" style="--gut:${GUT}px"><span></span>`+days.map(t=>{const n=allDay.filter(i=>i.t>=t&&i.t<addDays(t,1));return `<div>${n.map(i=>`<button class="wk-chip k-${i.kind}" data-agref="${esc(i.ref)}" title="${esc(i.title)}">${esc(i.title)}</button>`).join("")}</div>`}).join("")+`</div>`;
+  let g=`<div class="wk-body" id="wk-body" data-h0="${h0}" data-ws="${ws}" data-px="${PX}" style="--gut:${GUT}px;height:${(h1-h0)*PX}px">`;
+  for(let hr=h0;hr<h1;hr++)g+=`<div class="wk-hr" style="top:${(hr-h0)*PX}px;height:${PX}px"><span>${hr}</span></div>`;
+  days.forEach((t,i)=>{
+    const col=timed.filter(it=>it.t>=t&&it.t<addDays(t,1)).sort((x,y)=>x.t-y.t);
+    let lanes=[],grp=[],gEnd=-Infinity;const close=()=>{grp.forEach(x=>x.nl=Math.max(1,lanes.length));lanes=[];grp=[]};
+    col.forEach(it=>{if(it.t>=gEnd)close();let k=lanes.findIndex(e=>e<=it.t);if(k<0){k=lanes.length;lanes.push(0)}lanes[k]=it.end;it.lane=k;grp.push(it);gEnd=Math.max(gEnd,it.end)});close();
+    col.forEach(it=>{const top=Math.max(0,((it.t-t)/36e5-h0)*PX),ht=Math.max(16,Math.min((h1-h0)*PX,((Math.min(it.end,addDays(t,1))-t)/36e5-h0)*PX)-top-1);const d=new Date(it.t);
+      g+=`<button class="wk-ev k-${it.kind}" data-agref="${esc(it.ref)}" title="${esc(it.title)}" style="top:${top}px;height:${ht}px;left:calc(var(--gut) + (100% - var(--gut)) * ${i}/7 + (100% - var(--gut)) / 7 * ${it.lane}/${it.nl} + 1px);width:calc((100% - var(--gut)) / 7 / ${it.nl} - 2px)"><b>${d.getHours()}h${d.getMinutes()?pad(d.getMinutes()):""}</b>${ht>26?`<span>${esc(it.title)}</span>`:""}</button>`});
+    if(t===today){const n=Date.now(),y=((n-t)/36e5-h0)*PX;if(y>=0&&y<=(h1-h0)*PX)g+=`<div class="wk-now" style="top:${y}px;left:calc(var(--gut) + (100% - var(--gut)) * ${i}/7);width:calc((100% - var(--gut)) / 7)"></div>`}
+  });
+  g+=`</div></div>`;
+  out+=g+`<div class="status">Touche un jour pour le voir en détail, ou un créneau libre pour ajouter un RDV.</div>`;
+  return `<div class="ag">${out}</div>`;
+}
+function wkTap(e){
+  const body=e.target.closest&&e.target.closest("#wk-body");if(!body||e.target.closest(".wk-ev"))return false;
+  const r=body.getBoundingClientRect(),gut=30;const x=e.clientX-r.left-gut;if(x<0)return false;
+  const i=Math.min(6,Math.floor(x/((r.width-gut)/7)));const px=Number(body.dataset.px);
+  const mins=Number(body.dataset.h0)*60+Math.floor((e.clientY-r.top)/px*2)*30;
+  openApptSheet(null,{when:addDays(Number(body.dataset.ws),i)+mins*6e4});return true;
+}
 function renderAgenda(){
+  if(agView==="week")return renderAgendaWeek();
   const ws=weekStart(agDay);
   loadWeek();
   const week=agItems(ws,addDays(ws,7));
@@ -427,7 +508,7 @@ function renderAgenda(){
   let h=`<div class="ag-head"><button class="iconbtn ag-nav" data-agnav="-7" aria-label="Semaine précédente">‹</button>
     <div class="ag-title">${esc(MOIS[head.getMonth()])} ${head.getFullYear()}</div>
     <button class="iconbtn ag-nav" data-agnav="7" aria-label="Semaine suivante">›</button>
-    ${agDay!==today?`<button class="btn ag-today" data-agtoday="1">Aujourd'hui</button>`:""}</div>`;
+    ${agDay!==today?`<button class="btn ag-today" data-agtoday="1">Aujourd'hui</button>`:""}</div>`+agToggle();
   h+=`<div class="ag-week">`+[0,1,2,3,4,5,6].map(i=>{const t=addDays(ws,i),d=new Date(t);
     const n=week.filter(it=>it.t>=t&&it.t<addDays(t,1)).length;
     return `<button class="ag-d${t===agDay?" sel":""}${t===today?" today":""}" data-agday="${t}"><span>${JOURS[d.getDay()].slice(0,3)}</span><b>${d.getDate()}</b><i>${n?"•".repeat(Math.min(n,3)):"&nbsp;"}</i></button>`}).join("")+`</div>`;
@@ -962,7 +1043,7 @@ function todayHTML(){
     rows.push({t:x.when,time:x.when<a?"Retard":hmOf(x.when),late:x.when+durOf("appts",x)*6e4<now,title:apptName(x),sub:durLabel(durOf("appts",x))+((x.address||c&&c.address)?" · "+(x.address||c.address):""),phone:x.phone||c&&c.phone,id:x.id,done:"data-adone",open:`data-agref="appt:${esc(x.id)}"`})});
   projects.filter(p=>p.rdv&&p.rdv>=a&&p.rdv<b).forEach(p=>{if(p.calId)inCal.add(String(p.calId));
     rows.push({t:p.rdv,time:hmOf(p.rdv),title:"RDV "+fullName(p),sub:p.address||"",phone:p.phone,open:`data-editp="${esc(p.id)}"`})});
-  tasks.filter(k=>k.time&&!k.done&&k.day<=ymd(new Date())).forEach(k=>{const t=taskAt(k);rows.push({t,time:t<a?"Retard":hmOf(t),late:t<now,title:"✏️ "+k.text,sub:k.comment||"Tâche",id:k.id,done:"data-tkdone"})});
+  tasks.filter(k=>k.time&&k.day&&!k.done&&k.day<=ymd(new Date())).forEach(k=>{const t=taskAt(k);rows.push({t,time:t<a?"Retard":hmOf(t),late:t<now,title:"✏️ "+k.text,sub:k.comment||"Tâche",id:k.id,done:"data-tkdone"})});
   (agenda||[]).filter(e=>e.startDate>=a&&e.startDate<b&&!inCal.has(String(e.id))).forEach(e=>rows.push({t:e.startDate,time:e.isAllDay?"Journée":hmOf(e.startDate),title:e.title||"(sans titre)",sub:e.location||"agenda Google"}));
   rows.sort((x,y)=>x.t-y.t);
   const allow=NATIVE&&agendaState!=="granted"?`<button class="iconbtn" data-agenda-allow="1">+ Afficher aussi mon agenda Google</button>`:"";
@@ -986,39 +1067,87 @@ function resumeHTML(){
 
 // ===== Tâches du jour (sans créneau), avec commentaire et archive =====
 const taskBody=k=>({text:k.text||"",day:k.day,time:k.time||"",done:!!k.done,doneAt:k.doneAt||null,comment:k.comment||"",createdAt:k.createdAt||Date.now()});
-const taskAt=k=>k.time?new Date(k.day+"T"+k.time).getTime():null;
+const taskAt=k=>k.time&&k.day?new Date(k.day+"T"+k.time).getTime():null;
 const tkHm=k=>k.time?k.time.replace(":","h"):"";
 const todayKey=()=>ymd(new Date());
-function taskRow(k,showDay){
-  const open=openTk.has(k.id);
-  const from=showDay&&k.day!==todayKey()?`<span class="tk-from">${k.day<todayKey()?"reportée du ":"prévue le "}${esc(fmtD(new Date(k.day+"T12:00").getTime()))}</span>`:"";
-  return `<li class="${k.done?"is-done":""}"><input type="checkbox" class="chk" id="tk-${esc(k.id)}" data-tk="${esc(k.id)}" ${k.done?"checked":""}>
-    <label class="t-label" for="tk-${esc(k.id)}"><span class="txt">${k.time?`<b class="tk-time">${esc(tkHm(k))}</b> `:""}${esc(k.text)}</span>${from}${k.comment&&!open?`<span class="t-note">💬 ${esc(k.comment)}</span>`:""}</label>
-    <button class="iconbtn" data-tkc="${esc(k.id)}" aria-label="Commentaire">💬</button><button class="iconbtn" data-tkdel="${esc(k.id)}" aria-label="Supprimer">✕</button></li>
-    ${open?`<li class="tk-com"><textarea id="tkc-${esc(k.id)}" data-tkid="${esc(k.id)}" placeholder="Commentaire (enregistré quand tu quittes le champ)">${esc(k.comment)}</textarea></li>`:""}`;
+// « Pour quand ? » : une date limite, ou « pas pressé »
+const MOISC=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+const sundayKey=()=>{const d=new Date();d.setDate(d.getDate()+((7-d.getDay())%7));return ymd(d)};
+const plusKey=n=>{const d=new Date();d.setDate(d.getDate()+n);return ymd(d)};
+function whenOfDay(day){if(!day)return "none";if(day===todayKey())return "today";if(day===plusKey(1))return "tomorrow";if(day===sundayKey())return "week";return "pick"}
+function dayOfWhen(w,picked){return w==="today"?todayKey():w==="tomorrow"?plusKey(1):w==="week"?sundayKey():w==="none"?"":(picked||"")}
+function whenChips(pfx,w,picked){
+  const lbl=w==="pick"&&picked?"📅 "+fmtD(new Date(picked+"T12:00").getTime()):"📅 Date…";
+  return `<div class="chips" data-chips="${pfx}">`+[["today","Aujourd'hui"],["tomorrow","Demain"],["week","Cette semaine"],["pick",lbl],["none","Pas pressé"]].map(([k,l])=>`<button type="button" class="chip" data-when="${k}" aria-pressed="${w===k}">${esc(l)}</button>`).join("")+`</div><input type="date" id="${pfx}-date" value="${esc(picked||"")}" ${w==="pick"?"":"hidden"}>`;
 }
+function dueBadge(k){
+  if(!k.day)return "";const td=todayKey();
+  if(k.day<td){const n=Math.round((new Date(td+"T12:00")-new Date(k.day+"T12:00"))/864e5);return `<span class="due late">en retard · ${n} j</span>`}
+  if(k.day===td)return k.time?`<span class="due">${esc(tkHm(k))}</span>`:"";
+  if(k.day===plusKey(1))return `<span class="due">demain${k.time?" "+esc(tkHm(k)):""}</span>`;
+  const d=new Date(k.day+"T12:00");
+  return `<span class="due">${k.day<=sundayKey()?JOURS[d.getDay()].slice(0,3)+".":d.getDate()+" "+MOISC[d.getMonth()]}</span>`;
+}
+function taskRow(k){
+  return `<li class="${k.done?"is-done":""}"><input type="checkbox" class="chk" id="tk-${esc(k.id)}" data-tk="${esc(k.id)}" ${k.done?"checked":""} aria-label="Fait">
+    <button class="tk-open" data-tkopen="${esc(k.id)}"><span class="txt">${esc(k.text)}</span>${k.comment?`<span class="t-note">💬 ${esc(k.comment)}</span>`:""}</button>${dueBadge(k)}</li>`;
+}
+let tkWhen="today", tkPicked="", tkGroups=new Set(["late","today","week"]);
 function tasksHTML(){
-  const td=todayKey();
-  const list=tasks.filter(k=>k.day===td||(k.day<td&&!k.done)).sort((a,b)=>(a.done-b.done)||(a.day<b.day?-1:a.day>b.day?1:0)||((a.time||"99")<(b.time||"99")?-1:(a.time||"99")>(b.time||"99")?1:0)||(a.createdAt-b.createdAt));
-  const later=tasks.filter(k=>k.day>td&&!k.done).sort((a,b)=>a.day<b.day?-1:a.day>b.day?1:(a.time||"")<(b.time||"")?-1:1);
-  const tomorrow=tasks.filter(k=>k.day>td&&!k.done).length;
-  const n=list.filter(k=>k.done).length;
-  return `<div class="section-label">Mes tâches du jour${list.length?" · "+n+"/"+list.length:""}</div><article class="card">
-    ${list.length?`<ul class="tasks" style="border-top:0">${list.map(k=>taskRow(k,true)).join("")}</ul>`:""}
-    <div class="tk-add"><input type="text" id="tk-new" placeholder="Ajouter une tâche…" autocomplete="off"><button class="btn" data-tkadd="1">Ajouter</button></div>
-    <div class="tk-opts"><select id="tk-day" aria-label="Jour"><option value="0">Aujourd'hui</option><option value="1">Demain</option><option value="2">Après-demain</option><option value="7">Dans une semaine</option><option value="pick">Choisir une date…</option></select><input type="date" id="tk-date" aria-label="Date" hidden><input type="time" id="tk-time" aria-label="Heure (facultatif)" title="Heure (facultatif)"></div>
-    ${later.length?`<details class="tk-later"><summary>À venir · ${later.length} tâche${later.length>1?"s":""}</summary><ul class="tasks">${later.map(k=>taskRow(k,true)).join("")}</ul></details>`:""}
-    <div class="adv" style="justify-content:flex-end"><button class="iconbtn" data-tkarch="1">📚 Archive des tâches</button></div></article>`;
+  const td=todayKey(),sun=sundayKey();
+  const open=tasks.filter(k=>!k.done).sort((a,b)=>((a.day||"9")<(b.day||"9")?-1:(a.day||"9")>(b.day||"9")?1:0)||((a.time||"99")<(b.time||"99")?-1:1)||(a.createdAt-b.createdAt));
+  const G=[["late","En retard",open.filter(k=>k.day&&k.day<td)],["today","Aujourd'hui",open.filter(k=>k.day===td)],["week","Cette semaine",open.filter(k=>k.day>td&&k.day<=sun)],["later","Plus tard",open.filter(k=>k.day>sun)],["none","Pas pressé",open.filter(k=>!k.day)]];
+  const doneToday=tasks.filter(k=>k.done&&k.doneAt&&ymd(new Date(k.doneAt))===td);
+  const groups=G.filter(g=>g[2].length).map(([id,l,list])=>`<details class="tk-grp tk-${id}" data-grp="${id}" ${tkGroups.has(id)?"open":""}><summary>${l} <span>${list.length}</span></summary><ul class="tasks">${list.map(taskRow).join("")}</ul></details>`).join("");
+  return `<div class="section-label">Mes tâches${open.length?" · "+open.length+" à faire":""}</div><article class="card tkc">
+    <div class="tk-add"><input type="text" id="tk-new" placeholder="Nouvelle tâche…" autocomplete="off" enterkeyhint="done"><button class="btn primary" data-tkadd="1">Ajouter</button></div>
+    <div class="tk-when"><span class="tk-q">Pour quand ?</span>${whenChips("tk",tkWhen,tkPicked)}<button type="button" class="iconbtn tk-hr" data-tkhr="1">⏰ heure</button><input type="time" id="tk-time" hidden></div>
+    ${groups||`<div class="empty" style="padding:14px">Aucune tâche en cours.</div>`}
+    ${doneToday.length?`<details class="tk-grp tk-done" data-grp="done" ${tkGroups.has("done")?"open":""}><summary>Fait aujourd'hui <span>${doneToday.length}</span></summary><ul class="tasks">${doneToday.map(taskRow).join("")}</ul></details>`:""}
+    <div class="adv" style="justify-content:flex-end;padding-top:10px"><button class="iconbtn" data-tkarch="1">📚 Archive des tâches</button></div></article>`;
 }
+// les boutons « Pour quand ? » changent sans redessiner l'écran (le texte tapé reste)
+function setChips(box,w){box.querySelectorAll("[data-when]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.when===w));
+  const pfx=box.dataset.chips;const di=document.getElementById(pfx+"-date");if(di){di.hidden=w!=="pick";if(w==="pick"&&!di.value)try{di.showPicker()}catch(_){di.focus()}}}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-when]");if(!b)return;const box=b.closest("[data-chips]");
+  if(box.dataset.chips==="tk"){tkWhen=b.dataset.when}else if(tkEdit){tkEdit.when=b.dataset.when}setChips(box,b.dataset.when)});
+document.addEventListener("change",e=>{if(e.target.id==="tk-date"){tkPicked=e.target.value;const c=document.querySelector('[data-chips="tk"] [data-when="pick"]');if(c&&tkPicked)c.textContent="📅 "+fmtD(new Date(tkPicked+"T12:00").getTime())}
+  if(e.target.id==="te-date"&&tkEdit){tkEdit.picked=e.target.value}});
+document.addEventListener("toggle",e=>{const d=e.target;if(!d.matches||!d.matches("details.tk-grp"))return;if(d.open)tkGroups.add(d.dataset.grp);else tkGroups.delete(d.dataset.grp)},true);
 async function addTask(){
   const i=$("#tk-new");if(!i)return;const text=i.value.trim();if(!text){i.focus();return}
-  const sel=($("#tk-day")||{}).value||"0";let day;
-  if(sel==="pick"){day=($("#tk-date")||{}).value;if(!day){$("#tk-date").focus();return}}
-  else{const d=new Date();d.setDate(d.getDate()+Number(sel));day=ymd(d)}
-  const time=($("#tk-time")||{}).value||"";
+  const day=dayOfWhen(tkWhen,tkPicked);if(tkWhen==="pick"&&!day){const di=$("#tk-date");if(di){di.hidden=false;try{di.showPicker()}catch(_){di.focus()}}return}
+  const ti=$("#tk-time");const time=ti&&!ti.hidden&&day?ti.value:"";
   const k={id:"k"+uid(),text,day,time,done:false,comment:"",createdAt:Date.now()};
+  const grp=!day?"none":day<todayKey()?"late":day===todayKey()?"today":day<=sundayKey()?"week":"later";tkGroups.add(grp);
   await db.doc("tasks/"+k.id).set(taskBody(k));
   const n=$("#tk-new");if(n){n.value="";n.focus()}
+  $("#status").textContent="✓ Tâche ajoutée"+(day?" · pour "+(day===todayKey()?"aujourd'hui":fmtD(new Date(day+"T12:00").getTime())):" · pas pressé");
+}
+// Fiche d'une tâche : texte, date limite, heure, commentaire
+let tkEdit=null;
+function openTaskSheet(id){
+  const k=tasks.find(x=>x.id===id);if(!k)return;
+  tkEdit={id,text:k.text,when:whenOfDay(k.day),picked:k.day||"",time:k.time||"",comment:k.comment||"",done:k.done};
+  const root=$("#sheet-root");
+  root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="te-h"><h3 id="te-h">Tâche</h3>
+    <div class="field"><label for="te-tx">Quoi</label><input type="text" id="te-tx" value="${esc(k.text)}"></div>
+    <div class="field"><label>Pour quand ?</label>${whenChips("te",tkEdit.when,tkEdit.picked)}</div>
+    <div class="field"><label for="te-time">Heure (facultatif)</label><input type="time" id="te-time" value="${esc(k.time||"")}"></div>
+    <div class="field"><label for="te-com">Commentaire</label><textarea id="te-com" placeholder="Ce qui a été fait, ce qu'il reste, un numéro…">${esc(k.comment||"")}</textarea></div>
+    <label class="calopt"><input type="checkbox" id="te-done" ${k.done?"checked":""}> Fait</label>
+    <div class="btns"><button class="btn primary" id="te-save">Enregistrer</button><button class="btn" id="te-cancel">Annuler</button><button class="btn danger" id="te-del">Supprimer</button></div></div></div>`;
+  const s=$("#sheet-bg");const close=()=>{tkEdit=null;root.innerHTML=""};
+  s.addEventListener("click",ev=>{if(ev.target===s)close()});
+  $("#te-cancel").addEventListener("click",close);
+  $("#te-del").addEventListener("click",ev=>{const b=ev.target;if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Confirmer la suppression";return}db.doc("tasks/"+id).delete();close()});
+  $("#te-save").addEventListener("click",()=>{
+    const text=$("#te-tx").value.trim();if(!text){$("#te-tx").focus();return}
+    const day=dayOfWhen(tkEdit.when,tkEdit.picked||$("#te-date").value);if(tkEdit.when==="pick"&&!day){$("#te-date").hidden=false;$("#te-date").focus();return}
+    const done=$("#te-done").checked;
+    const nk={...k,text,day,time:day?$("#te-time").value:"",comment:$("#te-com").value.trim(),done,doneAt:done?(k.doneAt||Date.now()):null};
+    writeDoc("tasks/"+id,taskBody(nk));close();$("#status").textContent="✓ Tâche enregistrée.";
+  });
 }
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target&&e.target.id==="tk-new"){e.preventDefault();addTask()}});
 document.addEventListener("change",e=>{if(e.target&&e.target.id==="tk-day"){const p=$("#tk-date");if(p){p.hidden=e.target.value!=="pick";if(!p.hidden)p.focus()}}});
@@ -1080,6 +1209,9 @@ document.addEventListener("click",e=>{
   if(t=g("[data-pkday]")){if(pk){pk.day=Number(t.dataset.pkday);pkRender()}return}
   if(g("[data-pkgo]")){if(pk){pk.day=dayStart(pk.d[pk.field]);pkRender()}return}
   if(agTap(e))return;
+  if(wkTap(e))return;
+  if(t=g("[data-agview]")){agView=t.dataset.agview;try{localStorage.setItem("pb-agview",agView)}catch(_){}agScrolled=false;render();return}
+  if(t=g("[data-wkday]")){agDay=Number(t.dataset.wkday);agView="day";try{localStorage.setItem("pb-agview",agView)}catch(_){}agScrolled=false;render();return}
   if(t=g("[data-agnav]")){agDay=addDays(agDay,Number(t.dataset.agnav));agScrolled=false;render();return}
   if(t=g("[data-agday]")){agDay=Number(t.dataset.agday);agScrolled=false;render();return}
   if(g("[data-agtoday]")){agDay=dayStart(Date.now());agScrolled=false;render();return}
@@ -1101,6 +1233,8 @@ document.addEventListener("click",e=>{
   if(t=g("[data-adone]")){const a=appts.find(x=>x.id===t.dataset.adone);if(a){a.done=true;a.doneAt=Date.now();writeDoc("appts/"+a.id,apptBody(a));render()}return}
   if(t=g("[data-cstatus]")){const [id,st]=t.dataset.cstatus.split(":");const c=customers.find(x=>x.id===id);if(c){c.status=st;if(st!=="pause")c.pauseUntil=null;writeDoc("customers/"+c.id,custBody(c));if(document.getElementById("cd-h"))$("#sheet-root").innerHTML="";$("#status").textContent=st==="actif"?"✓ Client réactivé.":st==="pause"?"⏸ Client mis en pause.":"🗄 Client archivé."}return}
   if(t=g("[data-tk]")){const k=tasks.find(x=>x.id===t.dataset.tk);if(k){k.done=t.checked;k.doneAt=t.checked?Date.now():null;writeDoc("tasks/"+k.id,taskBody(k))}return}
+  if(t=g("[data-tkopen]")){openTaskSheet(t.dataset.tkopen);return}
+  if(g("[data-tkhr]")){const ti=$("#tk-time");if(ti){ti.hidden=!ti.hidden;if(!ti.hidden)ti.focus()}return}
   if(t=g("[data-tkc]")){const id=t.dataset.tkc;if(openTk.has(id))openTk.delete(id);else openTk.add(id);render();const ta=document.getElementById("tkc-"+id);if(ta)ta.focus();return}
   if(t=g("[data-tkdel]")){const id=t.dataset.tkdel;if(t.dataset.confirm!=="1"){t.dataset.confirm="1";t.textContent="Supprimer ?";return}db.doc("tasks/"+id).delete();return}
   if(g("[data-tkadd]")){addTask();return}
@@ -1338,7 +1472,7 @@ async function saveSheet(){
   $("#save").disabled=true;
   try{await db.doc("routines/"+d.id).set(body);closeSheet()}catch(e){$("#save").disabled=false;$("#sheet-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
 }
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(draft)closeSheet();else if(ld)closeList();else if(lead)closeLead();else if(cs)closeCust();else if(ap)closeAppt();else $("#sheet-root").innerHTML=""}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(tkEdit){tkEdit=null;$("#sheet-root").innerHTML=""}else if(draft)closeSheet();else if(ld)closeList();else if(lead)closeLead();else if(cs)closeCust();else if(ap)closeAppt();else $("#sheet-root").innerHTML=""}});
 
 // Date du jour + rafraîchissement à minuit
 function stamp(){const d=new Date();$("#today").textContent=JOURS[d.getDay()]+" "+d.getDate()+" "+MOIS[d.getMonth()]+" "+d.getFullYear()}

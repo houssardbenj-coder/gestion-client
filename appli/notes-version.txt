@@ -1,1 +1,1 @@
-Clients par activité, fiche détail, tâches avec date et heure
+Agenda en vue semaine, tâches avec date limite

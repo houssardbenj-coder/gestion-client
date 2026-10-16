@@ -1,4 +1,4 @@
 {
- "version": 10,
- "notes": "Clients par activité, fiche détail, tâches avec date et heure"
+ "version": 11,
+ "notes": "Agenda en vue semaine, tâches avec date limite"
 }
