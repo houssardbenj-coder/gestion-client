@@ -1,1 +1,1 @@
-RDV simples, tâches du jour, pause/archives, routine annuelle
+Clients par activité, fiche détail, tâches avec date et heure
