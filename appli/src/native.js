@@ -144,10 +144,10 @@
     async askAgenda(){try{return (await CAL.requestFullCalendarAccess()).result}catch(e){return "denied"}},
     async listEvents(from,to){const r=await CAL.listEventsInRange({from,to});return (r.result||[]).map(e=>({id:e.id,title:e.title,startDate:e.startDate,endDate:e.endDate,location:e.location,isAllDay:e.isAllDay}))},
     // Crée l'événement dans l'agenda Google (ou le met à jour s'il existe déjà : calId)
-    async addEvent({title,start,minutes,location,description,calId}){
+    async addEvent({title,start,end,minutes,location,description,calId}){
       if(!(await canWrite()))throw new Error("denied");
       const calendarId=await chosenCalendar();
-      const body={title,startDate:start,endDate:start+3600e3,location,description,alerts:[-(minutes||60)]};
+      const body={title,startDate:start,endDate:end&&end>start?end:start+3600e3,location,description,alerts:[-(minutes||60)]};
       if(calId&&calId!=="ok"){
         try{await CAL.modifyEvent({id:String(calId),...body});return calId}catch(e){/* supprimé de l'agenda : on le recrée */}
       }

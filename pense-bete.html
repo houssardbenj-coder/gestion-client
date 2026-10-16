@@ -26,7 +26,7 @@ h1{font-family:var(--display);font-weight:800;font-size:2rem;line-height:1;margi
 h1 span{background:linear-gradient(transparent 55%,var(--hi) 55%);padding:0 .1em}
 .today{color:var(--muted);font-size:.9rem;margin-top:6px}
 .tabs{display:flex;gap:4px;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:4px}
-.tabs button{flex:1;border:0;background:none;color:var(--muted);font:600 .85rem var(--body);padding:8px 4px;border-radius:999px;cursor:pointer}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);font:600 .8rem var(--body);padding:8px 2px;min-width:0;border-radius:999px;cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 .section-label{font:600 .75rem var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:6px 2px -6px}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
@@ -159,6 +159,27 @@ label.btn{display:inline-flex;align-items:center}
 .pk-fine-l{font:600 .72rem var(--body)!important;text-transform:none!important;letter-spacing:0!important;margin-top:4px}
 .ag-d.past{opacity:.45}
 .ag-hour::after{content:"";position:absolute;left:44px;right:0;top:50%;border-top:1px dashed var(--line)}
+.csum{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.csum>div{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column}
+.csum b{font-family:var(--display);font-size:1.5rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.csum span{font-size:.75rem;color:var(--muted);overflow-wrap:anywhere}
+.csum-a{border-top:4px solid var(--ac)!important}
+.ctabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.ctabs button{flex:none;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:999px;padding:8px 14px;font:600 .85rem var(--body);cursor:pointer;white-space:nowrap}
+.ctabs button[aria-pressed="true"]{background:var(--ac,var(--ink));border-color:var(--ac,var(--ink));color:#fff}
+.ctabs .ctab-edit{color:var(--muted);border-style:dashed}
+.csearch{font:500 1rem var(--body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+.clist{display:flex;flex-direction:column;gap:14px}
+.pill.act{border-color:var(--ac);color:var(--ac);background:color-mix(in srgb,var(--ac) 10%,transparent)}
+.cinfo{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;padding:0 16px 12px;font-size:.88rem}
+.cinfo div{display:flex;flex-direction:column;min-width:0}
+.cinfo span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.cinfo b{font-weight:600;overflow-wrap:anywhere}
+.achks{display:flex;flex-wrap:wrap;gap:8px}
+.achk{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-left:4px solid var(--ac);border-radius:10px;padding:7px 10px;font:600 .9rem var(--body);cursor:pointer}
+.achk input{width:18px;height:18px;accent-color:var(--ac)}
+.adot{width:14px;height:14px;border-radius:50%;background:var(--ac);flex:none;align-self:center}
+input[type=search],input[type=date]{font:500 1rem var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
 .dayinfo{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .dayinfo:empty{display:none}
 .day-h{font:600 .8rem var(--body);color:var(--muted)}
@@ -183,7 +204,8 @@ label.btn{display:inline-flex;align-items:center}
   <div class="tabs" role="tablist">
     <button id="tab-now" role="tab" aria-selected="true" data-tab="now">À faire</button>
     <button id="tab-agenda" role="tab" aria-selected="false" data-tab="agenda">Agenda</button>
-    <button id="tab-proj" role="tab" aria-selected="false" data-tab="proj">Clients</button>
+    <button id="tab-proj" role="tab" aria-selected="false" data-tab="proj">Suivi</button>
+    <button id="tab-cust" role="tab" aria-selected="false" data-tab="cust">Clients</button>
     <button id="tab-all" role="tab" aria-selected="false" data-tab="all">Routines</button>
   </div>
   <main id="view">
@@ -204,6 +226,7 @@ const FREQ={monthly:"Chaque mois",weekly:"Chaque semaine",daily:"Chaque jour",qu
 
 let db=null, routines=[], runs={}, tab="now", pending={};
 let projects=[], models=[], leads=[], projFilter="leads", openP=new Set();
+let customers=[], activities=[], custAct="all", custStatus="actif", custQ="";
 try{tab=localStorage.getItem("pb-tab")||"now";if(tab==="hist")tab="all";projFilter=localStorage.getItem("pb-pf")||"leads"}catch(e){}
 
 const pad=n=>String(n).padStart(2,"0");
@@ -267,8 +290,9 @@ function render(){
   const v=$("#view");
   if(!db){v.innerHTML=`<div class="card empty"><strong>Ouvre cette page depuis Claude</strong>Tes routines sont enregistrées dans ton compte. Connecte-toi pour les voir et cocher tes tâches.</div>`;return}
   $("#fab").hidden=tab==="proj";
-  $("#fab").textContent=tab==="agenda"?"+ RDV":"+ Routine";
+  $("#fab").textContent=tab==="agenda"?"+ RDV":tab==="cust"?"+ Client":"+ Routine";
   if(tab==="proj"){v.innerHTML=renderClients();return}
+  if(tab==="cust"){v.innerHTML=renderCustomers();return}
   if(tab==="agenda"){v.innerHTML=renderAgenda();const n=v.querySelector(".ag-now")||v.querySelector(".ag-ev");if(n&&!agScrolled){agScrolled=true;n.scrollIntoView({block:"center"})}return}
   const today=new Date();today.setHours(0,0,0,0);
   if(tab==="now"){
@@ -313,9 +337,9 @@ async function loadWeek(force){
 function agItems(a,b){
   const items=[],mine=new Set();
   leads.forEach(l=>{if(l.calId)mine.add(String(l.calId));
-    if((l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+(l.type==="rdv"?3600e3:1800e3),title:fullName(l),sub:l.type==="rdv"?(l.address||"RDV"):"À rappeler"+(l.phone?" · "+l.phone:""),kind:l.type==="rdv"?"rdv":"call",ref:"lead:"+l.id})});
+    if((l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:fullName(l),sub:l.type==="rdv"?(l.address||"RDV"):"À rappeler"+(l.phone?" · "+l.phone:""),kind:l.type==="rdv"?"rdv":"call",ref:"lead:"+l.id})});
   projects.forEach(p=>{if(p.calId)mine.add(String(p.calId));
-    if(p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+3600e3,title:fullName(p),sub:p.address||"RDV client",kind:"rdv",ref:"proj:"+p.id})});
+    if(p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:fullName(p),sub:p.address||"RDV client",kind:"rdv",ref:"proj:"+p.id})});
   (agEvents||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;
     if(!mine.has(String(e.id))&&e.startDate<b&&end>a)items.push({t:e.startDate,end,title:e.title||"(sans titre)",sub:e.location||"",kind:"cal",allDay:e.isAllDay,ref:"cal:"+e.id})});
   routines.forEach(r=>{const p=periodOf(r);const {n,total}=progress(r,p);const t=p.due.getTime();
@@ -371,9 +395,9 @@ async function weekEvents(ws){
 function busyItems(a,b,events,selfKind,selfId){
   const items=[],mine=new Set();
   leads.forEach(l=>{const self=selfKind==="leads"&&l.id===selfId;if(l.calId)mine.add(String(l.calId));
-    if(!self&&(l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+(l.type==="rdv"?3600e3:900e3),title:(l.type==="rdv"?"RDV ":"Rappel ")+fullName(l),kind:l.type==="rdv"?"rdv":"call"})});
+    if(!self&&(l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:(l.type==="rdv"?"RDV ":"Rappel ")+fullName(l),kind:l.type==="rdv"?"rdv":"call"})});
   projects.forEach(p=>{const self=selfKind==="projects"&&p.id===selfId;if(p.calId)mine.add(String(p.calId));
-    if(!self&&p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+3600e3,title:"RDV "+fullName(p),kind:"rdv"})});
+    if(!self&&p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:"RDV "+fullName(p),kind:"rdv"})});
   (events||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;if(!mine.has(String(e.id))&&e.startDate<b&&end>a)items.push({t:e.startDate,end,title:e.title||"(sans titre)",kind:"cal",allDay:e.isAllDay})});
   return items.sort((x,y)=>x.t-y.t);
 }
@@ -468,11 +492,11 @@ function projectCard(p){
   return `<article class="card"><div class="card-head"><h2>${esc(fullName(p))}</h2><button class="iconbtn" data-editp="${esc(p.id)}" aria-label="Modifier ${esc(fullName(p))}">Modifier</button></div>
   <div class="meta">${pill}<span>${esc(p.model||"")}${p.createdAt?" · démarré le "+fmtD(p.createdAt):""}</span></div>
   ${contactBlock(p)}
-  ${p.rdv?`<div class="next">RDV : <b>${esc(fmtDT(p.rdv))}</b></div><div class="adv">${calButton("projects",p,p.rdv)}</div>`:""}
+  ${p.rdv?`<div class="next">RDV : <b>${esc(fmtDT(p.rdv))}</b> · ${durLabel(durOf("projects",p))}</div><div class="adv">${calButton("projects",p,p.rdv)}</div>`:""}
   ${rail(p,st)}
   ${st.next?`<div class="next">Prochaine étape : <b>${esc(st.next.label)}</b></div>
   <div class="adv"><button class="btn ok" data-adv="${esc(p.id)}">✓ Étape faite</button>${nextLink}${st.n?`<button class="iconbtn" data-back="${esc(p.id)}">↶ Annuler la dernière</button>`:""}</div>`
-  :`<div class="adv"><button class="iconbtn" data-back="${esc(p.id)}">↶ Rouvrir la dernière étape</button></div>`}
+  :`<div class="adv">${p.customerId&&customers.some(c=>c.id===p.customerId)?`<span class="pill done">✓ Dans les clients actifs</span>`:`<button class="btn ok" data-p2c="${esc(p.id)}">➕ Ajouter aux clients actifs</button>`}<button class="iconbtn" data-back="${esc(p.id)}">↶ Rouvrir la dernière étape</button></div>`}
   ${p.note?`<div class="pnote">${esc(p.note)}</div>`:""}
   <details class="steps" data-pid="${esc(p.id)}" ${openP.has(p.id)?"open":""}><summary>${openP.has(p.id)?"Masquer les étapes":"Voir toutes les étapes"}</summary><ul class="tasks">${items}</ul></details></article>`;
 }
@@ -481,7 +505,7 @@ const endToday=()=>{const d=new Date();d.setHours(23,59,59,999);return d.getTime
 function leadCard(l){
   const open=l.status==="open"||!l.status;
   const late=open&&l.when&&l.when<Date.now();
-  const when=l.when?`<span class="pill ${late?"due":""}">${late?"En retard · ":""}${esc(fmtDT(l.when))}</span>`:"";
+  const when=l.when?`<span class="pill ${late?"due":""}">${late?"En retard · ":""}${esc(fmtDT(l.when))} · ${durLabel(durOf("leads",l))}</span>`:"";
   const state=open?"":`<span class="pill done">${l.status==="converted"?"Parcours démarré":"Traité"}${l.doneAt?" le "+fmtD(l.doneAt):""}</span>`;
   return `<article class="card"><div class="card-head"><h2>${esc(fullName(l))}</h2><button class="iconbtn" data-ledit="${esc(l.id)}" aria-label="Modifier ${esc(fullName(l))}">Modifier</button></div>
   <div class="meta"><span class="pill type-${esc(l.type||"rappel")}">${esc(LTYPE[l.type]||"À rappeler")}</span>${when}${state}</div>
@@ -492,10 +516,16 @@ function leadCard(l){
 }
 // Agenda du téléphone (appli Android uniquement) et planning des 7 prochains jours
 const NATIVE=window.PB_native||null;
+// Durée d'un RDV / rappel en minutes
+const DURS=[15,30,45,60,90,120,180,240];
+const durLabel=m=>m<60?m+" min":Math.floor(m/60)+" h"+(m%60?" "+pad(m%60):"");
+const durOf=(kind,x)=>kind==="leads"?Number(x.dur||(x.type==="rdv"?60:15)):Number(x.rdvDur||60);
+const durSelect=(id,val)=>`<select id="${id}">`+DURS.map(m=>`<option value="${m}" ${Number(val)===m?"selected":""}>${durLabel(m)}</option>`).join("")+`</select>`;
+const inAgenda=(kind,x)=>{const w=kind==="leads"?x.when:x.rdv;return !!(x.calId&&x.calAt===w&&Number(x.calDur||0)===durOf(kind,x))};
 let agenda=null, agendaState="unknown";
 function calButton(kind,x,when){
   if(!NATIVE||!when||when<Date.now())return "";
-  if(x.calId&&x.calAt===when)return `<span class="pill done">✓ Dans l'agenda</span>`;
+  if(inAgenda(kind,x))return `<span class="pill done">✓ Dans l'agenda</span>`;
   return `<button class="btn" data-cal="${kind}:${esc(x.id)}">📅 ${x.calId?"Mettre à jour l'agenda":"Mettre dans l'agenda"}</button>`;
 }
 // Envoie (ou met à jour) l'événement dans l'agenda Google du téléphone
@@ -503,8 +533,8 @@ async function pushToAgenda(kind,x){
   const when=kind==="leads"?x.when:x.rdv;const isRdv=kind==="projects"||x.type==="rdv";
   const desc=[x.phone?"Tél : "+x.phone:"",x.reason?"Motif : "+x.reason:"",x.note||"",x.model?"Parcours : "+x.model:""].filter(Boolean).join(" · ");
   try{
-    const calId=await NATIVE.addEvent({title:(isRdv?"RDV – ":"Rappeler – ")+fullName(x),start:when,minutes:isRdv?60:15,location:x.address||"",description:desc,calId:x.calId});
-    x.calId=String(calId||"ok");x.calAt=when;writeDoc(kind+"/"+x.id,kind==="leads"?leadBody(x):projBody(x));
+    const calId=await NATIVE.addEvent({title:(isRdv?"RDV – ":"Rappeler – ")+fullName(x),start:when,end:when+durOf(kind,x)*6e4,minutes:isRdv?60:15,location:x.address||"",description:desc,calId:x.calId});
+    x.calId=String(calId||"ok");x.calAt=when;x.calDur=durOf(kind,x);writeDoc(kind+"/"+x.id,kind==="leads"?leadBody(x):projBody(x));
     $("#status").textContent="📅 Ajouté à ton agenda.";render();loadAgenda();return true;
   }catch(err){$("#status").textContent=err&&err.message==="denied"?"Autorise l'accès à l'agenda : Réglages du téléphone → Applis → Pense-bête → Autorisations → Agenda.":"Impossible d'ajouter à l'agenda.";return false}
 }
@@ -513,9 +543,9 @@ async function dayItems(when,selfKind,selfId){
   const d0=new Date(when);d0.setHours(0,0,0,0);const a=d0.getTime(),b=a+864e5;
   const items=[],mine=new Set();
   leads.forEach(l=>{const self=selfKind==="leads"&&l.id===selfId;if(l.calId&&(self||l.when))mine.add(String(l.calId));
-    if(!self&&(l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+(l.type==="rdv"?3600e3:900e3),title:(l.type==="rdv"?"RDV – ":"Rappeler – ")+fullName(l)})});
+    if(!self&&(l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:(l.type==="rdv"?"RDV – ":"Rappeler – ")+fullName(l)})});
   projects.forEach(p=>{const self=selfKind==="projects"&&p.id===selfId;if(p.calId)mine.add(String(p.calId));
-    if(!self&&p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+3600e3,title:"RDV – "+fullName(p)})});
+    if(!self&&p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:"RDV – "+fullName(p)})});
   if(NATIVE&&agendaState==="granted"){try{(await NATIVE.listEvents(a,b)).forEach(e=>{if(!mine.has(String(e.id)))items.push({t:e.startDate,end:e.endDate||e.startDate+3600e3,title:e.title||"(sans titre)",allDay:e.isAllDay,phone:true})})}catch(e){}}
   return items.sort((x,y)=>x.t-y.t);
 }
@@ -604,14 +634,135 @@ document.addEventListener("toggle",e=>{const d=e.target;if(!d.matches||!d.matche
   if(d.open)openP.add(d.dataset.pid);else openP.delete(d.dataset.pid);
   const s=d.querySelector("summary");if(s)s.textContent=d.open?"Masquer les étapes":"Voir toutes les étapes"},true);
 
+// ===== Fichier clients actifs, avec onglets par activité =====
+const CSTAT={actif:"Actifs",pause:"En pause",termine:"Anciens"};
+const ACT_COLORS=["#2346d8","#1f8a4c","#c2410c","#8b3fd1","#0e7c86","#b8860b","#c0266d","#4b5563"];
+const actById=id=>activities.find(a=>a.id===id);
+const actNames=c=>(c.activities||[]).map(id=>(actById(id)||{}).name).filter(Boolean);
+const actColor=a=>ACT_COLORS[Math.max(0,activities.indexOf(a))%ACT_COLORS.length];
+function customerCard(c){
+  const pills=(c.activities||[]).map(actById).filter(Boolean).map(a=>`<span class="pill act" style="--ac:${actColor(a)}">${esc(a.name)}</span>`).join("");
+  const st=c.status&&c.status!=="actif"?`<span class="pill">${esc(CSTAT[c.status]||c.status)}</span>`:"";
+  const lines=[c.intervenant?`<div><span>Intervenant·e</span><b>${esc(c.intervenant)}</b></div>`:"",
+    c.schedule?`<div><span>Planning</span><b>${esc(c.schedule)}</b></div>`:"",
+    c.hoursMonth?`<div><span>Volume</span><b>${esc(c.hoursMonth)} h / mois</b></div>`:"",
+    c.start?`<div><span>Client depuis</span><b>${esc(fmtD(c.start))}</b></div>`:""].join("");
+  return `<article class="card"><div class="card-head"><h2>${esc(fullName(c))}</h2><button class="iconbtn" data-cedit="${esc(c.id)}" aria-label="Modifier ${esc(fullName(c))}">Modifier</button></div>
+  <div class="meta">${pills||`<span class="pill">Sans activité</span>`}${st}</div>
+  ${contactBlock(c)}
+  ${lines?`<div class="cinfo">${lines}</div>`:""}
+  ${c.note?`<div class="pnote">${esc(c.note)}</div>`:""}
+  <div class="adv"><button class="btn" data-crdv="${esc(c.id)}">📅 Prendre un RDV</button></div></article>`;
+}
+function renderCustomers(){
+  const byStatus=customers.filter(c=>(c.status||"actif")===custStatus);
+  const inAct=c=>custAct==="all"||(c.activities||[]).includes(custAct);
+  const q=custQ.trim().toLowerCase();
+  const list=byStatus.filter(inAct).filter(c=>!q||[fullName(c),c.phone,c.address,c.intervenant].join(" ").toLowerCase().includes(q))
+    .sort((a,b)=>fullName(a).localeCompare(fullName(b),"fr"));
+  const actifs=customers.filter(c=>(c.status||"actif")==="actif");
+  const hours=actifs.reduce((s,c)=>s+(Number(c.hoursMonth)||0),0);
+  if(custAct!=="all"&&!actById(custAct))custAct="all";
+  let h=`<div class="csum"><div><b>${actifs.length}</b><span>client${actifs.length>1?"s":""} actif${actifs.length>1?"s":""}</span></div><div><b>${Math.round(hours*10)/10}</b><span>heures / mois</span></div>${activities.map(a=>{const n=actifs.filter(c=>(c.activities||[]).includes(a.id)).length;return `<div style="--ac:${actColor(a)}" class="csum-a"><b>${n}</b><span>${esc(a.name)}</span></div>`}).join("")}</div>`;
+  h+=`<div class="ctabs" role="tablist"><button data-cact="all" aria-pressed="${custAct==="all"}">Tous (${byStatus.length})</button>`+
+    activities.map(a=>`<button data-cact="${esc(a.id)}" aria-pressed="${custAct===a.id}" style="--ac:${actColor(a)}">${esc(a.name)} (${byStatus.filter(c=>(c.activities||[]).includes(a.id)).length})</button>`).join("")+
+    `<button data-actedit="1" class="ctab-edit">⚙ Activités</button></div>`;
+  h+=`<div class="filters">`+Object.entries(CSTAT).map(([k,l])=>`<button data-cstat="${k}" aria-pressed="${custStatus===k}">${l} (${customers.filter(c=>(c.status||"actif")===k).length})</button>`).join("")+`</div>`;
+  h+=`<input type="search" id="cust-q" class="csearch" placeholder="Rechercher un client, un téléphone, un·e intervenant·e…" value="${esc(custQ)}">`;
+  if(!activities.length)h+=`<div class="card empty" style="padding:16px"><strong>Crée tes activités</strong>Touche « ⚙ Activités » pour créer tes onglets (par exemple ménage, repassage, jardinage, aide à domicile).</div>`;
+  h+=`<div id="cust-list" class="clist">`+(list.length?list.map(customerCard).join(""):`<div class="card empty"><strong>${customers.length?"Aucun client ici":"Aucun client actif pour l'instant"}</strong>${customers.length?"Change d'onglet ou de filtre.":"Touche « + Client » pour ajouter un client, ou « Ajouter aux clients actifs » sur un parcours validé dans l'onglet Suivi."}</div>`)+`</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:14px">${h}</div>`;
+}
+document.addEventListener("input",e=>{if(e.target.id!=="cust-q")return;custQ=e.target.value;
+  const pos=e.target.selectionStart;render();const i=$("#cust-q");if(i){i.focus();try{i.setSelectionRange(pos,pos)}catch(_){}}});
+
+// Fiche client actif
+let cs=null, csConfirm=false;
+function openCustSheet(c,preset){
+  if(!db){$("#status").textContent="Connecte-toi pour gérer tes clients.";return}
+  cs=c?{...JSON.parse(JSON.stringify(c)),isNew:false}:{id:"c"+uid(),isNew:true,firstName:"",lastName:"",phone:"",address:"",email:"",activities:custAct!=="all"?[custAct]:[],status:"actif",intervenant:"",schedule:"",hoursMonth:"",start:Date.now(),note:"",projectId:"",...(preset||{})};
+  csConfirm=false;drawCustSheet();
+}
+function drawCustSheet(){
+  const d=cs, root=$("#sheet-root");if(!d){root.innerHTML="";return}
+  const acts=activities.map(a=>`<label class="achk" style="--ac:${actColor(a)}"><input type="checkbox" data-act="${esc(a.id)}" ${(d.activities||[]).includes(a.id)?"checked":""}> ${esc(a.name)}</label>`).join("");
+  root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cs-h">
+   <h3 id="cs-h">${d.isNew?"Nouveau client actif":"Fiche client"}</h3>
+   <div class="row"><div class="field"><label for="cs-fn">Prénom</label><input type="text" id="cs-fn" autocomplete="off" value="${esc(d.firstName)}"></div>
+   <div class="field"><label for="cs-ln">Nom</label><input type="text" id="cs-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
+   <div class="field"><label for="cs-ph">Téléphone</label><input type="tel" id="cs-ph" autocomplete="off" placeholder="06 12 34 56 78" value="${esc(d.phone)}"></div>
+   <div class="field"><label for="cs-ad">Adresse</label><input type="text" id="cs-ad" autocomplete="off" placeholder="N°, rue, code postal, ville" value="${esc(d.address)}"></div>
+   <div class="field"><label>Activités</label><div class="achks">${acts||`<span class="status">Aucune activité : crée-les ci-dessous.</span>`}</div>
+     <div class="row"><input type="text" id="cs-newact" placeholder="Nouvelle activité (ex. Jardinage)"><button type="button" class="btn" id="cs-addact">+ Ajouter</button></div></div>
+   <div class="row"><div class="field"><label for="cs-st">Statut</label><select id="cs-st">${Object.entries({actif:"Actif",pause:"En pause",termine:"Ancien client"}).map(([k,l])=>`<option value="${k}" ${d.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
+   <div class="field"><label for="cs-hm">Heures / mois</label><input type="number" id="cs-hm" min="0" step="0.5" inputmode="decimal" value="${esc(d.hoursMonth)}"></div></div>
+   <div class="field"><label for="cs-in">Intervenant·e</label><input type="text" id="cs-in" autocomplete="off" placeholder="Qui intervient chez ce client" value="${esc(d.intervenant)}"></div>
+   <div class="field"><label for="cs-sc">Planning habituel</label><input type="text" id="cs-sc" placeholder="Ex. mardi et jeudi 9h–11h" value="${esc(d.schedule)}"></div>
+   <div class="field"><label for="cs-sd">Client depuis</label><input type="date" id="cs-sd" value="${d.start?ymd(new Date(d.start)):""}"></div>
+   <div class="field"><label for="cs-em">Email (facultatif)</label><input type="email" id="cs-em" autocomplete="off" value="${esc(d.email)}"></div>
+   <div class="field"><label for="cs-no">Note</label><textarea id="cs-no" placeholder="Code d'accès, consignes, infos utiles…">${esc(d.note)}</textarea></div>
+   <div class="btns"><button class="btn primary" id="cs-save">Enregistrer</button><button class="btn" id="cs-cancel">Annuler</button>
+   ${d.isNew?"":`<button class="btn danger" id="cs-del">${csConfirm?"Confirmer la suppression":"Supprimer"}</button>`}</div>
+   <div class="status" id="cs-msg"></div></div></div>`;
+  const s=$("#sheet-bg");
+  s.addEventListener("click",ev=>{if(ev.target===s)closeCust()});
+  const bind=(id,k)=>$(id).addEventListener("input",ev=>d[k]=ev.target.value);
+  bind("#cs-fn","firstName");bind("#cs-ln","lastName");bind("#cs-ph","phone");bind("#cs-ad","address");bind("#cs-in","intervenant");bind("#cs-sc","schedule");bind("#cs-hm","hoursMonth");bind("#cs-em","email");bind("#cs-no","note");
+  $("#cs-st").addEventListener("change",ev=>d.status=ev.target.value);
+  $("#cs-sd").addEventListener("change",ev=>d.start=ev.target.value?new Date(ev.target.value+"T12:00").getTime():null);
+  s.querySelectorAll("[data-act]").forEach(cb=>cb.addEventListener("change",()=>{const id=cb.dataset.act;d.activities=(d.activities||[]).filter(x=>x!==id);if(cb.checked)d.activities.push(id)}));
+  $("#cs-addact").addEventListener("click",async()=>{const name=$("#cs-newact").value.trim();if(!name)return;
+    const id="a"+uid();await db.doc("activities/"+id).set({name,order:Date.now()});if(!actById(id))activities.push({id,name,order:Date.now()});
+    d.activities=[...(d.activities||[]),id];drawCustSheet()});
+  $("#cs-cancel").addEventListener("click",closeCust);
+  $("#cs-save").addEventListener("click",async()=>{
+    if(!d.firstName.trim()&&!d.lastName.trim()){$("#cs-msg").textContent="Indique au moins un prénom ou un nom.";$("#cs-fn").focus();return}
+    $("#cs-save").disabled=true;
+    const body={firstName:d.firstName.trim(),lastName:d.lastName.trim(),phone:(d.phone||"").trim(),address:(d.address||"").trim(),email:(d.email||"").trim(),
+      activities:d.activities||[],status:d.status||"actif",intervenant:(d.intervenant||"").trim(),schedule:(d.schedule||"").trim(),hoursMonth:d.hoursMonth===""?"":Number(d.hoursMonth)||0,
+      start:d.start||null,note:d.note||"",projectId:d.projectId||"",createdAt:d.createdAt||Date.now()};
+    try{await db.doc("customers/"+d.id).set(body);
+      if(d.isNew&&d.projectId){const p=projects.find(x=>x.id===d.projectId);if(p){p.customerId=d.id;writeDoc("projects/"+p.id,projBody(p))}}
+      if(d.isNew){custStatus=body.status;tab="cust";try{localStorage.setItem("pb-tab",tab)}catch(_){}}
+      closeCust();render();$("#status").textContent="✓ Client enregistré.";}
+    catch(e){$("#cs-save").disabled=false;$("#cs-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
+  });
+  const del=$("#cs-del");if(del)del.addEventListener("click",async()=>{
+    if(!csConfirm){csConfirm=true;drawCustSheet();return}
+    try{await db.doc("customers/"+d.id).delete();closeCust()}catch(e){$("#cs-msg").textContent="Suppression impossible. Réessaie."}});
+}
+function closeCust(){cs=null;drawCustSheet()}
+
+// Gestion des activités (les onglets du fichier clients)
+function openActSheet(){
+  const root=$("#sheet-root");
+  const draw=()=>{root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ac-h"><h3 id="ac-h">Activités</h3>
+    <div class="status" style="text-align:left">Chaque activité devient un onglet du fichier clients.</div>
+    ${activities.map(a=>`<div class="row"><span class="adot" style="--ac:${actColor(a)}"></span><input type="text" data-aname="${esc(a.id)}" value="${esc(a.name)}"><button type="button" class="iconbtn" data-adel="${esc(a.id)}" aria-label="Supprimer ${esc(a.name)}">✕</button></div>`).join("")}
+    <div class="row"><input type="text" id="ac-new" placeholder="Nouvelle activité (ex. Ménage)"><button type="button" class="btn" id="ac-add">+ Ajouter</button></div>
+    <button class="btn primary" id="ac-close">Terminé</button></div></div>`;
+    const s=$("#sheet-bg");
+    s.addEventListener("click",ev=>{if(ev.target===s)root.innerHTML=""});
+    s.querySelectorAll("[data-aname]").forEach(inp=>inp.addEventListener("change",()=>{const a=actById(inp.dataset.aname);const v=inp.value.trim();if(a&&v&&v!==a.name){a.name=v;writeDoc("activities/"+a.id,{name:v,order:a.order||0})}}));
+    s.querySelectorAll("[data-adel]").forEach(b=>b.addEventListener("click",async()=>{const id=b.dataset.adel;const n=customers.filter(c=>(c.activities||[]).includes(id)).length;
+      if(n&&b.dataset.confirm!=="1"){b.dataset.confirm="1";b.textContent="Retirer ("+n+" client"+(n>1?"s":"")+") ?";return}
+      await db.doc("activities/"+id).delete();activities=activities.filter(a=>a.id!==id);
+      for(const c of customers.filter(c=>(c.activities||[]).includes(id))){c.activities=c.activities.filter(x=>x!==id);await db.doc("customers/"+c.id).update({activities:c.activities})}
+      draw()}));
+    const add=async()=>{const v=$("#ac-new").value.trim();if(!v)return;const id="a"+uid(),o=Date.now();await db.doc("activities/"+id).set({name:v,order:o});if(!actById(id))activities.push({id,name:v,order:o});draw();const n=$("#ac-new");if(n)n.focus()};
+    $("#ac-add").addEventListener("click",add);$("#ac-new").addEventListener("keydown",ev=>{if(ev.key==="Enter")add()});
+    $("#ac-close").addEventListener("click",()=>{root.innerHTML="";render()});
+  };draw();
+}
+
 // Écritures : une à la fois par document
 function writeDoc(path,body){
   const prev=pending[path]||Promise.resolve();
   pending[path]=prev.then(()=>db.doc(path).set(body)).catch(e=>{$("#status").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+"). Réessaie."});
 }
 const writeRun=(id,body)=>writeDoc("runs/"+id,body);
-const projBody=p=>({title:fullName(p),firstName:p.firstName||"",lastName:p.lastName||"",phone:p.phone||"",address:p.address||"",email:p.email||"",model:p.model||"",note:p.note||"",steps:p.steps||[],done:p.done||{},createdAt:p.createdAt||Date.now(),doneAt:p.doneAt||null,leadId:p.leadId||"",rdv:p.rdv||null,calId:p.calId||"",calAt:p.calAt||null});
-const leadBody=l=>({type:l.type||"rappel",firstName:l.firstName||"",lastName:l.lastName||"",phone:l.phone||"",address:l.address||"",when:l.when||null,reason:l.reason||"",note:l.note||"",status:l.status||"open",createdAt:l.createdAt||Date.now(),doneAt:l.doneAt||null,projectId:l.projectId||"",calId:l.calId||"",calAt:l.calAt||null});
+const projBody=p=>({title:fullName(p),firstName:p.firstName||"",lastName:p.lastName||"",phone:p.phone||"",address:p.address||"",email:p.email||"",model:p.model||"",note:p.note||"",steps:p.steps||[],done:p.done||{},createdAt:p.createdAt||Date.now(),doneAt:p.doneAt||null,leadId:p.leadId||"",rdv:p.rdv||null,rdvDur:Number(p.rdvDur||60),calId:p.calId||"",calAt:p.calAt||null,calDur:p.calDur||null,customerId:p.customerId||""});
+const leadBody=l=>({type:l.type||"rappel",firstName:l.firstName||"",lastName:l.lastName||"",phone:l.phone||"",address:l.address||"",when:l.when||null,reason:l.reason||"",note:l.note||"",status:l.status||"open",createdAt:l.createdAt||Date.now(),doneAt:l.doneAt||null,projectId:l.projectId||"",dur:durOf("leads",l),calId:l.calId||"",calAt:l.calAt||null,calDur:l.calDur||null});
 function saveProjectState(p){
   const st=pState(p); p.doneAt=st.finished?(p.doneAt||Date.now()):null;
   if(st.finished)$("#status").textContent="🎉 Parcours de « "+fullName(p)+" » validé.";
@@ -650,6 +801,13 @@ document.addEventListener("click",e=>{
     else if(k==="routine"){tab="now";render()}
     else{const ev=(agEvents||[]).find(x=>String(x.id)===id);if(ev){const d=new Date(ev.startDate);$("#status").textContent=(ev.title||"Événement")+" · "+(ev.isAllDay?"toute la journée":d.getHours()+"h"+pad(d.getMinutes()))+(ev.location?" · "+ev.location:"")+" (agenda Google)"}}
     return}
+  if(t=g("[data-cact]")){custAct=t.dataset.cact;render();return}
+  if(t=g("[data-cstat]")){custStatus=t.dataset.cstat;render();return}
+  if(g("[data-newcust]")){openCustSheet(null);return}
+  if(t=g("[data-cedit]")){openCustSheet(customers.find(c=>c.id===t.dataset.cedit));return}
+  if(t=g("[data-crdv]")){const c=customers.find(x=>x.id===t.dataset.crdv);if(c)openLeadSheet(null,{type:"rdv",dur:60,firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",address:c.address||"",reason:"Client actif"+(c.activities&&c.activities.length?" · "+actNames(c).join(", "):"")});return}
+  if(t=g("[data-p2c]")){const p=projects.find(x=>x.id===t.dataset.p2c);if(p)openCustSheet(null,{firstName:p.firstName||"",lastName:p.lastName||(p.firstName?"":p.title||""),phone:p.phone||"",address:p.address||"",email:p.email||"",note:p.note||"",projectId:p.id});return}
+  if(g("[data-actedit]")){openActSheet();return}
   if(t=g("[data-tab]")){tab=t.dataset.tab;try{localStorage.setItem("pb-tab",tab)}catch(_){}render();return}
   if(t=g("[data-edit]")){openSheet(routines.find(r=>r.id===t.dataset.edit));return}
   if(t=g("[data-pf]")){projFilter=t.dataset.pf;try{localStorage.setItem("pb-pf",projFilter)}catch(_){}render();return}
@@ -677,7 +835,7 @@ document.addEventListener("click",e=>{
     try{navigator.clipboard.writeText(v).then(()=>{t.textContent="Copié"},()=>{$("#status").textContent="Copie impossible : appuie longuement sur le numéro."})}catch(_){$("#status").textContent="Copie impossible : appuie longuement sur le numéro."}
     return}
 });
-$("#fab").addEventListener("click",()=>tab==="agenda"?openLeadSheet(null,{type:"rdv",when:agDay+9*36e5}):openSheet(null));
+$("#fab").addEventListener("click",()=>tab==="agenda"?openLeadSheet(null,{type:"rdv",when:agDay+9*36e5}):tab==="cust"?openCustSheet(null):openSheet(null));
 
 // Feuille demande (rappel / RDV)
 let lead=null, leadConfirm=false;
@@ -695,6 +853,7 @@ function drawLeadSheet(){
    <div class="field"><label for="ld-ln">Nom</label><input type="text" id="ld-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
    <div class="field"><label for="ld-ph">Téléphone</label><input type="tel" id="ld-ph" autocomplete="off" placeholder="06 12 34 56 78" value="${esc(d.phone)}"></div>
    <div class="field"><label for="ld-ad">Adresse</label><input type="text" id="ld-ad" autocomplete="off" placeholder="N°, rue, code postal, ville" value="${esc(d.address)}"></div>
+   <div class="field"><label for="ld-dur">Durée</label>${durSelect("ld-dur",durOf("leads",d))}</div>
    <div class="field"><label>${d.type==="rdv"?"Choisis le créneau du RDV":"Quand rappeler (facultatif)"}</label><div class="pk" id="ld-pk"></div>
    <label for="ld-wh" class="pk-fine-l">ou heure précise</label><input type="datetime-local" id="ld-wh" value="${esc(toLocalInput(d.when))}"></div>
    <div class="field"><label for="ld-re">Motif</label><input type="text" id="ld-re" placeholder="Ex. aide au ménage 2 h/semaine" value="${esc(d.reason)}"></div>
@@ -708,9 +867,10 @@ function drawLeadSheet(){
   const bind=(id,k,f)=>$(id).addEventListener("input",ev=>d[k]=f?f(ev.target.value):ev.target.value);
   bind("#ld-fn","firstName");bind("#ld-ln","lastName");bind("#ld-ph","phone");bind("#ld-ad","address");bind("#ld-re","reason");bind("#ld-no","note");
   bind("#ld-wh","when",v=>v?new Date(v).getTime():null);
-  pkStart({d,field:"when",dur:()=>d.type==="rdv"?3600e3:900e3,kind:"leads",id:d.id,inputId:"ld-wh",boxId:"ld-pk",saveId:"ld-save"});
+  pkStart({d,field:"when",dur:()=>durOf("leads",d)*6e4,kind:"leads",id:d.id,inputId:"ld-wh",boxId:"ld-pk",saveId:"ld-save"});
+  $("#ld-dur").addEventListener("change",ev=>{d.dur=Number(ev.target.value);d._forced=false;pkRender()});
   $("#ld-wh").addEventListener("change",()=>{d._forced=false;if(d.when&&pk)pk.day=dayStart(d.when);pkRender()});
-  $("#ld-type").addEventListener("change",ev=>{d.type=ev.target.value;drawLeadSheet()});
+  $("#ld-type").addEventListener("change",ev=>{const wasDefault=!d.dur;d.type=ev.target.value;if(wasDefault)d.dur=d.type==="rdv"?60:15;drawLeadSheet()});
   $("#ld-cancel").addEventListener("click",closeLead);
   $("#ld-save").addEventListener("click",async()=>{
     if(!d.firstName.trim()&&!d.lastName.trim()){$("#ld-msg").textContent="Indique au moins un prénom ou un nom.";$("#ld-fn").focus();return}
@@ -719,7 +879,7 @@ function drawLeadSheet(){
     const cb=$("#ld-cal");const wantCal=!!(cb&&cb.checked);
     try{const saved={...d,firstName:d.firstName.trim(),lastName:d.lastName.trim(),phone:d.phone.trim(),address:d.address.trim()};
       await db.doc("leads/"+d.id).set(leadBody(saved));
-      if(wantCal&&saved.when&&saved.when>Date.now()&&!(saved.calId&&saved.calAt===saved.when))setTimeout(()=>{const x=leads.find(o=>o.id===d.id);if(x)pushToAgenda("leads",x)},300);
+      if(wantCal&&saved.when&&saved.when>Date.now()&&!inAgenda("leads",saved))setTimeout(()=>{const x=leads.find(o=>o.id===d.id);if(x)pushToAgenda("leads",x)},300);
       projFilter="leads";closeLead();render()}
     catch(e){$("#ld-save").disabled=false;$("#ld-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
   });
@@ -757,6 +917,7 @@ function drawListSheet(){
    <div class="field"><label for="l-ln">Nom</label><input type="text" id="l-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
    <div class="field"><label for="l-ph">Téléphone</label><input type="tel" id="l-ph" autocomplete="off" placeholder="06 12 34 56 78" value="${esc(d.phone)}"></div>
    <div class="field"><label for="l-ad">Adresse</label><input type="text" id="l-ad" autocomplete="off" placeholder="N°, rue, code postal, ville" value="${esc(d.address)}"></div>
+   <div class="field"><label for="l-dur">Durée du prochain RDV</label>${durSelect("l-dur",durOf("projects",d))}</div>
    <div class="field"><label for="l-rdv">Prochain RDV (facultatif)</label><div class="pk" id="l-pk"></div><label for="l-rdv" class="pk-fine-l">ou heure précise</label><input type="datetime-local" id="l-rdv" value="${esc(toLocalInput(d.rdv))}"></div>
    ${agendaToggle("l-cal",d.toCal!==false)}
    <div class="field"><label for="l-em">Email (facultatif)</label><input type="email" id="l-em" autocomplete="off" value="${esc(d.email)}"></div>
@@ -778,7 +939,8 @@ function drawListSheet(){
   s.querySelectorAll("[data-k]").forEach(inp=>inp.addEventListener("input",()=>{d.steps[inp.dataset.i][inp.dataset.k]=inp.value}));
   const bind=(id,k)=>{const el=$(id);if(el)el.addEventListener("input",ev=>d[k]=ev.target.value)};
   bind("#l-title","title");bind("#l-fn","firstName");bind("#l-ln","lastName");bind("#l-ph","phone");bind("#l-ad","address");bind("#l-em","email");bind("#l-note","note");
-  const rv=$("#l-rdv");if(rv){pkStart({d,field:"rdv",dur:3600e3,kind:"projects",id:d.id,inputId:"l-rdv",boxId:"l-pk",saveId:"l-save"});
+  const ldur=$("#l-dur");if(ldur)ldur.addEventListener("change",ev=>{d.rdvDur=Number(ev.target.value);d._forced=false;pkRender()});
+  const rv=$("#l-rdv");if(rv){pkStart({d,field:"rdv",dur:()=>durOf("projects",d)*6e4,kind:"projects",id:d.id,inputId:"l-rdv",boxId:"l-pk",saveId:"l-save"});
     const upd=ev=>{d.rdv=ev.target.value?new Date(ev.target.value).getTime():null;d._forced=false;if(d.rdv&&pk)pk.day=dayStart(d.rdv);pkRender()};
     rv.addEventListener("change",upd)}
   const ms=$("#l-model");if(ms)ms.addEventListener("change",ev=>{const m=models.find(x=>x.id===ev.target.value);d.modelId=m?m.id:"";d.model=m?m.title:"";d.steps=m?JSON.parse(JSON.stringify(m.steps||[])):[blankStep()];drawListSheet()});
@@ -808,7 +970,7 @@ async function saveList(){
       const keep={};steps.forEach(s=>{if((d.done||{})[s.id])keep[s.id]=d.done[s.id]});p.done=keep;
       const st=pState(p);p.doneAt=st.finished?(d.doneAt||Date.now()):null;
       await db.doc("projects/"+d.id).set(projBody(p));
-      const cb=$("#l-cal");if(cb&&cb.checked&&p.rdv&&p.rdv>Date.now()&&!(p.calId&&p.calAt===p.rdv))setTimeout(()=>{const x=projects.find(o=>o.id===d.id);if(x)pushToAgenda("projects",x)},300);
+      const cb=$("#l-cal");if(cb&&cb.checked&&p.rdv&&p.rdv>Date.now()&&!inAgenda("projects",p))setTimeout(()=>{const x=projects.find(o=>o.id===d.id);if(x)pushToAgenda("projects",x)},300);
       if(d.isNew&&d.leadId){const l=leads.find(x=>x.id===d.leadId);if(l)setLead(l,{status:"converted",doneAt:Date.now(),projectId:d.id})}
       if(d.isNew)projFilter="open";
     }
@@ -872,7 +1034,7 @@ async function saveSheet(){
   $("#save").disabled=true;
   try{await db.doc("routines/"+d.id).set(body);closeSheet()}catch(e){$("#save").disabled=false;$("#sheet-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
 }
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(draft)closeSheet();else if(ld)closeList();else if(lead)closeLead();else $("#sheet-root").innerHTML=""}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(draft)closeSheet();else if(ld)closeList();else if(lead)closeLead();else if(cs)closeCust();else $("#sheet-root").innerHTML=""}});
 
 // Date du jour + rafraîchissement à minuit
 function stamp(){const d=new Date();$("#today").textContent=JOURS[d.getDay()]+" "+d.getDate()+" "+MOIS[d.getMonth()]+" "+d.getFullYear()}
@@ -887,6 +1049,8 @@ render();
   db.collection("routines").orderBy("order").onSnapshot(s=>{routines=s.docs.map(x=>({id:x.id,...x.data()}));render()},e=>{$("#status").textContent="Connexion perdue. Recharge la page."});
   db.collection("projects").onSnapshot(s=>{projects=s.docs.map(x=>{const b=x.data();return {id:x.id,...b,done:{...(b.done||{})},steps:(b.steps||[]).map(t=>({...t}))}});render()},()=>{});
   db.collection("leads").onSnapshot(s=>{leads=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
+  db.collection("customers").onSnapshot(s=>{customers=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
+  db.collection("activities").orderBy("order").onSnapshot(s=>{activities=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
   db.collection("models").orderBy("order").onSnapshot(s=>{models=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
   db.collection("runs").onSnapshot(s=>{const m={};s.docs.forEach(x=>{const b=x.data();m[x.id]={routineId:b.routineId,period:b.period,done:{...(b.done||{})}}});runs=m;render()},()=>{});
 })();
