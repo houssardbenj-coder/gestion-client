@@ -1,4 +1,4 @@
-# Pense-bête
+# Pense intelligent
 
 Appli Android personnelle : routines du mois à cocher, clients suivis sur des parcours types,
 rappels et demandes de RDV, agenda visuel relié à l'agenda Google du téléphone.

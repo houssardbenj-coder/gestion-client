@@ -1,4 +1,4 @@
-<title>Pense-bête</title>
+<title>Pense intelligent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap">
 <style>
@@ -197,7 +197,7 @@ input[type=search],input[type=date]{font:500 1rem var(--body);color:var(--ink);b
 <div class="wrap">
   <header>
     <div>
-      <h1><span>Pense-bête</span></h1>
+      <h1><span>Pense intelligent</span></h1>
       <div class="today" id="today"></div>
     </div>
   </header>
@@ -536,9 +536,9 @@ async function pushToAgenda(kind,x){
     const calId=await NATIVE.addEvent({title:(isRdv?"RDV – ":"Rappeler – ")+fullName(x),start:when,end:when+durOf(kind,x)*6e4,minutes:isRdv?60:15,location:x.address||"",description:desc,calId:x.calId});
     x.calId=String(calId||"ok");x.calAt=when;x.calDur=durOf(kind,x);writeDoc(kind+"/"+x.id,kind==="leads"?leadBody(x):projBody(x));
     $("#status").textContent="📅 Ajouté à ton agenda.";render();loadAgenda();return true;
-  }catch(err){$("#status").textContent=err&&err.message==="denied"?"Autorise l'accès à l'agenda : Réglages du téléphone → Applis → Pense-bête → Autorisations → Agenda.":"Impossible d'ajouter à l'agenda.";return false}
+  }catch(err){$("#status").textContent=err&&err.message==="denied"?"Autorise l'accès à l'agenda : Réglages du téléphone → Applis → Pense intelligent → Autorisations → Agenda.":"Impossible d'ajouter à l'agenda.";return false}
 }
-// Ce qui est déjà prévu le jour choisi (Pense-bête + agenda du téléphone)
+// Ce qui est déjà prévu le jour choisi (appli + agenda du téléphone)
 async function dayItems(when,selfKind,selfId){
   const d0=new Date(when);d0.setHours(0,0,0,0);const a=d0.getTime(),b=a+864e5;
   const items=[],mine=new Set();
@@ -607,7 +607,7 @@ document.addEventListener("change",async e=>{
   if(e.target.id!=="restore-file"||!NATIVE)return;
   const f=e.target.files&&e.target.files[0];if(!f)return;
   try{await NATIVE.importData(await f.text());$("#status").textContent="Sauvegarde restaurée.";}
-  catch(err){$("#status").textContent="Ce fichier n'est pas une sauvegarde du Pense-bête.";}
+  catch(err){$("#status").textContent="Ce fichier n'est pas une sauvegarde de Pense intelligent.";}
   e.target.value="";
 });
 const sortLeads=a=>a.sort((x,y)=>(x.when||x.createdAt||0)-(y.when||y.createdAt||0));
@@ -829,7 +829,7 @@ document.addEventListener("click",e=>{
   if(g("[data-calpick]")){if(NATIVE)openCalPicker();return}
   if(g("[data-agenda-allow]")){if(NATIVE)NATIVE.askAgenda().then(loadAgenda);return}
   if(g("[data-backup]")){if(NATIVE)NATIVE.exportData().catch(()=>{$("#status").textContent="Sauvegarde impossible."});return}
-  if(g("[data-update]")){if(NATIVE){$("#status").textContent="Recherche de mise à jour…";NATIVE.checkUpdate().then(r=>{$("#status").textContent={uptodate:"✓ Ton appli est à jour.",updated:"Mise à jour en cours…",none:"Mises à jour automatiques non configurées.",error:"Impossible de vérifier (pas de connexion ?)."}[r]||""})}return}
+  if(g("[data-update]")){if(NATIVE){$("#status").textContent="Recherche de mise à jour…";NATIVE.checkUpdate().then(r=>{$("#status").textContent={uptodate:"✓ Ton appli est à jour.",updated:"Mise à jour en cours…",none:"Mises à jour automatiques non configurées.",error:"Impossible de vérifier : "+(window.PB_lastUpdateError||"pas de connexion ?")}[r]||""})}return}
   if(g("[data-alarms]")){if(NATIVE)NATIVE.openAlarmSettings();return}
   if(t=g("[data-copy]")){const v=t.dataset.copy;
     try{navigator.clipboard.writeText(v).then(()=>{t.textContent="Copié"},()=>{$("#status").textContent="Copie impossible : appuie longuement sur le numéro."})}catch(_){$("#status").textContent="Copie impossible : appuie longuement sur le numéro."}

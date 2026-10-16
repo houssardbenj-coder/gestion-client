@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=6;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=7;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -158,7 +158,7 @@ body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transpa
       WV.setServerBasePath({path:decodeURIComponent(uri.replace(/^file:\/\//,""))});
       WV.persistServerBasePath();
       return "updated";
-    }catch(e){console.error("Mise à jour impossible",e);return "error"}
+    }catch(e){console.error("Mise à jour impossible",e);window.PB_lastUpdateError=String(e&&(e.message||e.errorMessage)||e);return "error"}
     finally{checking=false}
   }
   document.addEventListener("DOMContentLoaded",()=>{
@@ -171,7 +171,7 @@ body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transpa
   APP.addListener("resume",async()=>{
     try{const s=await LN.checkExactNotificationSetting();exact=s.exact_alarm==="granted"}catch(e){}
     window.dispatchEvent(new Event("pb-resume"));reschedule();
-    if(Date.now()-lastCheck>30*60e3)checkUpdate(false);
+    if(Date.now()-lastCheck>2*60e3)checkUpdate(false);
   });
   APP.addListener("backButton",()=>{
     if(document.querySelector(".sheet-bg"))document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape"}));
@@ -219,9 +219,9 @@ body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transpa
     chosenCalendarId:()=>{try{return localStorage.getItem("pb-cal-id")||""}catch(e){return ""}},
     setCalendar(id){try{localStorage.setItem("pb-cal-id",id)}catch(e){}},
     async exportData(){
-      const file="pense-bete-sauvegarde-"+ymd(new Date())+".json";
+      const file="pense-intelligent-sauvegarde-"+ymd(new Date())+".json";
       const w=await FS.writeFile({path:file,data:window.PB_store.exportJSON(),directory:"CACHE",encoding:"utf8"});
-      await SH.share({title:"Sauvegarde Pense-bête",text:"Sauvegarde de mes données Pense-bête",files:[w.uri],dialogTitle:"Où enregistrer la sauvegarde ?"});
+      await SH.share({title:"Sauvegarde Pense intelligent",text:"Sauvegarde de mes données Pense intelligent",files:[w.uri],dialogTitle:"Où enregistrer la sauvegarde ?"});
     },
     version:()=>window.PB_VERSION||0,
     checkUpdate:()=>checkUpdate(true),
@@ -236,7 +236,7 @@ body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transpa
 })();
 </script>
 </head><body>
-<title>Pense-bête</title>
+<title>Pense intelligent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap">
 <style>
@@ -435,7 +435,7 @@ input[type=search],input[type=date]{font:500 1rem var(--body);color:var(--ink);b
 <div class="wrap">
   <header>
     <div>
-      <h1><span>Pense-bête</span></h1>
+      <h1><span>Pense intelligent</span></h1>
       <div class="today" id="today"></div>
     </div>
   </header>
@@ -774,9 +774,9 @@ async function pushToAgenda(kind,x){
     const calId=await NATIVE.addEvent({title:(isRdv?"RDV – ":"Rappeler – ")+fullName(x),start:when,end:when+durOf(kind,x)*6e4,minutes:isRdv?60:15,location:x.address||"",description:desc,calId:x.calId});
     x.calId=String(calId||"ok");x.calAt=when;x.calDur=durOf(kind,x);writeDoc(kind+"/"+x.id,kind==="leads"?leadBody(x):projBody(x));
     $("#status").textContent="📅 Ajouté à ton agenda.";render();loadAgenda();return true;
-  }catch(err){$("#status").textContent=err&&err.message==="denied"?"Autorise l'accès à l'agenda : Réglages du téléphone → Applis → Pense-bête → Autorisations → Agenda.":"Impossible d'ajouter à l'agenda.";return false}
+  }catch(err){$("#status").textContent=err&&err.message==="denied"?"Autorise l'accès à l'agenda : Réglages du téléphone → Applis → Pense intelligent → Autorisations → Agenda.":"Impossible d'ajouter à l'agenda.";return false}
 }
-// Ce qui est déjà prévu le jour choisi (Pense-bête + agenda du téléphone)
+// Ce qui est déjà prévu le jour choisi (appli + agenda du téléphone)
 async function dayItems(when,selfKind,selfId){
   const d0=new Date(when);d0.setHours(0,0,0,0);const a=d0.getTime(),b=a+864e5;
   const items=[],mine=new Set();
@@ -845,7 +845,7 @@ document.addEventListener("change",async e=>{
   if(e.target.id!=="restore-file"||!NATIVE)return;
   const f=e.target.files&&e.target.files[0];if(!f)return;
   try{await NATIVE.importData(await f.text());$("#status").textContent="Sauvegarde restaurée.";}
-  catch(err){$("#status").textContent="Ce fichier n'est pas une sauvegarde du Pense-bête.";}
+  catch(err){$("#status").textContent="Ce fichier n'est pas une sauvegarde de Pense intelligent.";}
   e.target.value="";
 });
 const sortLeads=a=>a.sort((x,y)=>(x.when||x.createdAt||0)-(y.when||y.createdAt||0));
@@ -1067,7 +1067,7 @@ document.addEventListener("click",e=>{
   if(g("[data-calpick]")){if(NATIVE)openCalPicker();return}
   if(g("[data-agenda-allow]")){if(NATIVE)NATIVE.askAgenda().then(loadAgenda);return}
   if(g("[data-backup]")){if(NATIVE)NATIVE.exportData().catch(()=>{$("#status").textContent="Sauvegarde impossible."});return}
-  if(g("[data-update]")){if(NATIVE){$("#status").textContent="Recherche de mise à jour…";NATIVE.checkUpdate().then(r=>{$("#status").textContent={uptodate:"✓ Ton appli est à jour.",updated:"Mise à jour en cours…",none:"Mises à jour automatiques non configurées.",error:"Impossible de vérifier (pas de connexion ?)."}[r]||""})}return}
+  if(g("[data-update]")){if(NATIVE){$("#status").textContent="Recherche de mise à jour…";NATIVE.checkUpdate().then(r=>{$("#status").textContent={uptodate:"✓ Ton appli est à jour.",updated:"Mise à jour en cours…",none:"Mises à jour automatiques non configurées.",error:"Impossible de vérifier : "+(window.PB_lastUpdateError||"pas de connexion ?")}[r]||""})}return}
   if(g("[data-alarms]")){if(NATIVE)NATIVE.openAlarmSettings();return}
   if(t=g("[data-copy]")){const v=t.dataset.copy;
     try{navigator.clipboard.writeText(v).then(()=>{t.textContent="Copié"},()=>{$("#status").textContent="Copie impossible : appuie longuement sur le numéro."})}catch(_){$("#status").textContent="Copie impossible : appuie longuement sur le numéro."}

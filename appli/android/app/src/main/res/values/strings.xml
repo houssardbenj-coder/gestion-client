@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Pense-bête</string>
-    <string name="title_activity_main">Pense-bête</string>
+    <string name="app_name">Pense intelligent</string>
+    <string name="title_activity_main">Pense intelligent</string>
     <string name="package_name">fr.oikos.pensebete</string>
     <string name="custom_url_scheme">fr.oikos.pensebete</string>
 </resources>

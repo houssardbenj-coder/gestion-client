@@ -101,7 +101,7 @@
       WV.setServerBasePath({path:decodeURIComponent(uri.replace(/^file:\/\//,""))});
       WV.persistServerBasePath();
       return "updated";
-    }catch(e){console.error("Mise à jour impossible",e);return "error"}
+    }catch(e){console.error("Mise à jour impossible",e);window.PB_lastUpdateError=String(e&&(e.message||e.errorMessage)||e);return "error"}
     finally{checking=false}
   }
   document.addEventListener("DOMContentLoaded",()=>{
@@ -114,7 +114,7 @@
   APP.addListener("resume",async()=>{
     try{const s=await LN.checkExactNotificationSetting();exact=s.exact_alarm==="granted"}catch(e){}
     window.dispatchEvent(new Event("pb-resume"));reschedule();
-    if(Date.now()-lastCheck>30*60e3)checkUpdate(false);
+    if(Date.now()-lastCheck>2*60e3)checkUpdate(false);
   });
   APP.addListener("backButton",()=>{
     if(document.querySelector(".sheet-bg"))document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape"}));
@@ -162,9 +162,9 @@
     chosenCalendarId:()=>{try{return localStorage.getItem("pb-cal-id")||""}catch(e){return ""}},
     setCalendar(id){try{localStorage.setItem("pb-cal-id",id)}catch(e){}},
     async exportData(){
-      const file="pense-bete-sauvegarde-"+ymd(new Date())+".json";
+      const file="pense-intelligent-sauvegarde-"+ymd(new Date())+".json";
       const w=await FS.writeFile({path:file,data:window.PB_store.exportJSON(),directory:"CACHE",encoding:"utf8"});
-      await SH.share({title:"Sauvegarde Pense-bête",text:"Sauvegarde de mes données Pense-bête",files:[w.uri],dialogTitle:"Où enregistrer la sauvegarde ?"});
+      await SH.share({title:"Sauvegarde Pense intelligent",text:"Sauvegarde de mes données Pense intelligent",files:[w.uri],dialogTitle:"Où enregistrer la sauvegarde ?"});
     },
     version:()=>window.PB_VERSION||0,
     checkUpdate:()=>checkUpdate(true),

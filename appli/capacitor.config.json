@@ -1,6 +1,6 @@
 {
   "appId": "fr.oikos.pensebete",
-  "appName": "Pense-bête",
+  "appName": "Pense intelligent",
   "webDir": "www",
   "android": {
     "allowMixedContent": false
