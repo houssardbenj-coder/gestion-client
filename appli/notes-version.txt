@@ -1,1 +1,1 @@
-Agenda : choix rapide du jour (Sem. pro, Mar, 14h ou « mardi pro 14h »), séances régulières des clients (annuler ou déplacer une fois, vacances scolaires, jours fériés, absences), déplacer un RDV par appui long ou en touchant l'agenda
+Tâches : appui long sur une tâche puis la glisser dans une autre section (Aujourd'hui, Cette semaine, Semaine pro, Plus tard, Pas pressé, Fait) ; nouvelle section « Semaine pro »

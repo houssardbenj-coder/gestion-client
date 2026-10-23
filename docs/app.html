@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=15;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=16;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -585,6 +585,12 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 .field .calopt{text-transform:none;letter-spacing:0;font:600 .92rem var(--body);color:var(--ink)}
 .field .slot-d{text-transform:none;letter-spacing:0;font:600 .8rem var(--body)}
 .occ-list{display:flex;flex-direction:column;gap:4px}
+.tk-grp li{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.tk-ghost{position:fixed;z-index:30;pointer-events:none;list-style:none;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--paper);border:2px solid var(--ink);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:.95}
+.tk-src{opacity:.3}
+.tk-grp.tk-over{background:color-mix(in srgb,var(--hi) 35%,var(--paper))}
+.tk-grp.tk-over>summary{color:var(--ink)}
+.tk-empty{margin:0 16px 10px;padding:10px;border:2px dashed var(--line);border-radius:10px;text-align:center;font-size:.82rem;color:var(--muted)}
 .day-row.off b{color:var(--muted);font-weight:500}
 .day-row .iconbtn{padding:2px 6px;font-size:.8rem;color:var(--accent)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -1778,17 +1784,20 @@ const todayKey=()=>ymd(new Date());
 const MOISC=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
 const sundayKey=()=>{const d=new Date();d.setDate(d.getDate()+((7-d.getDay())%7));return ymd(d)};
 const plusKey=n=>{const d=new Date();d.setDate(d.getDate()+n);return ymd(d)};
-function whenOfDay(day){if(!day)return "none";if(day===todayKey())return "today";if(day===plusKey(1))return "tomorrow";if(day===sundayKey())return "week";return "pick"}
-function dayOfWhen(w,picked){return w==="today"?todayKey():w==="tomorrow"?plusKey(1):w==="week"?sundayKey():w==="none"?"":(picked||"")}
+const sundayPlus=w=>{const d=new Date(sundayKey()+"T12:00");d.setDate(d.getDate()+7*w);return ymd(d)};
+const nextSundayKey=()=>sundayPlus(1);
+function whenOfDay(day){if(!day)return "none";if(day===todayKey())return "today";if(day===plusKey(1))return "tomorrow";if(day===sundayKey())return "week";if(day===nextSundayKey())return "next";return "pick"}
+function dayOfWhen(w,picked){return w==="today"?todayKey():w==="tomorrow"?plusKey(1):w==="week"?sundayKey():w==="next"?nextSundayKey():w==="none"?"":(picked||"")}
 function whenChips(pfx,w,picked){
   const lbl=w==="pick"&&picked?"📅 "+fmtD(new Date(picked+"T12:00").getTime()):"📅 Date…";
-  return `<div class="chips" data-chips="${pfx}">`+[["today","Aujourd'hui"],["tomorrow","Demain"],["week","Cette semaine"],["pick",lbl],["none","Pas pressé"]].map(([k,l])=>`<button type="button" class="chip" data-when="${k}" aria-pressed="${w===k}">${esc(l)}</button>`).join("")+`</div><input type="date" id="${pfx}-date" value="${esc(picked||"")}" ${w==="pick"?"":"hidden"}>`;
+  return `<div class="chips" data-chips="${pfx}">`+[["today","Aujourd'hui"],["tomorrow","Demain"],["week","Cette semaine"],["next","Semaine pro"],["pick",lbl],["none","Pas pressé"]].map(([k,l])=>`<button type="button" class="chip" data-when="${k}" aria-pressed="${w===k}">${esc(l)}</button>`).join("")+`</div><input type="date" id="${pfx}-date" value="${esc(picked||"")}" ${w==="pick"?"":"hidden"}>`;
 }
 function dueBadge(k){
   if(!k.day)return "";const td=todayKey();
   if(k.day<td){const n=Math.round((new Date(td+"T12:00")-new Date(k.day+"T12:00"))/864e5);return `<span class="due late">en retard · ${n} j</span>`}
   if(k.day===td)return k.time?`<span class="due">${esc(tkHm(k))}</span>`:"";
   if(k.day===plusKey(1))return `<span class="due">demain${k.time?" "+esc(tkHm(k)):""}</span>`;
+  if(k.day===nextSundayKey())return `<span class="due">sem. pro</span>`;
   const d=new Date(k.day+"T12:00");
   return `<span class="due">${k.day<=sundayKey()?JOURS[d.getDay()].slice(0,3)+".":d.getDate()+" "+MOISC[d.getMonth()]}</span>`;
 }
@@ -1796,19 +1805,65 @@ function taskRow(k){
   return `<li class="${k.done?"is-done":""}"><input type="checkbox" class="chk" id="tk-${esc(k.id)}" data-tk="${esc(k.id)}" ${k.done?"checked":""} aria-label="Fait">
     <button class="tk-open" data-tkopen="${esc(k.id)}"><span class="txt">${esc(k.text)}</span>${k.comment?`<span class="t-note">💬 ${esc(k.comment)}</span>`:""}</button>${dueBadge(k)}</li>`;
 }
-let tkWhen="today", tkPicked="", tkGroups=new Set(["late","today","week"]);
+let tkWhen="today", tkPicked="", tkGroups=new Set(["late","today","week","next"]);
+// Section d'une tâche (sert aussi au glisser-déposer)
+const grpOf=k=>{const td=todayKey();return k.done?"done":!k.day?"none":k.day<td?"late":k.day===td?"today":k.day<=sundayKey()?"week":k.day<=nextSundayKey()?"next":"later"};
+const GRP_NAMES={late:"En retard",today:"Aujourd'hui",week:"Cette semaine",next:"Semaine pro",later:"Plus tard",none:"Pas pressé",done:"Fait aujourd'hui"};
+const tkGroupHTML=(id,list)=>{const empty=!list.length;return `<details class="tk-grp tk-${id}" data-grp="${id}" ${tkGroups.has(id)||empty?"open":""}><summary>${GRP_NAMES[id]} <span>${list.length}</span></summary>${empty?`<div class="tk-empty">Dépose la tâche ici</div>`:`<ul class="tasks">${list.map(taskRow).join("")}</ul>`}</details>`};
 function tasksHTML(){
-  const td=todayKey(),sun=sundayKey();
+  const td=todayKey();
   const open=tasks.filter(k=>!k.done).sort((a,b)=>((a.day||"9")<(b.day||"9")?-1:(a.day||"9")>(b.day||"9")?1:0)||((a.time||"99")<(b.time||"99")?-1:1)||(a.createdAt-b.createdAt));
-  const G=[["late","En retard",open.filter(k=>k.day&&k.day<td)],["today","Aujourd'hui",open.filter(k=>k.day===td)],["week","Cette semaine",open.filter(k=>k.day>td&&k.day<=sun)],["later","Plus tard",open.filter(k=>k.day>sun)],["none","Pas pressé",open.filter(k=>!k.day)]];
+  const G=["late","today","week","next","later","none"].map(id=>[id,open.filter(k=>grpOf(k)===id)]);
   const doneToday=tasks.filter(k=>k.done&&k.doneAt&&ymd(new Date(k.doneAt))===td);
-  const groups=G.filter(g=>g[2].length).map(([id,l,list])=>`<details class="tk-grp tk-${id}" data-grp="${id}" ${tkGroups.has(id)?"open":""}><summary>${l} <span>${list.length}</span></summary><ul class="tasks">${list.map(taskRow).join("")}</ul></details>`).join("");
+  // pendant un glisser, toutes les sections apparaissent pour pouvoir y déposer la tâche
+  const groups=G.filter(([id,list])=>list.length||(tkShowAll&&id!=="late")).map(([id,list])=>tkGroupHTML(id,list)).join("");
   return `<div class="section-label">Mes tâches${open.length?" · "+open.length+" à faire":""}</div><article class="card tkc">
     <div class="tk-add"><input type="text" id="tk-new" placeholder="Nouvelle tâche…" autocomplete="off" enterkeyhint="done"><button class="btn primary" data-tkadd="1">Ajouter</button></div>
     <div class="tk-when"><span class="tk-q">Pour quand ?</span>${whenChips("tk",tkWhen,tkPicked)}<button type="button" class="iconbtn tk-hr" data-tkhr="1">⏰ heure</button><input type="time" id="tk-time" hidden></div>
     ${groups||`<div class="empty" style="padding:14px">Aucune tâche en cours.</div>`}
-    ${doneToday.length?`<details class="tk-grp tk-done" data-grp="done" ${tkGroups.has("done")?"open":""}><summary>Fait aujourd'hui <span>${doneToday.length}</span></summary><ul class="tasks">${doneToday.map(taskRow).join("")}</ul></details>`:""}
-    <div class="adv" style="justify-content:flex-end;padding-top:10px"><button class="iconbtn" data-tkarch="1">📚 Archive des tâches</button></div></article>`;
+    ${doneToday.length||tkShowAll?tkGroupHTML("done",doneToday):""}
+    <div class="adv" style="justify-content:space-between;padding-top:10px">${open.length?`<span class="pnote" style="padding:0">Appui long sur une tâche pour la ranger ailleurs.</span>`:"<span></span>"}<button class="iconbtn" data-tkarch="1">📚 Archive des tâches</button></div></article>`;
+}
+// Glisser une tâche (appui long) vers une autre section : Aujourd'hui, Cette semaine, Semaine pro…
+let tkDrag=null,tkShowAll=false;
+document.addEventListener("pointerdown",e=>{
+  const li=e.target.closest&&e.target.closest(".tk-grp li");if(!li||e.target.closest(".chk"))return;
+  const cb=li.querySelector("[data-tk]");if(!cb)return;
+  const st={id:cb.dataset.tk,li,x:e.clientX,y:e.clientY,on:false};
+  st.timer=setTimeout(()=>tkDragStart(st),450);tkDrag=st;
+});
+function tkDragStart(st){
+  if(tkDrag!==st)return;
+  const r=st.li.getBoundingClientRect();st.on=true;st.dy=st.y-r.top;st.cx=st.x;st.cy=st.y;
+  const g=st.li.cloneNode(true);g.classList.add("tk-ghost");Object.assign(g.style,{left:r.left+"px",top:r.top+"px",width:r.width+"px"});document.body.appendChild(g);st.ghost=g;
+  try{navigator.vibrate&&navigator.vibrate(25)}catch(_){}
+  tkShowAll=true;render();
+  const src=document.querySelector(`.tk-grp [data-tk="${CSS.escape(st.id)}"]`);if(src)src.closest("li").classList.add("tk-src");
+  const loop=()=>{if(tkDrag!==st)return;if(st.cy<80)scrollBy(0,-12);else if(st.cy>innerHeight-80)scrollBy(0,12);tkTarget(st);st.raf=requestAnimationFrame(loop)};loop();
+}
+function tkTarget(st){
+  const el=document.elementFromPoint(st.cx,st.cy),g=el&&el.closest&&el.closest(".tk-grp");
+  document.querySelectorAll(".tk-over").forEach(x=>{if(x!==g)x.classList.remove("tk-over")});
+  st.to=g&&g.dataset.grp!=="late"?g.dataset.grp:null;if(st.to)g.classList.add("tk-over");
+}
+function tkDragStop(st){tkDrag=null;clearTimeout(st.timer);if(!st.on)return false;cancelAnimationFrame(st.raf);if(st.ghost)st.ghost.remove();tkShowAll=false;dragEnd=Date.now();return true}
+document.addEventListener("pointermove",e=>{const st=tkDrag;if(!st)return;
+  if(!st.on){if(Math.abs(e.clientX-st.x)>8||Math.abs(e.clientY-st.y)>8){clearTimeout(st.timer);tkDrag=null}return}
+  e.preventDefault();st.cx=e.clientX;st.cy=e.clientY;st.ghost.style.top=(e.clientY-st.dy)+"px";tkTarget(st)});
+document.addEventListener("touchmove",e=>{if(tkDrag&&tkDrag.on)e.preventDefault()},{passive:false});
+document.addEventListener("pointerup",()=>{const st=tkDrag;if(st&&tkDragStop(st))tkDrop(st.id,st.to)});
+document.addEventListener("pointercancel",()=>{const st=tkDrag;if(st&&tkDragStop(st))render()});
+document.addEventListener("contextmenu",e=>{if(e.target.closest&&e.target.closest(".tk-grp li"))e.preventDefault()});
+// le clic qui suit un glisser ne doit ni ouvrir la tâche ni replier une section
+document.addEventListener("click",e=>{if(Date.now()-dragEnd<500){e.preventDefault();e.stopPropagation()}},true);
+function tkDrop(id,to){
+  const k=tasks.find(x=>x.id===id);
+  if(!k||!to||to===grpOf(k)){render();return}
+  const nk={...k};
+  if(to==="done"){nk.done=true;nk.doneAt=Date.now()}
+  else{nk.done=false;nk.doneAt=null;nk.day={today:todayKey(),week:sundayKey(),next:nextSundayKey(),later:sundayPlus(2),none:""}[to];if(to!=="today")nk.time=""}
+  tkGroups.add(to);Object.assign(k,nk);writeDoc("tasks/"+k.id,taskBody(nk));render();
+  $("#status").textContent="✓ « "+k.text+" » rangée dans "+GRP_NAMES[to].replace(" aujourd'hui","")+(to==="later"?" (pour le "+fmtD(dayTs(nk.day))+", touche-la pour changer la date)":"")+".";
 }
 // les boutons « Pour quand ? » changent sans redessiner l'écran (le texte tapé reste)
 function setChips(box,w){box.querySelectorAll("[data-when]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.when===w));
@@ -1823,7 +1878,7 @@ async function addTask(){
   const day=dayOfWhen(tkWhen,tkPicked);if(tkWhen==="pick"&&!day){const di=$("#tk-date");if(di){di.hidden=false;try{di.showPicker()}catch(_){di.focus()}}return}
   const ti=$("#tk-time");const time=ti&&!ti.hidden&&day?ti.value:"";
   const k={id:"k"+uid(),text,day,time,done:false,comment:"",createdAt:Date.now()};
-  const grp=!day?"none":day<todayKey()?"late":day===todayKey()?"today":day<=sundayKey()?"week":"later";tkGroups.add(grp);
+  tkGroups.add(grpOf({day}));
   await db.doc("tasks/"+k.id).set(taskBody(k));
   const n=$("#tk-new");if(n){n.value="";n.focus()}
   $("#status").textContent="✓ Tâche ajoutée"+(day?" · pour "+(day===todayKey()?"aujourd'hui":fmtD(new Date(day+"T12:00").getTime())):" · pas pressé");
