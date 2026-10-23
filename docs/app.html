@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=13;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=14;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1065,7 +1065,7 @@ document.addEventListener("change",async e=>{
   if(e.target.id!=="contacts-file")return;
   const f=e.target.files&&e.target.files[0];if(!f)return;
   $("#status").textContent="Import des contacts…";
-  try{const n=await importContacts(JSON.parse(await f.text()));$("#status").textContent=`✓ Contacts : ${n.added} ajouté${n.added>1?"s":""}, ${n.updated} mis à jour.`;}
+  try{const n=await importContacts(JSON.parse(await f.text()));$("#status").textContent=`✓ Contacts : ${n.added} ajouté${n.added>1?"s":""}, ${n.updated} mis à jour.`+(n.merged.length?" Fusionnés : "+n.merged.join(" ; ")+".":"");}
   catch(err){$("#status").textContent="Ce fichier n'est pas un fichier de contacts (contacts-pense-intelligent.json).";}
   e.target.value="";
 });
@@ -1073,22 +1073,58 @@ async function importContacts(o){
   if(!o||o.app!=="pense-bete-contacts"||!Array.isArray(o.contacts))throw new Error("format");
   const actId=async name=>{const a=activities.find(x=>fold(x.name)===fold(name));if(a)return a.id;
     const id="a"+uid(),order=Date.now()+activities.length;await db.doc("activities/"+id).set({name,order});if(!actById(id))activities.push({id,name,order});return id};
-  let added=0,updated=0;
+  let added=0,updated=0;const merged=[];
   for(const x of o.contacts){
     const svc=[];for(const s of x.services||[])svc.push({act:await actId(s.act),who:s.who||"",hours:""});
     const ex=customers.find(c=>c.extKey===x.key)||customers.find(c=>!c.extKey&&fold(fullName(c))===fold(fullName(x)));
-    const info={extKey:x.key,firstName:x.firstName||"",lastName:x.lastName||"",phone:x.phone||"",phone2:x.phone2||"",address:x.address||"",email:x.email||"",students:x.students||[],entity:x.entity||""};
+    const seen=x.seen?new Date(x.seen+"T12:00").getTime():(x.last?new Date(x.last+"T12:00").getTime():null);
+    const info={extKey:x.key,firstName:x.firstName||"",lastName:x.lastName||"",phone:x.phone||"",phone2:x.phone2||"",address:x.address||"",email:x.email||"",students:x.students||[],entity:x.entity||"",lastBilled:seen};
+    let id;
     if(ex){ // on garde ce qui a été réglé dans l'appli (statut, heures, planning, note)
       const cur=svcOf(ex);for(const s of svc){const y=cur.find(z=>z.act===s.act);if(!y)cur.push(s);else if(!y.who&&s.who)y.who=s.who}
-      const c={...ex,...info,phone:info.phone||ex.phone,address:info.address||ex.address,email:info.email||ex.email,services:cur};
-      await db.doc("customers/"+ex.id).set(custBody(c));Object.assign(ex,c);updated++;
+      const c={...ex,...info,phone:info.phone||ex.phone,address:info.address||ex.address,email:info.email||ex.email,services:cur,lastBilled:Math.max(ex.lastBilled||0,seen||0)||null};
+      if(c.status==="termine"&&seen&&(ex.lastBilled||0)<seen&&Date.now()-seen<ARCHIVE_AFTER){c.status="actif";c.touchedAt=Date.now()} // nouvelle facture : de retour
+      await db.doc("customers/"+ex.id).set(custBody(c));Object.assign(ex,c);updated++;id=ex.id;
     }else{
       const c={id:"c"+uid(),...info,status:x.active?"actif":"termine",schedule:"",start:x.last?new Date(x.last+"T12:00").getTime():null,note:x.notes||"",services:svc,createdAt:Date.now()};
-      await db.doc("customers/"+c.id).set(custBody(c));if(!customers.some(y=>y.id===c.id))customers.push(c);added++;
+      await db.doc("customers/"+c.id).set(custBody(c));if(!customers.some(y=>y.id===c.id))customers.push(c);added++;id=c.id;
     }
+    // fiche créée à la main au nom de l'élève (ex. « Simon » pour l'élève « simon p ») : fusionnée avec le parent
+    for(const m of customers.filter(c=>!c.extKey&&c.id!==id&&studentMatch(c,x,o.contacts))){await mergeCustomers(m.id,id);merged.push(fullName(m)+" → "+fullName(x))}
   }
-  render();return {added,updated};
+  await autoArchive();render();return {added,updated,merged};
 }
+// La fiche manuelle c correspond-elle à un élève de x, et à aucun autre parent ?
+function studentMatch(c,x,all){
+  const fn=fold(c.firstName).trim(),ln=fold(c.lastName).trim();if(!fn)return false;
+  // élève « simon p » : prénom identique, et nom de la fiche vide ou commençant par « p »
+  const fits=p=>(p.students||[]).some(s=>{const [a,...r]=fold(s).trim().split(/\s+/);const b=r.join(" ");
+    return a===fn&&(!ln||(b?ln.startsWith(b):ln===fold(p.lastName)))});
+  if(!fits(x))return false;
+  const cand=all.filter(fits);if(cand.length===1)return true;
+  const act=cand.filter(p=>p.active);return act.length===1&&act[0]===x; // homonymes : le seul client actif
+}
+// Réunit deux fiches : RDV et parcours de « from » passent sur « to », puis « from » est supprimée
+async function mergeCustomers(fromId,toId){
+  const a=customers.find(c=>c.id===fromId),b=customers.find(c=>c.id===toId);if(!a||!b||a===b)return;
+  const sv=svcOf(b);for(const s of svcOf(a)){const y=sv.find(z=>z.act===s.act);if(!y)sv.push(s);else{if(!y.who&&s.who)y.who=s.who;if((y.hours===""||y.hours==null)&&s.hours!=="")y.hours=s.hours}}
+  const c={...b,services:sv,phone:b.phone||a.phone,phone2:[b.phone2,a.phone&&a.phone!==b.phone?a.phone:""].filter(Boolean).join(" / "),address:b.address||a.address,email:b.email||a.email,
+    schedule:b.schedule||a.schedule,note:[b.note,a.note].filter(Boolean).join("\n"),status:a.status==="actif"||b.status==="actif"?"actif":b.status,touchedAt:Math.max(a.touchedAt||0,b.touchedAt||0,a.createdAt||0)||null};
+  await db.doc("customers/"+b.id).set(custBody(c));Object.assign(b,c);
+  for(const x of appts.filter(x=>x.customerId===a.id))await db.doc("appts/"+x.id).set(apptBody({...x,customerId:b.id}));
+  for(const p of projects.filter(p=>p.customerId===a.id))await db.doc("projects/"+p.id).set(projBody({...p,customerId:b.id}));
+  await db.doc("customers/"+a.id).delete();
+}
+// Archivage automatique : client sans facture, RDV ni réactivation depuis 6 mois
+const ARCHIVE_AFTER=183*864e5;
+const lastSeen=c=>Math.max(c.lastBilled||0,c.touchedAt||0,c.extKey?0:(c.createdAt||0),...appts.filter(a=>a.customerId===c.id&&a.when).map(a=>a.when));
+async function autoArchive(){
+  if(!db)return 0;const now=Date.now();let n=0;
+  for(const c of customers.filter(c=>(c.status||"actif")==="actif")){const t=lastSeen(c);if(t&&now-t>ARCHIVE_AFTER){await db.doc("customers/"+c.id).set(custBody({...c,status:"termine"}));n++}}
+  return n;
+}
+setTimeout(()=>autoArchive().then(n=>{if(n)$("#status").textContent=`🗄 ${n} client${n>1?"s":""} sans activité depuis 6 mois archivé${n>1?"s":""}.`}),4000);
+window.addEventListener("pb-resume",()=>autoArchive());
 const sortLeads=a=>a.sort((x,y)=>(x.when||x.createdAt||0)-(y.when||y.createdAt||0));
 const openLeads=()=>sortLeads(leads.filter(l=>l.status==="open"||!l.status));
 
@@ -1173,9 +1209,32 @@ function openCustDetail(id){
     ${c.start?`<div class="dlab">Client depuis</div><div>${esc(fmtD(c.start))}</div>`:""}
     ${c.note?`<div class="dlab">Note</div><div class="pnote" style="padding:0">${esc(c.note)}</div>`:""}
     <div class="dlab">Rendez-vous</div><div>${next.length?next.slice(0,3).map(a=>`📅 ${esc(fmtDT(a.when))} · ${durLabel(durOf("appts",a))}`).join("<br>"):"Aucun RDV à venir."}${past.length?`<br><span class="status">${past.length} RDV passé${past.length>1?"s":""}</span>`:""}</div>
-    <div class="btns"><button class="btn primary" data-crdv="${esc(c.id)}">📅 Prendre un RDV</button>${custQuick(c)}</div>
+    <div class="btns"><button class="btn primary" data-crdv="${esc(c.id)}">📅 Prendre un RDV</button>${custQuick(c)}<button class="iconbtn" id="cd-merge">🔗 Fusionner avec…</button></div>
     <button class="btn" id="cd-close">Fermer</button></div></div>`;
   const s=$("#sheet-bg");s.addEventListener("click",ev=>{if(ev.target===s||ev.target.id==="cd-close")root.innerHTML=""});
+  $("#cd-merge").addEventListener("click",()=>openMergeSheet(c.id));
+}
+// Deux fiches pour la même famille (ex. « Simon » créé à la main et sa mère importée) : on les réunit
+function openMergeSheet(id){
+  const c=customers.find(x=>x.id===id);if(!c)return;const root=$("#sheet-root");let pick=null;
+  const draw=()=>{const o=pick&&customers.find(x=>x.id===pick);
+    root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mg-h"><h3 id="mg-h">Fusionner « ${esc(fullName(c))} »</h3>
+    ${o?`<div>« <b>${esc(fullName(c))}</b> » et « <b>${esc(fullName(o))}</b>${studentsOf(o).length?" · 🎓 "+esc(studentsOf(o).join(", ")):""} » ne feront plus qu'une fiche. Les RDV, activités, téléphones et notes sont gardés.</div>
+      <div class="btns"><button class="btn primary" id="mg-ok">Fusionner</button><button class="btn" id="mg-back">Choisir un autre client</button></div>`
+    :`<div class="field"><label for="mg-q">Avec quel client (nom du parent ou de l'élève) ?</label><input type="search" id="mg-q" autocomplete="off" placeholder="Tape un nom, un prénom d'élève…"><div class="svc-list" id="mg-res"></div></div>`}
+    <button class="btn" id="mg-close">Annuler</button><div class="status" id="mg-msg"></div></div></div>`;
+    const s=$("#sheet-bg");s.addEventListener("click",ev=>{if(ev.target===s||ev.target.id==="mg-close")openCustDetail(id)});
+    const q=$("#mg-q");if(q){q.focus();q.addEventListener("input",()=>{const t=fold(q.value.trim());
+      const hits=t?customers.filter(x=>x.id!==id&&fold([fullName(x),...studentsOf(x),x.phone].join(" ")).includes(t)).sort((a,b)=>fullName(a).localeCompare(fullName(b),"fr")).slice(0,8):[];
+      $("#mg-res").innerHTML=hits.map(x=>`<button type="button" class="btn" data-mgpick="${esc(x.id)}" style="text-align:left"><b>${esc(fullName(x))}</b>${studentsOf(x).length?" · 🎓 "+esc(studentsOf(x).join(", ")):""}${x.status==="termine"?" <small>(archivé)</small>":""}</button>`).join("")||(t?`<span class="status">Aucun client trouvé.</span>`:"")});
+      $("#mg-res").addEventListener("click",ev=>{const b=ev.target.closest("[data-mgpick]");if(b){pick=b.dataset.mgpick;draw()}})}
+    const back=$("#mg-back");if(back)back.addEventListener("click",()=>{pick=null;draw()});
+    const ok=$("#mg-ok");if(ok)ok.addEventListener("click",async()=>{ok.disabled=true;
+      // on garde la fiche importée du tableau de bord, pour que les prochains imports la retrouvent
+      const keep=c.extKey&&!o.extKey?c.id:o.id,gone=keep===c.id?o.id:c.id;
+      try{await mergeCustomers(gone,keep);root.innerHTML="";render();openCustDetail(keep);$("#status").textContent="✓ Fiches fusionnées.";}
+      catch(e){ok.disabled=false;$("#mg-msg").textContent="Fusion impossible. Réessaie."}});
+  };draw();
 }
 
 // Fiche client (création / modification) : l'essentiel d'abord, le reste replié
@@ -1229,6 +1288,7 @@ function drawCustSheet(){
     if(!d.firstName.trim()&&!d.lastName.trim()){$("#cs-msg").textContent="Indique au moins un prénom ou un nom.";$("#cs-fn").focus();return}
     $("#cs-save").disabled=true;
     d.services=d.services.filter(x=>actById(x.act)).map(x=>({act:x.act,who:(x.who||"").trim(),hours:x.hours===""||x.hours==null?"":Number(x.hours)||0}));
+    const prev=customers.find(x=>x.id===d.id);if(d.status==="actif"&&(!prev||(prev.status||"actif")!=="actif"))d.touchedAt=Date.now();
     try{await db.doc("customers/"+d.id).set(custBody({...d,firstName:d.firstName.trim(),lastName:d.lastName.trim(),phone:(d.phone||"").trim(),address:(d.address||"").trim()}));
       if(d.isNew&&d.projectId){const p=projects.find(x=>x.id===d.projectId);if(p){p.customerId=d.id;writeDoc("projects/"+p.id,projBody(p))}}
       if(d.isNew&&d.leadId){const l=leads.find(x=>x.id===d.leadId);if(l)setLead(l,{status:"client",doneAt:Date.now()})}
@@ -1266,7 +1326,7 @@ function openActSheet(){
 
 // ===== RDV simples (agenda, clients actifs) : hors Suivi =====
 const apptBody=a=>({firstName:a.firstName||"",lastName:a.lastName||"",title:a.title||"",phone:a.phone||"",address:a.address||"",when:a.when||null,dur:durOf("appts",a),note:a.note||"",customerId:a.customerId||"",done:!!a.done,doneAt:a.doneAt||null,createdAt:a.createdAt||Date.now(),calId:a.calId||"",calAt:a.calAt||null,calDur:a.calDur||null});
-const custBody=c=>({firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",phone2:c.phone2||"",address:c.address||"",email:c.email||"",students:studentsOf(c),entity:c.entity||"",extKey:c.extKey||"",services:svcOf(c),activities:svcOf(c).map(s=>s.act),status:c.status||"actif",schedule:c.schedule||"",start:c.start||null,note:c.note||"",projectId:c.projectId||"",createdAt:c.createdAt||Date.now(),pauseUntil:c.status==="pause"?(c.pauseUntil||null):null});
+const custBody=c=>({firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",phone2:c.phone2||"",address:c.address||"",email:c.email||"",students:studentsOf(c),entity:c.entity||"",extKey:c.extKey||"",lastBilled:c.lastBilled||null,touchedAt:c.touchedAt||null,services:svcOf(c),activities:svcOf(c).map(s=>s.act),status:c.status||"actif",schedule:c.schedule||"",start:c.start||null,note:c.note||"",projectId:c.projectId||"",createdAt:c.createdAt||Date.now(),pauseUntil:c.status==="pause"?(c.pauseUntil||null):null});
 function custApptsHTML(c){
   const now=Date.now();const mine=appts.filter(a=>a.customerId===c.id&&a.when);
   const next=mine.filter(a=>!a.done&&a.when>=now).sort((a,b)=>a.when-b.when)[0];
@@ -1332,6 +1392,8 @@ function drawApptSheet(){
     $("#ap-save").disabled=true;
     try{const saved={...d,firstName:(d.firstName||"").trim(),lastName:(d.lastName||"").trim()};
       await db.doc("appts/"+d.id).set(apptBody(saved));
+      const cu=saved.customerId&&customers.find(c=>c.id===saved.customerId); // un RDV remet le client dans les actifs
+      if(cu&&(cu.status||"actif")!=="actif")await db.doc("customers/"+cu.id).set(custBody({...cu,status:"actif",touchedAt:Date.now()}));
       if(wantCal&&saved.when>Date.now()&&!inAgenda("appts",saved))setTimeout(()=>{const x=appts.find(o=>o.id===d.id);if(x)pushToAgenda("appts",x)},300);
       closeAppt();render();$("#status").textContent="✓ RDV enregistré.";}
     catch(e){$("#ap-save").disabled=false;$("#ap-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
@@ -1549,7 +1611,7 @@ document.addEventListener("click",e=>{
   if(t=g("[data-tkdone]")){const k=tasks.find(x=>x.id===t.dataset.tkdone);if(k){k.done=true;k.doneAt=Date.now();writeDoc("tasks/"+k.id,taskBody(k))}return}
   if(t=g("[data-crdv]")){const c=customers.find(x=>x.id===t.dataset.crdv);if(c)openApptSheet(null,{customerId:c.id});return}
   if(t=g("[data-adone]")){const a=appts.find(x=>x.id===t.dataset.adone);if(a){a.done=true;a.doneAt=Date.now();writeDoc("appts/"+a.id,apptBody(a));render()}return}
-  if(t=g("[data-cstatus]")){const [id,st]=t.dataset.cstatus.split(":");const c=customers.find(x=>x.id===id);if(c){c.status=st;if(st!=="pause")c.pauseUntil=null;writeDoc("customers/"+c.id,custBody(c));if(document.getElementById("cd-h"))$("#sheet-root").innerHTML="";$("#status").textContent=st==="actif"?"✓ Client réactivé.":st==="pause"?"⏸ Client mis en pause.":"🗄 Client archivé."}return}
+  if(t=g("[data-cstatus]")){const [id,st]=t.dataset.cstatus.split(":");const c=customers.find(x=>x.id===id);if(c){c.status=st;if(st!=="pause")c.pauseUntil=null;if(st==="actif")c.touchedAt=Date.now();writeDoc("customers/"+c.id,custBody(c));if(document.getElementById("cd-h"))$("#sheet-root").innerHTML="";$("#status").textContent=st==="actif"?"✓ Client réactivé.":st==="pause"?"⏸ Client mis en pause.":"🗄 Client archivé."}return}
   if(t=g("[data-tk]")){const k=tasks.find(x=>x.id===t.dataset.tk);if(k){k.done=t.checked;k.doneAt=t.checked?Date.now():null;writeDoc("tasks/"+k.id,taskBody(k))}return}
   if(t=g("[data-tkopen]")){openTaskSheet(t.dataset.tkopen);return}
   if(g("[data-tkhr]")){const ti=$("#tk-time");if(ti){ti.hidden=!ti.hidden;if(!ti.hidden)ti.focus()}return}

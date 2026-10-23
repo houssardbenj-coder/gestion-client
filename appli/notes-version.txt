@@ -1,1 +1,1 @@
-Bouton « ⬇ Importer » dans l'onglet Clients : clients classés par activité d'après leurs factures
+Archivage automatique après 6 mois sans activité, retour en actif avec un RDV, fusion de fiches (ex. élève créé à la main + parent importé)
