@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=11;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=12;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -886,10 +886,21 @@ const fmtD=ts=>{const d=new Date(ts);return d.getDate()+" "+MOIS[d.getMonth()]+(
 const fmtDT=ts=>{const d=new Date(ts);return JOURS[d.getDay()].slice(0,3)+". "+d.getDate()+" "+MOIS[d.getMonth()]+" à "+d.getHours()+"h"+pad(d.getMinutes())};
 const toLocalInput=ts=>{if(!ts)return "";const d=new Date(ts);return ymd(d)+"T"+pad(d.getHours())+":"+pad(d.getMinutes())};
 const fullName=x=>[x.firstName,x.lastName].filter(Boolean).join(" ")||x.title||"Sans nom";
-const apptName=a=>{const c=a.customerId&&customers.find(x=>x.id===a.customerId);return c?fullName(c):fullName(a)};
+const studentsOf=c=>Array.isArray(c.students)?c.students.filter(Boolean):[];
+const apptName=a=>{const c=a.customerId&&customers.find(x=>x.id===a.customerId);return c?fullName(c)+(studentsOf(c).length?" ("+studentsOf(c).join(", ")+")":""):fullName(a)};
 const openAppts=()=>appts.filter(a=>!a.done);
 const telHref=t=>"tel:"+String(t||"").replace(/[^\d+]/g,"");
 const mapsHref=a=>"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(a);
+const gpsHref=a=>"https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination="+encodeURIComponent(a);
+const phonesOf=c=>[c.phone,...String(c.phone2||"").split("/")].map(s=>(s||"").trim()).filter(Boolean);
+const fold=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+// Coordonnées d'un client : élèves, appel, carte, GPS
+function infoBox(c){
+  const st=studentsOf(c);
+  const ph=phonesOf(c).map(p=>`<a class="go" href="${esc(telHref(p))}">📞 ${esc(p)}</a>`).join("");
+  const ad=c.address?`<a class="go addr" href="${esc(mapsHref(c.address))}" target="_blank" rel="noopener">📍 ${esc(c.address)}</a><a class="go" href="${esc(gpsHref(c.address))}" target="_blank" rel="noopener">🧭 Y aller (GPS)</a>`:"";
+  return `${st.length?`<div>🎓 Élève${st.length>1?"s":""} : <b>${esc(st.join(", "))}</b></div>`:""}<div class="dbox">${ph}${ad}${c.email?`<span class="mail">✉ ${esc(c.email)}</span>`:""}${!ph&&!ad&&!c.email?`<span class="status">Pas de coordonnées.</span>`:""}</div>`;
+}
 const LTYPE={rappel:"À rappeler",rdv:"RDV demandé"};
 const blankStep=()=>({id:uid(),label:"",link:"",note:""});
 
@@ -1022,6 +1033,7 @@ function nativeToolsHTML(){
   if(!NATIVE)return "";
   return `<div class="section-label">Mes données et rappels</div><article class="card"><div class="pnote" style="padding-top:14px">Tout est enregistré sur ce téléphone. Fais une sauvegarde de temps en temps et garde-la sur ton Drive ou envoie-la-toi par mail.</div>
   <div class="adv"><button class="btn" data-backup="1">Sauvegarder mes données</button><label class="btn" for="restore-file">Restaurer une sauvegarde</label><input type="file" id="restore-file" accept="application/json,.json" hidden></div>
+  <div class="adv"><label class="btn" for="contacts-file">Importer mes contacts (élèves, parents)</label><input type="file" id="contacts-file" accept="application/json,.json" hidden><span class="pnote" style="padding:0">Fichier « contacts-pense-intelligent.json » préparé par le PC dans Google Drive › Pense intelligent.</span></div>
   <div class="adv"><button class="iconbtn" data-calpick="1">Choisir l'agenda utilisé pour les RDV</button><button class="iconbtn" data-alarms="1">Réglages des alarmes et notifications</button></div><div class="adv"><span class="pnote" style="padding:0">Version ${NATIVE.version()}${window.PB_store&&PB_store.sizeKB?" · données : "+PB_store.sizeKB()+" Ko":""}</span><button class="iconbtn" data-update="1">Vérifier les mises à jour</button></div></article>`;
 }
 async function openCalPicker(){
@@ -1048,6 +1060,35 @@ document.addEventListener("change",async e=>{
   catch(err){$("#status").textContent="Ce fichier n'est pas une sauvegarde de Pense intelligent.";}
   e.target.value="";
 });
+// Contacts du tableau de bord (préparés sur le PC, jamais publiés) : ajoute ou met à jour les clients, sans doublon
+document.addEventListener("change",async e=>{
+  if(e.target.id!=="contacts-file")return;
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  $("#status").textContent="Import des contacts…";
+  try{const n=await importContacts(JSON.parse(await f.text()));$("#status").textContent=`✓ Contacts : ${n.added} ajouté${n.added>1?"s":""}, ${n.updated} mis à jour.`;}
+  catch(err){$("#status").textContent="Ce fichier n'est pas un fichier de contacts (contacts-pense-intelligent.json).";}
+  e.target.value="";
+});
+async function importContacts(o){
+  if(!o||o.app!=="pense-bete-contacts"||!Array.isArray(o.contacts))throw new Error("format");
+  const actId=async name=>{const a=activities.find(x=>fold(x.name)===fold(name));if(a)return a.id;
+    const id="a"+uid(),order=Date.now()+activities.length;await db.doc("activities/"+id).set({name,order});if(!actById(id))activities.push({id,name,order});return id};
+  let added=0,updated=0;
+  for(const x of o.contacts){
+    const svc=[];for(const s of x.services||[])svc.push({act:await actId(s.act),who:s.who||"",hours:""});
+    const ex=customers.find(c=>c.extKey===x.key)||customers.find(c=>!c.extKey&&fold(fullName(c))===fold(fullName(x)));
+    const info={extKey:x.key,firstName:x.firstName||"",lastName:x.lastName||"",phone:x.phone||"",phone2:x.phone2||"",address:x.address||"",email:x.email||"",students:x.students||[],entity:x.entity||""};
+    if(ex){ // on garde ce qui a été réglé dans l'appli (statut, heures, planning, note)
+      const cur=svcOf(ex);for(const s of svc){const y=cur.find(z=>z.act===s.act);if(!y)cur.push(s);else if(!y.who&&s.who)y.who=s.who}
+      const c={...ex,...info,phone:info.phone||ex.phone,address:info.address||ex.address,email:info.email||ex.email,services:cur};
+      await db.doc("customers/"+ex.id).set(custBody(c));Object.assign(ex,c);updated++;
+    }else{
+      const c={id:"c"+uid(),...info,status:x.active?"actif":"termine",schedule:"",start:x.last?new Date(x.last+"T12:00").getTime():null,note:x.notes||"",services:svc,createdAt:Date.now()};
+      await db.doc("customers/"+c.id).set(custBody(c));if(!customers.some(y=>y.id===c.id))customers.push(c);added++;
+    }
+  }
+  render();return {added,updated};
+}
 const sortLeads=a=>a.sort((x,y)=>(x.when||x.createdAt||0)-(y.when||y.createdAt||0));
 const openLeads=()=>sortLeads(leads.filter(l=>l.status==="open"||!l.status));
 
@@ -1094,14 +1135,14 @@ const fmtH=n=>Math.round(n*10)/10+" h";
 function custRow(c){
   const dots=svcOf(c).map(s=>{const a=actById(s.act);return `<span class="cdot" style="--ac:${actColor(a)}">${esc(a.name)}</span>`}).join("");
   const st=c.status==="pause"?`<span class="pill due">Pause${c.pauseUntil?" → "+esc(fmtD(c.pauseUntil)):""}</span>`:"";
-  return `<div class="crow"><button class="crow-x" data-cview="${esc(c.id)}"><b>${esc(fullName(c))}</b><span>${dots||`<span class="cdot">Sans activité</span>`}${st}</span></button>${c.phone?`<a class="mini" href="${esc(telHref(c.phone))}" aria-label="Appeler ${esc(fullName(c))}">📞</a>`:""}<span class="crow-go" aria-hidden="true">›</span></div>`;
+  return `<div class="crow"><button class="crow-x" data-cview="${esc(c.id)}"><b>${esc(fullName(c))}${studentsOf(c).length?` <small>· ${esc(studentsOf(c).join(", "))}</small>`:""}</b><span>${dots||`<span class="cdot">Sans activité</span>`}${st}</span></button>${c.phone?`<a class="mini" href="${esc(telHref(c.phone))}" aria-label="Appeler ${esc(fullName(c))}">📞</a>`:""}<span class="crow-go" aria-hidden="true">›</span></div>`;
 }
 function renderCustomers(){
   const inStatus=customers.filter(c=>(c.status||"actif")===custStatus);
   if(custAct!=="all"&&!actById(custAct))custAct="all";
   const inAct=c=>custAct==="all"||actIds(c).includes(custAct);
   const q=custQ.trim().toLowerCase();
-  const list=inStatus.filter(inAct).filter(c=>!q||[fullName(c),c.phone,c.address,...svcOf(c).map(s=>s.who)].join(" ").toLowerCase().includes(q))
+  const list=inStatus.filter(inAct).filter(c=>!q||fold([fullName(c),c.phone,c.phone2,c.address,...studentsOf(c),...svcOf(c).map(s=>s.who)].join(" ")).includes(fold(q)))
     .sort((a,b)=>fullName(a).localeCompare(fullName(b),"fr"));
   // tuiles cliquables : Tous + une par activité (nombre de clients et heures du filtre de statut)
   const tile=(key,name,n,hrs,color)=>`<button class="ctile" data-cact="${esc(key)}" aria-pressed="${custAct===key}" style="--ac:${color}"><b>${n}</b><span>${esc(name)}</span><small>${hrs?fmtH(hrs)+" / mois":"&nbsp;"}</small></button>`;
@@ -1125,7 +1166,7 @@ function openCustDetail(id){
   root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cd-h">
     <div class="card-head" style="padding:0"><h3 id="cd-h" style="flex:1">${esc(fullName(c))}</h3><button class="btn" data-cedit="${esc(c.id)}">Modifier</button></div>
     ${c.status==="pause"?`<span class="pill due" style="align-self:flex-start">En pause${c.pauseUntil?" · reprise le "+esc(fmtD(c.pauseUntil)):""}</span>`:c.status==="termine"?`<span class="pill" style="align-self:flex-start">Archivé</span>`:""}
-    <div class="dbox">${c.phone?`<a class="go" href="${esc(telHref(c.phone))}">📞 ${esc(c.phone)}</a><button class="iconbtn" data-copy="${esc(c.phone)}">Copier</button>`:""}${c.address?`<a class="go addr" href="${esc(mapsHref(c.address))}" target="_blank" rel="noopener">📍 ${esc(c.address)}</a>`:""}${c.email?`<span class="mail">✉ ${esc(c.email)}</span>`:""}${!c.phone&&!c.address&&!c.email?`<span class="status">Pas de coordonnées.</span>`:""}</div>
+    ${infoBox(c)}${c.phone?`<div><button class="iconbtn" data-copy="${esc(c.phone)}">Copier le numéro</button></div>`:""}
     <div class="dlab">Activités</div>${svc||`<div class="status" style="text-align:left">Aucune activité.</div>`}
     ${c.schedule?`<div class="dlab">Planning habituel</div><div>${esc(c.schedule)}</div>`:""}
     ${c.start?`<div class="dlab">Client depuis</div><div>${esc(fmtD(c.start))}</div>`:""}
@@ -1224,7 +1265,7 @@ function openActSheet(){
 
 // ===== RDV simples (agenda, clients actifs) : hors Suivi =====
 const apptBody=a=>({firstName:a.firstName||"",lastName:a.lastName||"",title:a.title||"",phone:a.phone||"",address:a.address||"",when:a.when||null,dur:durOf("appts",a),note:a.note||"",customerId:a.customerId||"",done:!!a.done,doneAt:a.doneAt||null,createdAt:a.createdAt||Date.now(),calId:a.calId||"",calAt:a.calAt||null,calDur:a.calDur||null});
-const custBody=c=>({firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",address:c.address||"",email:c.email||"",services:svcOf(c),activities:svcOf(c).map(s=>s.act),status:c.status||"actif",schedule:c.schedule||"",start:c.start||null,note:c.note||"",projectId:c.projectId||"",createdAt:c.createdAt||Date.now(),pauseUntil:c.status==="pause"?(c.pauseUntil||null):null});
+const custBody=c=>({firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",phone2:c.phone2||"",address:c.address||"",email:c.email||"",students:studentsOf(c),entity:c.entity||"",extKey:c.extKey||"",services:svcOf(c),activities:svcOf(c).map(s=>s.act),status:c.status||"actif",schedule:c.schedule||"",start:c.start||null,note:c.note||"",projectId:c.projectId||"",createdAt:c.createdAt||Date.now(),pauseUntil:c.status==="pause"?(c.pauseUntil||null):null});
 function custApptsHTML(c){
   const now=Date.now();const mine=appts.filter(a=>a.customerId===c.id&&a.when);
   const next=mine.filter(a=>!a.done&&a.when>=now).sort((a,b)=>a.when-b.when)[0];
@@ -1246,12 +1287,12 @@ function openApptSheet(a,preset){
 }
 function drawApptSheet(){
   const d=ap,root=$("#sheet-root");if(!d){root.innerHTML="";return}
-  const opts=customers.filter(c=>(c.status||"actif")!=="termine").sort((a,b)=>fullName(a).localeCompare(fullName(b),"fr"));
   const c=d.customerId&&customers.find(x=>x.id===d.customerId);
   root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ap-h">
    <h3 id="ap-h">${d.isNew?"Nouveau RDV":"Modifier le RDV"}</h3>
-   <div class="field"><label for="ap-cu">Avec un client</label><select id="ap-cu"><option value="">— Autre personne / sans client —</option>${opts.map(o=>`<option value="${esc(o.id)}" ${o.id===d.customerId?"selected":""}>${esc(fullName(o))}</option>`).join("")}</select></div>
-   ${c?`<div class="pnote" style="padding:0">${esc([c.phone,c.address].filter(Boolean).join(" · "))}</div>`:`
+   ${c?`<div class="field"><label>Avec</label><div class="card-head" style="padding:0"><b style="flex:1">${esc(fullName(c))}</b><button type="button" class="iconbtn" id="ap-unpick">Changer</button></div></div>${infoBox(c)}`:`
+   <div class="field"><label for="ap-q">Avec un client (nom du parent ou de l'élève)</label><input type="search" id="ap-q" autocomplete="off" placeholder="Tape un nom, un prénom d'élève…"><div class="svc-list" id="ap-res"></div></div>
+   <div class="status" style="text-align:left">Ou une autre personne / sans client :</div>
    <div class="row"><div class="field"><label for="ap-fn">Prénom / objet</label><input type="text" id="ap-fn" autocomplete="off" placeholder="Ex. Réunion, comptable…" value="${esc(d.firstName||d.title)}"></div>
    <div class="field"><label for="ap-ln">Nom</label><input type="text" id="ap-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
    <div class="field"><label for="ap-ph">Téléphone</label><input type="tel" id="ap-ph" autocomplete="off" value="${esc(d.phone)}"></div>
@@ -1269,7 +1310,14 @@ function drawApptSheet(){
   s.addEventListener("click",ev=>{if(ev.target===s)closeAppt()});
   const bind=(id,k)=>{const el=$(id);if(el)el.addEventListener("input",ev=>d[k]=ev.target.value)};
   bind("#ap-fn","firstName");bind("#ap-ln","lastName");bind("#ap-ph","phone");bind("#ap-ad","address");bind("#ap-no","note");
-  $("#ap-cu").addEventListener("change",ev=>{d.customerId=ev.target.value;drawApptSheet()});
+  const un=$("#ap-unpick");if(un)un.addEventListener("click",()=>{d.customerId="";drawApptSheet();const q=$("#ap-q");if(q)q.focus()});
+  const q=$("#ap-q");if(q){
+    q.addEventListener("input",()=>{const t=fold(q.value.trim());
+      const hits=t?customers.filter(o=>fold([fullName(o),...studentsOf(o),o.phone].join(" ")).includes(t))
+        .sort((a,b)=>((a.status||"actif")==="termine")-((b.status||"actif")==="termine")||fullName(a).localeCompare(fullName(b),"fr")).slice(0,8):[];
+      $("#ap-res").innerHTML=hits.map(o=>`<button type="button" class="btn" data-appick="${esc(o.id)}" style="text-align:left"><b>${esc(fullName(o))}</b>${studentsOf(o).length?" · 🎓 "+esc(studentsOf(o).join(", ")):""}${o.status==="termine"?" <small>(archivé)</small>":""}${o.address?`<br><small>${esc(o.address)}</small>`:""}</button>`).join("")||(t?`<span class="status">Aucun client trouvé.</span>`:"")});
+    $("#ap-res").addEventListener("click",ev=>{const b=ev.target.closest("[data-appick]");if(b){d.customerId=b.dataset.appick;drawApptSheet()}});
+  }
   $("#ap-dur").addEventListener("change",ev=>{d.dur=Number(ev.target.value);d._forced=false;pkRender()});
   $("#ap-wh").addEventListener("input",ev=>d.when=ev.target.value?new Date(ev.target.value).getTime():null);
   $("#ap-wh").addEventListener("change",()=>{d._forced=false;if(d.when&&pk)pk.day=dayStart(d.when);pkRender()});
