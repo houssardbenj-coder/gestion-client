@@ -1,4 +1,4 @@
 {
- "version": 12,
- "notes": "Contacts du tableau de bord : élèves, parents, téléphones, GPS dans les RDV"
+ "version": 13,
+ "notes": "Bouton « ⬇ Importer » dans l'onglet Clients : clients classés par activité d'après leurs factures"
 }

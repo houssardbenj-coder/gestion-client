@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=12;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=13;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -376,7 +376,7 @@ details.steps>summary::-webkit-details-marker{display:none}
 details.steps[open]>summary{color:var(--muted)}
 .t-when{font-size:.75rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .filters{display:flex;gap:8px;flex-wrap:wrap}
-.filters button{border:1px solid var(--line);background:var(--paper);color:var(--muted);border-radius:999px;padding:6px 12px;font:600 .82rem var(--body);cursor:pointer}
+.filters button,.filters label{border:1px solid var(--line);background:var(--paper);color:var(--muted);border-radius:999px;padding:6px 12px;font:600 .82rem var(--body);cursor:pointer}
 .filters button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
 .pill.win{background:var(--ok);border-color:var(--ok);color:var(--paper)}
 textarea{font:500 1rem var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-height:70px;resize:vertical}
@@ -1147,7 +1147,8 @@ function renderCustomers(){
   // tuiles cliquables : Tous + une par activité (nombre de clients et heures du filtre de statut)
   const tile=(key,name,n,hrs,color)=>`<button class="ctile" data-cact="${esc(key)}" aria-pressed="${custAct===key}" style="--ac:${color}"><b>${n}</b><span>${esc(name)}</span><small>${hrs?fmtH(hrs)+" / mois":"&nbsp;"}</small></button>`;
   let h=`<div class="ctiles">${tile("all","Tous",inStatus.length,inStatus.reduce((n,c)=>n+svcHours(c),0),"var(--ink)")}${activities.map(a=>{const cs=inStatus.filter(c=>actIds(c).includes(a.id));return tile(a.id,a.name,cs.length,cs.reduce((n,c)=>n+svcHours(c,a.id),0),actColor(a))}).join("")}</div>`;
-  h+=`<div class="filters">`+Object.entries(CSTAT).map(([k,l])=>`<button data-cstat="${k}" aria-pressed="${custStatus===k}">${l} (${customers.filter(c=>(c.status||"actif")===k).length})</button>`).join("")+`<button data-actedit="1" class="ctab-edit">⚙ Activités</button></div>`;
+  h+=`<div class="filters">`+Object.entries(CSTAT).map(([k,l])=>`<button data-cstat="${k}" aria-pressed="${custStatus===k}">${l} (${customers.filter(c=>(c.status||"actif")===k).length})</button>`).join("")+`<button data-actedit="1" class="ctab-edit">⚙ Activités</button><label class="ctab-edit" for="contacts-file" role="button">⬇ Importer</label><input type="file" id="contacts-file" accept="application/json,.json" hidden></div>`;
+  if(!customers.some(c=>c.extKey))h+=`<div class="card empty" style="padding:16px"><strong>Importer tes clients du tableau de bord</strong>Touche « ⬇ Importer » puis choisis dans Drive : Pense intelligent › contacts-pense-intelligent.json. Les clients arrivent classés par activité (cours, ménage, jardinage, bricolage), avec élèves, téléphones et adresses.</div>`;
   h+=`<input type="search" id="cust-q" class="csearch" placeholder="Rechercher un client, un téléphone, un·e intervenant·e…" value="${esc(custQ)}">`;
   if(!activities.length)h+=`<div class="card empty" style="padding:16px"><strong>Crée tes activités</strong>Touche « ⚙ Activités » (ex. Ménage, Jardinage, Cours).</div>`;
   h+=`<div class="card clist" id="cust-list">`+(list.length?list.map(custRow).join(""):`<div class="empty"><strong>${customers.length?"Aucun client ici":"Aucun client pour l'instant"}</strong>${customers.length?"Change d'activité ou de filtre.":"Touche « + Client » pour en ajouter un."}</div>`)+`</div>`;

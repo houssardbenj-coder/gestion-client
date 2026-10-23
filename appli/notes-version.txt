@@ -1,1 +1,1 @@
-Contacts du tableau de bord : élèves, parents, téléphones, GPS dans les RDV
+Bouton « ⬇ Importer » dans l'onglet Clients : clients classés par activité d'après leurs factures
