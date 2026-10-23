@@ -59,6 +59,8 @@
       if(!p.rdv)return;const at=p.rdv-3600e3;
       if(at>now)list.push({key:"p:"+id+":"+p.rdv,at:new Date(at),title:"📅 RDV dans 1 h : "+name(p),body:[p.address,p.phone].filter(Boolean).join(" · ")||"Rendez-vous client"});
     });
+    // séances régulières des clients (calculées par l'interface)
+    try{(window.PB_extraNotifs?window.PB_extraNotifs():[]).forEach(n=>{if(n.at.getTime()>now)list.push(n)})}catch(e){}
     return list.sort((a,b)=>a.at-b.at).slice(0,400);
   }
 
@@ -162,6 +164,7 @@
       const r=await CAL.createEvent(calendarId?{...body,calendarId}:body);
       return r&&r.id;
     },
+    async deleteEvent(id){if(!(await canWrite()))throw new Error("denied");await CAL.deleteEvent({id:String(id)})},
     async calendars(){
       if(!(await canWrite()))return [];
       const r=await CAL.listCalendars();

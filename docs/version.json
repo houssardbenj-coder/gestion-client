@@ -1,4 +1,4 @@
 {
- "version": 14,
- "notes": "Archivage automatique après 6 mois sans activité, retour en actif avec un RDV, fusion de fiches (ex. élève créé à la main + parent importé)"
+ "version": 15,
+ "notes": "Agenda : choix rapide du jour (Sem. pro, Mar, 14h ou « mardi pro 14h »), séances régulières des clients (annuler ou déplacer une fois, vacances scolaires, jours fériés, absences), déplacer un RDV par appui long ou en touchant l'agenda"
 }
