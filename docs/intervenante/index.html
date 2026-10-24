@@ -192,8 +192,9 @@ function ecranCode(message) {
     <p class="muted">Cette application est réservée aux intervenantes d'OIKOS. Entre ton e-mail et le code d'accès donné par OIKOS (ou ton mot de passe si tu l'as déjà choisi).</p>
     ${message ? `<p class="tag warn" style="padding:8px 12px;border-radius:12px">${esc(message)}</p>` : ""}
     <form class="stack" id="f">
-      <label class="f">Ton e-mail<input id="email" type="email" autocomplete="username" required inputmode="email"></label>
-      <label class="f">Code d'accès ou mot de passe<input id="code" type="password" autocomplete="current-password" required></label>
+      <label class="f">Ton e-mail<input id="email" type="email" autocomplete="username" required inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+      <label class="f">Code d'accès ou mot de passe<input id="code" type="password" autocomplete="current-password" required autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+      <label class="chk small"><input type="checkbox" id="voir">Afficher le code</label>
       <p class="err" id="err"></p>
       <button class="btn primary big" type="submit">Entrer</button>
     </form>
@@ -201,12 +202,13 @@ function ecranCode(message) {
   document.getElementById("f").onsubmit = async e => {
     e.preventDefault();
     const err = document.getElementById("err"), b = e.submitter; err.textContent = ""; b.disabled = true;
-    const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim(), password: document.getElementById("code").value });
+    const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim().toLowerCase(), password: document.getElementById("code").value.trim() });
     b.disabled = false;
-    if (error) { err.textContent = reseau(error) ? "Pas de réseau : réessaie." : /banned/i.test(error.message) ? "Ton accès OIKOS est coupé." : "E-mail ou code incorrect."; return; }
+    if (error) { err.textContent = reseau(error) ? "Pas de réseau : réessaie." : /banned/i.test(error.message) ? "Ton accès OIKOS est coupé." : /confirm/i.test(error.message) ? "Compte pas encore activé : contacte OIKOS." : "E-mail ou code incorrect. Vérifie qu'il n'y a pas d'espace ni de majuscule."; return; }
     LS.set("mdp-le", Date.now()); LS.set("erreurs", 0);
     suite();
   };
+  document.getElementById("voir").onchange = e => document.getElementById("code").type = e.target.checked ? "text" : "password";
   document.getElementById("oubli").onclick = () => feuille(`<h2 style="margin:0">Mot de passe oublié</h2>
     <p>Appelle OIKOS : on te donnera un nouveau code d'accès. Tu choisiras ensuite un nouveau mot de passe.</p>
     <button class="btn" data-fermer>J'ai compris</button>`);
