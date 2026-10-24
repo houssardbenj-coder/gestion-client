@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0E6266">
+<meta name="robots" content="noindex,nofollow">
+<title>OIKOS Intervenante</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone-192.png">
+<link rel="apple-touch-icon" href="icone-192.png">
+<style>
+/* Appli des intervenantes OIKOS : un écran à la fois, gros boutons, barre d'onglets en bas.
+   Rien n'est gardé sur le téléphone à part la session et le code à 4 chiffres (chiffré). */
+:root{
+  --bg:#EEF2F1; --surface:#FFFFFF; --sunk:#E3E9E7; --ink:#17242A; --muted:#55646B; --line:#C8D1CE;
+  --accent:#0E6266; --accent-ink:#FFFFFF; --accent-soft:#D3E6E5;
+  --go:#2E8B3E; --stop:#B8432F; --warn:#9A6A00; --warn-soft:#F6EBCB;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#111A1D; --surface:#18242A; --sunk:#0C1417; --ink:#E4ECEA; --muted:#9AABB0; --line:#2C3C42;
+  --accent:#5BC0BE; --accent-ink:#0C1417; --accent-soft:#173A3C;
+  --go:#4CC453; --stop:#E9775F; --warn:#E2B341; --warn-soft:#3A3115; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#111A1D; --surface:#18242A; --sunk:#0C1417; --ink:#E4ECEA; --muted:#9AABB0; --line:#2C3C42;
+  --accent:#5BC0BE; --accent-ink:#0C1417; --accent-soft:#173A3C;
+  --go:#4CC453; --stop:#E9775F; --warn:#E2B341; --warn-soft:#3A3115; color-scheme:dark }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#app{max-width:560px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column}
+.page{flex:1;padding:calc(env(safe-area-inset-top,0px) + 18px) 16px calc(env(safe-area-inset-bottom,0px) + 96px)}
+.page.solo{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);display:flex;flex-direction:column;justify-content:center;gap:18px}
+h1{font-size:26px;line-height:1.2;margin:0}
+h2{font-size:19px;margin:22px 0 10px}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.logo{width:64px;height:64px;border-radius:18px;display:block}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:12px 18px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:18px;cursor:pointer;text-decoration:none;color:var(--ink);text-align:center}
+.btn.big{min-height:72px;font-size:21px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.go{background:var(--go);border-color:var(--go);color:#fff}
+.btn.stop{background:var(--stop);border-color:var(--stop);color:#fff}
+.btn.flat{background:transparent;border-color:transparent;color:var(--accent);min-height:44px;font-size:16px}
+.btn:disabled{opacity:.5}
+.btn .ic{font-size:24px;line-height:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:15px;color:var(--muted)}
+label.f input,label.f select,label.f textarea{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--surface);color:var(--ink);font-size:17px;width:100%}
+label.f textarea{min-height:90px;resize:vertical}
+.chk{display:flex;align-items:center;gap:10px;font-size:17px;padding:6px 0}
+.chk input{width:24px;height:24px}
+.err{color:var(--stop);font-weight:700;min-height:1.2em}
+.client-nom{font-weight:800;font-size:19px}
+.tag{display:inline-block;font-size:13px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--ink)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.encours{border:2px solid var(--go)}
+.ligne{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.ligne:first-child{border-top:0}
+.ligne button{border:0;background:none;text-align:left;padding:0;cursor:pointer;flex:1}
+.total{font-size:30px;font-weight:800}
+.info dt{font-size:13px;color:var(--muted);margin-top:8px}
+.info dd{margin:0;white-space:pre-wrap}
+/* barre d'onglets */
+.nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
+.nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.nav button{border:0;background:none;padding:9px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer}
+.nav button .ic{font-size:24px;line-height:1.1}
+.nav button[aria-current="page"]{color:var(--accent)}
+/* clavier du code */
+.dots{display:flex;gap:16px;justify-content:center;margin:6px 0}
+.dots span{width:18px;height:18px;border-radius:50%;border:2px solid var(--accent)}
+.dots span.on{background:var(--accent)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:320px;margin:0 auto;width:100%}
+.pad button{height:68px;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-size:26px;font-weight:700;cursor:pointer}
+.pad button.vide{visibility:hidden}
+/* fenêtre du bas */
+.voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.feuille{background:var(--bg);width:100%;max-width:560px;max-height:92dvh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 20px);display:flex;flex-direction:column;gap:12px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 88px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:700;max-width:min(92vw,520px);z-index:30;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script>
+/* ===================== Réglages ===================== */
+/* Adresse et clé PUBLIQUE du projet (faites pour être dans l'appli : la base protège les données elle-même) */
+const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
+const SB_CLE = "sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q";
+const JOURS_MDP = 30;            // mot de passe complet redemandé tous les 30 jours
+const ESSAIS_CODE = 5;           // erreurs de code à 4 chiffres avant de tout effacer
+const VERROU_MIN = 5;            // l'appli se reverrouille après 5 min en arrière-plan
+const ACTIVITES = ["Ménage", "Jardinage", "Bricolage"];
+const PRODUITS = ["Liquide vaisselle", "Sacs poubelle", "Produit pour le sol", "Éponges", "Papier toilette", "Produit vitres"];
+
+const sb = window.supabase.createClient(SB_URL, SB_CLE, {
+  auth: { persistSession: true, autoRefreshToken: true, storageKey: "oikos-int-session" }
+});
+
+/* ===================== Outils ===================== */
+const app = document.getElementById("app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const LS = {
+  get(k) { try { return JSON.parse(localStorage.getItem("oikos-int-" + k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem("oikos-int-" + k, JSON.stringify(v)); } catch (e) {} }
+};
+let tt;
+function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 3800); }
+const pad2 = n => String(n).padStart(2, "0");
+const heure = d => { d = new Date(d); return d.getHours() + " h " + pad2(d.getMinutes()); };
+const jourTxt = d => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+const duree = min => { min = Math.max(0, Math.round(min)); const h = Math.floor(min / 60), m = min % 60; return h ? h + " h" + (m ? " " + pad2(m) : "") : m + " min"; };
+const minutesEntre = (a, b) => (new Date(b) - new Date(a)) / 60000;
+const debutJour = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const ajouterJours = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const versLocal = d => { d = new Date(d); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
+const reseau = e => !navigator.onLine || /fetch|network|réseau/i.test(String(e && (e.message || e)));
+function souci(e) { toast(reseau(e) ? "Pas de réseau : réessaie dans un instant." : "Ça n'a pas marché : " + ((e && e.message) || e)); }
+const estIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const lienSMS = (tel, texte) => "sms:" + String(tel || "").replace(/[^\d+]/g, "") + (estIOS ? "&" : "?") + "body=" + encodeURIComponent(texte);
+const lienItineraire = adr => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(adr || "");
+const lienTel = tel => "tel:" + String(tel || "").replace(/[^\d+]/g, "");
+
+async function empreinte(texte) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texte));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+/* Efface tout ce que l'appli garde sur le téléphone : il ne reste qu'une coquille vide */
+function toutEffacer() {
+  try { Object.keys(localStorage).filter(k => k.startsWith("oikos-int")).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  try { sessionStorage.clear(); } catch (e) {}
+  moi = null; clients = []; ouvert = null;
+}
+async function sortir() { try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toutEffacer(); }
+
+/* ===================== État ===================== */
+let moi = null, clients = [], ouvert = null, onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
+let cache = {};   // créneaux, pointages du mois… rechargés à chaque affichage
+const nomClient = id => (clients.find(c => c.id === id) || {}).nom || "Client";
+const sousTraitante = () => moi && moi.statut === "sous-traitant";
+
+/* ===================== Démarrage ===================== */
+async function demarrer() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return ecranCode();
+  if (!LS.get("pin")) return suite();
+  if (Date.now() - (LS.get("mdp-le") || 0) > JOURS_MDP * 864e5) {
+    await sortir();
+    return ecranCode("Par sécurité, entre de nouveau ton mot de passe (tous les " + JOURS_MDP + " jours).");
+  }
+  ecranPin();
+}
+/* Après une connexion réussie : chaque étape manquante, dans l'ordre */
+async function suite() {
+  if (!(await chargerMoi())) return;
+  if (moi.mdp_provisoire) return ecranNouveauMdp(true);
+  if (!LS.get("pin")) return ecranChoisirPin();
+  if (!moi.profil_complet) return ecranProfil(true);
+  accueil();
+}
+/* Lit son profil. Accès coupé par OIKOS → la base ne renvoie rien → tout est effacé */
+async function chargerMoi() {
+  const { data: u, error: eu } = await sb.auth.getUser();
+  if (eu || !u.user) {
+    if (eu && reseau(eu)) { ecranHorsLigne(); return false; }
+    await sortir();
+    if (eu && /banned|bann/i.test(eu.message)) ecranFin(); else ecranCode("Connecte-toi de nouveau.");
+    return false;
+  }
+  const { data, error } = await sb.from("profils").select("*").eq("id", u.user.id).maybeSingle();
+  if (error) { if (reseau(error)) { ecranHorsLigne(); return false; } souci(error); return false; }
+  if (!data || !data.actif) { await sortir(); ecranFin(); return false; }
+  moi = data; return true;
+}
+
+/* ===================== Écrans d'accès ===================== */
+function page(html, solo) { app.innerHTML = `<main class="page${solo ? " solo" : ""}">${html}</main>`; window.scrollTo(0, 0); }
+const LOGO = `<img class="logo" src="icone-192.png" alt="">`;
+
+function ecranCode(message) {
+  page(`${LOGO}
+    <h1>Code d'accès OIKOS</h1>
+    <p class="muted">Cette application est réservée aux intervenantes d'OIKOS. Entre ton e-mail et le code d'accès donné par OIKOS (ou ton mot de passe si tu l'as déjà choisi).</p>
+    ${message ? `<p class="tag warn" style="padding:8px 12px;border-radius:12px">${esc(message)}</p>` : ""}
+    <form class="stack" id="f">
+      <label class="f">Ton e-mail<input id="email" type="email" autocomplete="username" required inputmode="email"></label>
+      <label class="f">Code d'accès ou mot de passe<input id="code" type="password" autocomplete="current-password" required></label>
+      <p class="err" id="err"></p>
+      <button class="btn primary big" type="submit">Entrer</button>
+    </form>
+    <button class="btn flat" id="oubli" type="button">J'ai oublié mon mot de passe</button>`, true);
+  document.getElementById("f").onsubmit = async e => {
+    e.preventDefault();
+    const err = document.getElementById("err"), b = e.submitter; err.textContent = ""; b.disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim(), password: document.getElementById("code").value });
+    b.disabled = false;
+    if (error) { err.textContent = reseau(error) ? "Pas de réseau : réessaie." : /banned/i.test(error.message) ? "Ton accès OIKOS est coupé." : "E-mail ou code incorrect."; return; }
+    LS.set("mdp-le", Date.now()); LS.set("erreurs", 0);
+    suite();
+  };
+  document.getElementById("oubli").onclick = () => feuille(`<h2 style="margin:0">Mot de passe oublié</h2>
+    <p>Appelle OIKOS : on te donnera un nouveau code d'accès. Tu choisiras ensuite un nouveau mot de passe.</p>
+    <button class="btn" data-fermer>J'ai compris</button>`);
+}
+
+function ecranNouveauMdp(obligatoire) {
+  page(`${LOGO}
+    <h1>${obligatoire ? "Choisis ton mot de passe" : "Changer mon mot de passe"}</h1>
+    <p class="muted">${obligatoire ? "Le code d'accès ne sert qu'une fois. " : ""}Au moins 8 caractères. Garde-le pour toi : il te sera redemandé tous les ${JOURS_MDP} jours.</p>
+    <form class="stack" id="f">
+      <label class="f">Nouveau mot de passe<input id="m1" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="f">Encore une fois<input id="m2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p class="err" id="err"></p>
+      <button class="btn primary big" type="submit">Valider</button>
+      ${obligatoire ? "" : `<button class="btn flat" type="button" id="annuler">Annuler</button>`}
+    </form>`, true);
+  if (!obligatoire) document.getElementById("annuler").onclick = () => accueil("moi");
+  document.getElementById("f").onsubmit = async e => {
+    e.preventDefault();
+    const m1 = document.getElementById("m1").value, m2 = document.getElementById("m2").value, err = document.getElementById("err");
+    if (m1 !== m2) { err.textContent = "Les deux mots de passe ne sont pas pareils."; return; }
+    e.submitter.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: m1 });
+    if (error) { e.submitter.disabled = false; err.textContent = reseau(error) ? "Pas de réseau : réessaie." : /different|same/i.test(error.message) ? "Choisis un mot de passe différent du code d'accès." : /weak|short|least/i.test(error.message) ? "Mot de passe trop simple : allonge-le." : error.message; return; }
+    await sb.from("profils").update({ mdp_provisoire: false }).eq("id", moi.id);
+    LS.set("mdp-le", Date.now());
+    toast("Mot de passe enregistré");
+    if (obligatoire) suite(); else accueil("moi");
+  };
+}
+
+/* Clavier du code à 4 chiffres */
+function clavier(titre, texte, quandFini, extra = "") {
+  let saisi = "";
+  page(`${LOGO}<h1>${titre}</h1><p class="muted">${texte}</p>
+    <div class="dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <p class="err" id="err" style="text-align:center"></p>
+    <div class="pad">${[1,2,3,4,5,6,7,8,9].map(n => `<button type="button" data-n="${n}">${n}</button>`).join("")}<button class="vide" type="button" tabindex="-1"></button><button type="button" data-n="0">0</button><button type="button" data-n="x" aria-label="Effacer">⌫</button></div>${extra}`, true);
+  const dots = [...document.querySelectorAll(".dots span")];
+  const maj = () => dots.forEach((d, i) => d.classList.toggle("on", i < saisi.length));
+  document.querySelector(".pad").onclick = async e => {
+    const b = e.target.closest("[data-n]"); if (!b) return;
+    if (b.dataset.n === "x") saisi = saisi.slice(0, -1); else if (saisi.length < 4) saisi += b.dataset.n;
+    maj();
+    if (saisi.length === 4) { const v = saisi; saisi = ""; setTimeout(maj, 150); quandFini(v, t => document.getElementById("err").textContent = t); }
+  };
+}
+function ecranChoisirPin(depuisMoi) {
+  clavier("Choisis ton code", "4 chiffres. Il te sera demandé à chaque ouverture de l'application.", v1 =>
+    clavier("Encore une fois", "Tape le même code pour confirmer.", async (v2, err) => {
+      if (v1 !== v2) { toast("Les deux codes ne sont pas pareils, recommence."); return ecranChoisirPin(depuisMoi); }
+      const sel = crypto.getRandomValues(new Uint32Array(2)).join("-");
+      LS.set("pin", { sel, h: await empreinte(sel + v1) }); LS.set("erreurs", 0);
+      toast("Code enregistré");
+      depuisMoi ? accueil("moi") : suite();
+    }));
+}
+function ecranPin() {
+  clavier("Ton code", "Tape ton code à 4 chiffres.", async (v, err) => {
+    const p = LS.get("pin");
+    if (p && await empreinte(p.sel + v) === p.h) { LS.set("erreurs", 0); verrouille = false; return suite(); }
+    const n = (LS.get("erreurs") || 0) + 1; LS.set("erreurs", n);
+    if (n >= ESSAIS_CODE) { await sortir(); return ecranCode("Trop d'erreurs : par sécurité, entre ton mot de passe."); }
+    err("Code faux. Encore " + (ESSAIS_CODE - n) + " essai" + (ESSAIS_CODE - n > 1 ? "s" : "") + ".");
+  }, `<button class="btn flat" id="oubli" type="button">J'ai oublié mon code</button>`);
+  document.getElementById("oubli").onclick = async () => { await sortir(); ecranCode("Entre ton mot de passe, puis choisis un nouveau code."); };
+}
+function ecranFin() {
+  page(`${LOGO}<h1>Ton accès OIKOS est terminé</h1>
+    <p class="muted">Toutes les informations ont été retirées de ce téléphone. Pour toute question, contacte OIKOS.</p>
+    <button class="btn" id="ok">Fermer</button>`, true);
+  document.getElementById("ok").onclick = () => ecranCode();
+}
+function ecranHorsLigne() {
+  page(`${LOGO}<h1>Pas de réseau</h1><p class="muted">L'application a besoin d'Internet. Vérifie ta connexion.</p>
+    <button class="btn primary big" id="re">Réessayer</button>`, true);
+  document.getElementById("re").onclick = () => suite();
+}
+
+/* ===================== Profil (première fois puis « Moi ») ===================== */
+function ecranProfil(premiere) {
+  const v = k => esc(moi[k] ?? "");
+  const st = moi.statut;
+  page(`<h1>${premiere ? "Tes informations" : "Mes informations"}</h1>
+    <p class="muted">${premiere ? "Une seule fois : OIKOS en a besoin pour travailler avec toi." : "Modifie ce qui a changé."}</p>
+    <form class="stack" id="f" style="margin-top:14px">
+      <div class="grid2"><label class="f">Prénom<input name="prenom" value="${v("prenom")}" required autocomplete="given-name"></label>
+      <label class="f">Nom<input name="nom" value="${v("nom")}" required autocomplete="family-name"></label></div>
+      <label class="f">Téléphone<input name="telephone" type="tel" value="${v("telephone")}" required autocomplete="tel"></label>
+      <label class="f">Adresse<input name="adresse" value="${v("adresse")}" required autocomplete="street-address"></label>
+      <div class="grid2"><label class="f">Date de naissance<input name="date_naissance" type="date" value="${v("date_naissance")}"></label>
+      <label class="f">Lieu de naissance<input name="lieu_naissance" value="${v("lieu_naissance")}"></label></div>
+      <label class="f">Nationalité<input name="nationalite" value="${v("nationalite")}"></label>
+      <h2>En cas d'urgence</h2>
+      <div class="grid2"><label class="f">Personne à prévenir<input name="urgence_nom" value="${v("urgence_nom")}" required></label>
+      <label class="f">Son téléphone<input name="urgence_tel" type="tel" value="${v("urgence_tel")}" required></label></div>
+      <h2>Ton travail</h2>
+      ${st !== "salarie" ? `<div class="grid2"><label class="f">N° SIRET<input name="siret" value="${v("siret")}" inputmode="numeric"></label>
+      <label class="f">Début d'activité<input name="debut_activite" type="date" value="${v("debut_activite")}"></label></div>` : ""}
+      <div><p class="muted small">Ce que tu fais</p>${ACTIVITES.map(a => `<label class="chk"><input type="checkbox" name="act" value="${a}" ${(moi.activites || []).includes(a) ? "checked" : ""}>${a}</label>`).join("")}</div>
+      <div><p class="muted small">Zones où tu acceptes d'aller</p>${[[1, "Zone 1 : moins de 10 km"], [2, "Zone 2 : 10 à 20 km"], [3, "Zone 3 : plus de 20 km"]].map(([z, t]) => `<label class="chk"><input type="checkbox" name="zone" value="${z}" ${(moi.zones || []).includes(z) ? "checked" : ""}>${t}</label>`).join("")}</div>
+      <label class="f">Comment tu te déplaces<select name="transport">${["", "Voiture", "Scooter / moto", "Vélo", "Transports en commun", "À pied"].map(t => `<option ${moi.transport === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <h2>Paiement</h2>
+      <label class="f">IBAN (pour tes virements)<input name="iban" value="${v("iban")}" required autocomplete="off" style="text-transform:uppercase"></label>
+      ${st === "salarie" ? `<label class="f">N° de sécurité sociale<input name="num_secu" value="${v("num_secu")}" inputmode="numeric"></label>
+      <label class="f">Mutuelle<input name="mutuelle" value="${v("mutuelle")}"></label>` : ""}
+      <p class="err" id="err"></p>
+      <button class="btn primary big" type="submit">Enregistrer</button>
+      ${premiere ? "" : `<button class="btn flat" type="button" id="annuler">Annuler</button>`}
+    </form>`);
+  if (!premiere) document.getElementById("annuler").onclick = () => accueil("moi");
+  document.getElementById("f").onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target), d = {};
+    for (const [k, val] of fd) if (k !== "act" && k !== "zone") d[k] = String(val).trim() || null;
+    if (d.iban) d.iban = d.iban.toUpperCase().replace(/\s+/g, " ");
+    d.activites = fd.getAll("act"); d.zones = fd.getAll("zone").map(Number); d.profil_complet = true;
+    e.submitter.disabled = true;
+    const { data, error } = await sb.from("profils").update(d).eq("id", moi.id).select().maybeSingle();
+    e.submitter.disabled = false;
+    if (error) return souci(error);
+    if (!data) { await sortir(); return ecranFin(); }
+    moi = data; toast("Enregistré"); accueil(premiere ? "jour" : "moi");
+  };
+}
+
+/* ===================== Fenêtre du bas ===================== */
+function feuille(html, brancher) {
+  const v = document.createElement("div"); v.className = "voile";
+  v.innerHTML = `<div class="feuille" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(v);
+  const fermer = () => v.remove();
+  v.addEventListener("click", e => { if (e.target === v || e.target.closest("[data-fermer]")) fermer(); });
+  if (brancher) brancher(v.querySelector(".feuille"), fermer);
+  return fermer;
+}
+const choixClient = (sel, nom = "client") => `<label class="f">Client<select name="${nom}" required>${clients.map(c => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>`;
+
+/* ===================== Accueil et onglets ===================== */
+const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["clients", "👥", "Mes clients"], ["mois", "🕒", "Mon mois"], ["moi", "👤", "Moi"]];
+async function accueil(o) {
+  if (o) onglet = o;
+  app.innerHTML = `<main class="page" id="contenu"><p class="muted">Chargement…</p></main>
+    <nav class="nav" aria-label="Onglets"><div>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ic}</span>${t}</button>`).join("")}</div></nav>`;
+  app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) accueil(b.dataset.onglet); };
+  try {
+    if (!(await chargerMoi())) return;
+    const [c, p] = await Promise.all([
+      sb.from("clients").select("id,nom,telephone,adresse,zone,activite,acces,cle,consignes").order("nom"),
+      sb.from("pointages").select("*").eq("intervenante_id", moi.id).is("depart", null).order("arrivee", { ascending: false }).limit(1)
+    ]);
+    if (c.error) throw c.error; if (p.error) throw p.error;
+    clients = c.data; ouvert = p.data[0] || null;
+    await ({ jour: vueJour, clients: vueClients, mois: vueMois, moi: vueMoi })[onglet]();
+  } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
+}
+const contenu = html => { document.getElementById("contenu").innerHTML = html; };
+
+/* ---------- Aujourd'hui ---------- */
+async function vueJour() {
+  const j0 = debutJour(), j7 = ajouterJours(j0, 7);
+  const { data: cr, error } = await sb.from("creneaux").select("*").eq("intervenante_id", moi.id).eq("annule", false)
+    .gte("debut", j0.toISOString()).lt("debut", j7.toISOString()).order("debut");
+  if (error) throw error;
+  const auj = cr.filter(x => new Date(x.debut) < ajouterJours(j0, 1)), suite7 = cr.filter(x => new Date(x.debut) >= ajouterJours(j0, 1));
+  const carteCreneau = x => { const c = clients.find(k => k.id === x.client_id) || {}; return `<div class="card">
+      <div class="row" style="justify-content:space-between"><span class="client-nom">${esc(c.nom || "Client")}</span><span class="tag">${heure(x.debut)} – ${heure(x.fin)}</span></div>
+      ${c.adresse ? `<p class="muted">${esc(c.adresse)}</p>` : ""}
+      <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : `<span></span>`}
+      <button class="btn go" data-arrive="${x.client_id}" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive</button></div>
+      <button class="btn flat" data-fiche="${x.client_id}">Voir la fiche (accès, clé, consignes)</button></div>`; };
+  contenu(`<h1>Bonjour ${esc(moi.prenom || "")}</h1><p class="muted" style="margin-bottom:14px">${jourTxt(new Date())}</p>
+    ${ouvert ? (oubli(ouvert)
+      ? `<div class="card" style="border:2px solid var(--warn)"><p><b>⚠️ Tu as oublié « Je pars »</b></p><p class="client-nom">${esc(nomClient(ouvert.client_id))}</p>
+         <p class="muted">Arrivée ${jourTxt(ouvert.arrivee)} à ${heure(ouvert.arrivee)}</p>
+         <button class="btn stop big" id="pars"><span class="ic">🕒</span>Indiquer mon heure de départ</button></div>`
+      : `<div class="card encours"><p class="muted">En cours depuis ${heure(ouvert.arrivee)}</p><p class="client-nom">${esc(nomClient(ouvert.client_id))}</p>
+         <button class="btn stop big" id="pars"><span class="ic">🏁</span>Je pars</button></div>`) : ""}
+    <div class="stack" style="margin-top:12px">
+      <button class="btn big" id="prevenir"><span class="ic">📣</span>Prévenir (retard, absence, problème…)</button>
+    </div>
+    <h2>Aujourd'hui</h2>
+    <div class="stack">${auj.length ? auj.map(carteCreneau).join("") : `<p class="muted">Rien de prévu dans ton planning aujourd'hui.</p>`}</div>
+    ${!ouvert && clients.length ? `<h2>J'arrive chez un autre client</h2><div class="stack">${clients.filter(c => !auj.some(x => x.client_id === c.id)).map(c => `<button class="btn" data-arrive="${c.id}"><span class="ic">✅</span>${esc(c.nom)}</button>`).join("")}</div>` : ""}
+    ${!clients.length ? `<div class="card" style="margin-top:12px"><p>Aucun client ne t'est encore confié. OIKOS te préviendra.</p></div>` : ""}
+    <h2>Les 7 prochains jours</h2>
+    <div class="card">${suite7.length ? suite7.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b><br><span class="muted small">${jourTxt(x.debut)} · ${heure(x.debut)} – ${heure(x.fin)}</span></span>${sousTraitante() ? `<button class="btn flat" style="flex:none" data-annule="${x.id}">Annuler</button>` : ""}</div>`).join("") : `<p class="muted">Rien de prévu.</p>`}</div>
+    ${sousTraitante() && clients.length ? `<button class="btn primary" id="ajout" style="margin-top:12px"><span class="ic">➕</span>Ajouter un passage à mon planning</button>` : ""}
+    ${moi.statut === "salarie" ? `<p class="muted small" style="margin-top:8px">Ton planning est préparé par OIKOS.</p>` : ""}`);
+  const c = document.getElementById("contenu");
+  c.onclick = async e => {
+    const a = e.target.closest("[data-arrive]"), f = e.target.closest("[data-fiche]"), an = e.target.closest("[data-annule]");
+    if (a) return arriver(a.dataset.arrive);
+    if (f) return ficheClient(f.dataset.fiche);
+    if (an) { const { error } = await sb.from("creneaux").update({ annule: true }).eq("id", an.dataset.annule); if (error) return souci(error); toast("Passage annulé"); return accueil(); }
+  };
+  if (ouvert) document.getElementById("pars").onclick = partir;
+  document.getElementById("prevenir").onclick = prevenir;
+  if (document.getElementById("ajout")) document.getElementById("ajout").onclick = ajouterPassage;
+}
+async function arriver(clientId) {
+  if (ouvert) return toast("Termine d'abord chez " + nomClient(ouvert.client_id));
+  const { error } = await sb.from("pointages").insert({ client_id: clientId });
+  if (error) return souci(error);
+  toast("Arrivée notée à " + heure(new Date()) + " chez " + nomClient(clientId));
+  accueil("jour");
+}
+const oubli = p => p && (debutJour(new Date(p.arrivee)) < debutJour() || minutesEntre(p.arrivee, new Date()) > 12 * 60);
+async function partir() {
+  if (!ouvert) return;
+  if (oubli(ouvert)) { cache.mois = [ouvert]; return corrigerPointage(ouvert.id, "jour"); }   // « Je pars » oublié : elle indique l'heure réelle
+  const fin = new Date();
+  const { error } = await sb.from("pointages").update({ depart: fin.toISOString() }).eq("id", ouvert.id);
+  if (error) return souci(error);
+  toast("Départ noté : " + duree(minutesEntre(ouvert.arrivee, fin)) + " chez " + nomClient(ouvert.client_id));
+  accueil("jour");
+}
+function ajouterPassage() {
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  feuille(`<h2 style="margin:0">Ajouter un passage</h2>
+    <form class="stack" id="fp">${choixClient(null)}
+      <div class="grid2"><label class="f">Jour<input name="jour" type="date" value="${versLocal(d).slice(0, 10)}" required></label>
+      <label class="f">Heure<input name="h" type="time" value="09:00" required></label></div>
+      <label class="f">Durée<select name="duree">${[60, 90, 120, 150, 180, 210, 240, 300].map(m => `<option value="${m}" ${m === 120 ? "selected" : ""}>${duree(m)}</option>`).join("")}</select></label>
+      <button class="btn primary big" type="submit">Ajouter</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fp").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target);
+      const debut = new Date(f.get("jour") + "T" + f.get("h")), fin = new Date(debut.getTime() + Number(f.get("duree")) * 60000);
+      const { error } = await sb.from("creneaux").insert({ intervenante_id: moi.id, client_id: f.get("client"), debut: debut.toISOString(), fin: fin.toISOString() });
+      if (error) return souci(error);
+      fermer(); toast("Passage ajouté"); accueil("jour");
+    };
+  });
+}
+
+/* ---------- Prévenir ---------- */
+function prevenir() {
+  const defaut = ouvert ? ouvert.client_id : null;
+  feuille(`<h2 style="margin:0">Prévenir</h2>
+    <button class="btn big" data-p="retard"><span class="ic">⏰</span>Je suis en retard</button>
+    <button class="btn big" data-p="absence"><span class="ic">🚫</span>Je ne peux pas venir</button>
+    <button class="btn big" data-p="produits"><span class="ic">🧴</span>Il manque des produits</button>
+    <button class="btn big" data-p="probleme"><span class="ic">⚠️</span>Un problème (casse, clé, client absent…)</button>
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    el.onclick = e => { const b = e.target.closest("[data-p]"); if (!b) return; fermer(); ({ retard, absence, produits, probleme })[b.dataset.p](defaut); };
+  });
+  if (!clients.length) toast("Aucun client ne t'est encore confié.");
+}
+async function envoyerSignalement(d) {
+  const { error } = await sb.from("signalements").insert(d);
+  if (error) { souci(error); return false; }
+  return true;
+}
+function proposerSMS(clientId, texte) {
+  const c = clients.find(k => k.id === clientId);
+  if (!c || !c.telephone) { toast("OIKOS est prévenu."); return; }
+  feuille(`<h2 style="margin:0">OIKOS est prévenu</h2><p>Envoyer aussi un SMS à ${esc(c.nom)} ?</p>
+    <div class="card"><p>${esc(texte)}</p></div>
+    <a class="btn primary big" href="${lienSMS(c.telephone, texte)}"><span class="ic">💬</span>Envoyer le SMS</a>
+    <button class="btn flat" data-fermer>Non merci</button>`);
+}
+const signature = () => (moi.prenom || "") + ", OIKOS";
+function retard(defaut) {
+  feuille(`<h2 style="margin:0">Je suis en retard</h2><form class="stack" id="fr">${choixClient(defaut)}
+    <p class="muted">De combien ?</p><div class="grid2">${[10, 20, 30, 45].map(m => `<button class="btn" type="submit" value="${m}">${m} min</button>`).join("")}</div>
+    <button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fr").onsubmit = async e => {
+      e.preventDefault(); const cl = new FormData(e.target).get("client"), m = Number(e.submitter.value);
+      if (!(await envoyerSignalement({ type: "retard", minutes: m, client_id: cl }))) return;
+      fermer(); proposerSMS(cl, `Bonjour, j'aurai environ ${m} minutes de retard. Désolée pour ce contretemps. ${signature()}`);
+    };
+  });
+}
+function absence(defaut) {
+  feuille(`<h2 style="margin:0">Je ne peux pas venir</h2><form class="stack" id="fa">${choixClient(defaut)}
+    <label class="f">Quel jour ?<input name="jour" type="date" value="${versLocal(new Date()).slice(0, 10)}" required></label>
+    <label class="f">Pourquoi ? (pour OIKOS)<textarea name="msg" placeholder="Ex. malade, enfant malade…"></textarea></label>
+    <button class="btn primary big" type="submit">Prévenir OIKOS</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fa").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target);
+      if (!(await envoyerSignalement({ type: "absence", client_id: f.get("client"), message: "Le " + f.get("jour") + (f.get("msg") ? " : " + f.get("msg") : "") }))) return;
+      fermer(); proposerSMS(f.get("client"), `Bonjour, je ne pourrai pas venir le ${new Date(f.get("jour") + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}. OIKOS vous recontacte. ${signature()}`);
+    };
+  });
+}
+function produits(defaut) {
+  feuille(`<h2 style="margin:0">Il manque des produits</h2><form class="stack" id="fm">${choixClient(defaut)}
+    <div>${PRODUITS.map(p => `<label class="chk"><input type="checkbox" name="p" value="${p}">${p}</label>`).join("")}</div>
+    <label class="f">Autre chose<input name="autre"></label>
+    <button class="btn primary big" type="submit">Envoyer</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fm").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), liste = [...f.getAll("p"), f.get("autre")].map(s => String(s || "").trim()).filter(Boolean);
+      if (!liste.length) return toast("Coche au moins un produit.");
+      if (!(await envoyerSignalement({ type: "produits", client_id: f.get("client"), message: liste.join(", ") }))) return;
+      fermer(); proposerSMS(f.get("client"), `Bonjour, pour mon prochain passage il manque : ${liste.join(", ")}. Merci ! ${signature()}`);
+    };
+  });
+}
+function probleme(defaut) {
+  feuille(`<h2 style="margin:0">Un problème</h2><form class="stack" id="fq">${choixClient(defaut)}
+    <label class="f">Que s'est-il passé ?<textarea name="msg" required placeholder="Ex. vase cassé, clé introuvable, personne à la maison…"></textarea></label>
+    <button class="btn primary big" type="submit">Prévenir OIKOS</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fq").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target);
+      if (!(await envoyerSignalement({ type: "probleme", client_id: f.get("client"), message: f.get("msg") }))) return;
+      fermer(); toast("OIKOS est prévenu.");
+    };
+  });
+}
+
+/* ---------- Mes clients ---------- */
+async function vueClients() {
+  contenu(`<h1>Mes clients</h1><p class="muted" style="margin-bottom:14px">Les clients que OIKOS t'a confiés.</p>
+    <div class="stack">${clients.length ? clients.map(c => `<button class="card" style="text-align:left;cursor:pointer" data-fiche="${c.id}">
+      <span class="client-nom">${esc(c.nom)}</span><span class="muted">${esc(c.adresse || "")}</span>
+      <span class="row">${c.zone ? `<span class="tag">Zone ${c.zone}</span>` : ""}<span class="tag">${esc(c.activite || "")}</span></span></button>`).join("") : `<p class="muted">Aucun client pour l'instant.</p>`}</div>`);
+  document.getElementById("contenu").onclick = e => { const f = e.target.closest("[data-fiche]"); if (f) ficheClient(f.dataset.fiche); };
+}
+function ficheClient(id) {
+  const c = clients.find(k => k.id === id); if (!c) return;
+  feuille(`<h2 style="margin:0">${esc(c.nom)}</h2>
+    <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : ""}
+    ${c.telephone ? `<a class="btn" href="${lienTel(c.telephone)}"><span class="ic">📞</span>Appeler</a>` : ""}</div>
+    <dl class="info card">
+      <dt>Adresse</dt><dd>${esc(c.adresse || "—")}</dd>
+      <dt>Accès (digicode, étage…)</dt><dd>${esc(c.acces || "—")}</dd>
+      <dt>Clé</dt><dd>${esc(c.cle || "—")}</dd>
+      <dt>Consignes</dt><dd>${esc(c.consignes || "—")}</dd>
+    </dl>
+    <button class="btn go big" id="arr" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive ici</button>
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => { el.querySelector("#arr").onclick = () => { fermer(); arriver(id); }; });
+}
+
+/* ---------- Mon mois ---------- */
+async function vueMois() {
+  const m0 = moisVu, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
+  const { data: pt, error } = await sb.from("pointages").select("*").eq("intervenante_id", moi.id)
+    .gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).order("arrivee");
+  if (error) throw error;
+  cache.mois = pt;
+  const finis = pt.filter(p => p.depart), total = finis.reduce((s, p) => s + minutesEntre(p.arrivee, p.depart), 0);
+  const parClient = {}; finis.forEach(p => parClient[p.client_id] = (parClient[p.client_id] || 0) + minutesEntre(p.arrivee, p.depart));
+  const tousValides = finis.length && finis.every(p => p.valide_par_intervenante), sansDepart = pt.filter(p => !p.depart && (!ouvert || p.id !== ouvert.id));
+  const titre = m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  contenu(`<div class="row" style="justify-content:space-between"><button class="btn flat" id="prec" aria-label="Mois précédent">◀</button>
+      <h1 style="text-transform:capitalize">${titre}</h1><button class="btn flat" id="suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>▶</button></div>
+    <div class="card" style="margin-top:10px;align-items:center"><span class="muted">Total du mois</span><span class="total">${duree(total)}</span>
+      ${tousValides ? `<span class="tag">✓ Tu as validé ces heures</span>` : ""}</div>
+    ${sansDepart.length ? `<div class="card" style="margin-top:10px;border-color:var(--warn)"><b>⚠️ ${sansDepart.length} passage${sansDepart.length > 1 ? "s" : ""} sans heure de départ</b><span class="muted small">Touche la ligne pour l'indiquer.</span></div>` : ""}
+    <h2>Par client</h2><div class="card">${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${duree(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</div>
+    <h2>Chaque passage</h2><div class="card">${pt.length ? pt.map(p => `<div class="ligne"><button data-pt="${p.id}" ${p.verrouille ? "disabled" : ""}>
+        <b>${esc(nomClient(p.client_id))}</b><br><span class="muted small">${jourTxt(p.arrivee)} · ${heure(p.arrivee)} → ${p.depart ? heure(p.depart) : "?"}${p.corrige_par_gerant ? " · corrigé par OIKOS" : ""}${p.verrouille ? " · facturé" : ""}</span></button>
+        <b>${p.depart ? duree(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</div>
+    ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px" ${sansDepart.length ? "disabled" : ""}><span class="ic">👍</span>Mes heures du mois sont justes</button>
+      <p class="muted small" style="margin-top:6px">OIKOS fait ta facture à partir de ces heures.</p>` : ""}`);
+  document.getElementById("prec").onclick = () => { moisVu = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); accueil("mois"); };
+  document.getElementById("suiv").onclick = () => { moisVu = m1; accueil("mois"); };
+  document.getElementById("contenu").addEventListener("click", e => { const b = e.target.closest("[data-pt]"); if (b) corrigerPointage(b.dataset.pt); });
+  const v = document.getElementById("valider");
+  if (v) v.onclick = async () => {
+    const { error } = await sb.from("pointages").update({ valide_par_intervenante: true }).eq("intervenante_id", moi.id)
+      .gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).not("depart", "is", null).eq("verrouille", false);
+    if (error) return souci(error);
+    toast("Merci, tes heures sont validées"); accueil("mois");
+  };
+}
+function corrigerPointage(id, retour = "mois") {
+  const p = (cache.mois || []).find(x => x.id === id); if (!p) return;
+  const jour = versLocal(p.arrivee).slice(0, 10);
+  feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2><p class="muted">${jourTxt(p.arrivee)}</p>
+    <form class="stack" id="fc"><div class="grid2"><label class="f">Arrivée<input name="a" type="time" value="${versLocal(p.arrivee).slice(11)}" required></label>
+    <label class="f">Départ<input name="d" type="time" value="${p.depart ? versLocal(p.depart).slice(11) : ""}" required></label></div>
+    <p class="err" id="err"></p>
+    <button class="btn primary big" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fc").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target);
+      const a = new Date(jour + "T" + f.get("a")), d = new Date(jour + "T" + f.get("d"));
+      if (d <= a) { el.querySelector("#err").textContent = "Le départ doit être après l'arrivée."; return; }
+      const { error } = await sb.from("pointages").update({ arrivee: a.toISOString(), depart: d.toISOString(), valide_par_intervenante: false }).eq("id", id);
+      if (error) return souci(error);
+      fermer(); toast("Enregistré : " + duree(minutesEntre(a, d))); accueil(retour);
+    };
+  });
+}
+
+/* ---------- Moi ---------- */
+async function vueMoi() {
+  const statut = { "sous-traitant": "Sous-traitante (auto-entrepreneuse)", salarie: "Salariée" }[moi.statut] || "Statut à préciser par OIKOS";
+  contenu(`<h1>${esc((moi.prenom || "") + " " + (moi.nom || ""))}</h1><p class="muted" style="margin-bottom:14px">${statut}</p>
+    <dl class="info card"><dt>E-mail</dt><dd>${esc(moi.email || "")}</dd><dt>Téléphone</dt><dd>${esc(moi.telephone || "—")}</dd>
+      <dt>Adresse</dt><dd>${esc(moi.adresse || "—")}</dd><dt>Activités</dt><dd>${esc((moi.activites || []).join(", ") || "—")}</dd>
+      <dt>Zones</dt><dd>${esc((moi.zones || []).map(z => "Zone " + z).join(", ") || "—")}</dd></dl>
+    <div class="stack" style="margin-top:14px">
+      <button class="btn" id="infos"><span class="ic">✏️</span>Modifier mes informations</button>
+      <button class="btn" id="pin"><span class="ic">🔢</span>Changer mon code à 4 chiffres</button>
+      <button class="btn" id="mdp"><span class="ic">🔑</span>Changer mon mot de passe</button>
+      <button class="btn" id="sortir"><span class="ic">🚪</span>Me déconnecter de ce téléphone</button>
+    </div>
+    <p class="muted small" style="margin-top:18px">Mes papiers et mes factures arriveront ici prochainement.</p>`);
+  document.getElementById("infos").onclick = () => ecranProfil(false);
+  document.getElementById("pin").onclick = () => ecranChoisirPin(true);
+  document.getElementById("mdp").onclick = () => ecranNouveauMdp(false);
+  document.getElementById("sortir").onclick = () => feuille(`<h2 style="margin:0">Te déconnecter ?</h2><p>Il faudra ton e-mail et ton mot de passe pour revenir.</p>
+    <button class="btn stop big" id="ok">Me déconnecter</button><button class="btn flat" data-fermer>Annuler</button>`, (el, fermer) => {
+    el.querySelector("#ok").onclick = async () => { fermer(); await sortir(); ecranCode(); };
+  });
+}
+
+/* ===================== Verrou quand l'appli revient au premier plan ===================== */
+let cachee = 0, verrouille = false;
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) { cachee = Date.now(); return; }
+  if (!cachee || Date.now() - cachee < VERROU_MIN * 60000 || verrouille) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && LS.get("pin")) { verrouille = true; document.querySelectorAll(".voile").forEach(v => v.remove()); demarrer(); }
+});
+
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+demarrer();
+</script>
+</body>
+</html>
