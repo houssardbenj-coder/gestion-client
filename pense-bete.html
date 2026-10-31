@@ -1298,11 +1298,11 @@ function drawCustSheet(){
    <div class="row"><div class="field"><label for="cs-fn">Prénom</label><input type="text" id="cs-fn" autocomplete="off" value="${esc(d.firstName)}"></div>
    <div class="field"><label for="cs-ln">Nom</label><input type="text" id="cs-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
    <div class="field"><label for="cs-ph">Téléphone</label><input type="tel" id="cs-ph" autocomplete="off" placeholder="06 12 34 56 78" value="${esc(d.phone)}"></div>
+   <div class="field"><label for="cs-ad">Adresse</label><input type="text" id="cs-ad" autocomplete="off" placeholder="N°, rue, code postal, ville" value="${esc(d.address)}"></div>
    <div class="field"><label>Activités · intervenant·e · heures par mois</label><div class="svc-list">${acts||`<span class="status">Aucune activité : crée-la ci-dessous.</span>`}</div>
      <div class="row"><input type="text" id="cs-newact" placeholder="Nouvelle activité (ex. Cours)"><button type="button" class="btn" id="cs-addact">+</button></div></div>
    ${slotEditor(d)}
-   <details class="cfg" ${d.isNew?"":"open"}><summary>Plus d'infos (adresse, statut, planning, note…)</summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
-   <div class="field"><label for="cs-ad">Adresse</label><input type="text" id="cs-ad" autocomplete="off" placeholder="N°, rue, code postal, ville" value="${esc(d.address)}"></div>
+   <details class="cfg" ${d.isNew?"":"open"}><summary>Plus d'infos (statut, planning, e-mail, note…)</summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
    <div class="field"><label for="cs-st">Statut</label><select id="cs-st">${Object.entries({actif:"Actif",pause:"En pause (reviendra)",termine:"Archivé (ne prend plus)"}).map(([k,l])=>`<option value="${k}" ${d.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
    <div class="field" id="cs-pause-f" ${d.status==="pause"?"":"hidden"}><label for="cs-pu">Reprise prévue le (facultatif)</label><input type="date" id="cs-pu" value="${d.pauseUntil?ymd(new Date(d.pauseUntil)):""}"></div>
    <div class="field"><label for="cs-sc">Précisions sur le planning (texte libre)</label><input type="text" id="cs-sc" placeholder="Ex. sonner chez la voisine le jeudi" value="${esc(d.schedule)}"></div>
@@ -1473,10 +1473,12 @@ function todayHTML(){
   const a=dayStart(Date.now()),b=endToday()+1,now=Date.now();const rows=[],inCal=new Set();
   leads.filter(l=>l.status==="open"||!l.status).forEach(l=>{if(l.calId)inCal.add(String(l.calId));
     if(l.when&&l.when>=b)return;
-    rows.push({t:l.when||0,time:l.when?(l.when<a?"Retard":hmOf(l.when)):"—",late:l.when&&l.when<now,title:(l.type==="rdv"?"RDV ":"Rappeler ")+fullName(l),sub:l.reason||l.address||"",phone:l.phone,id:l.id,done:"data-ldone",open:`data-ledit="${esc(l.id)}"`})});
-  appts.filter(x=>!x.done&&x.when&&x.when<b).forEach(x=>{if(x.calId)inCal.add(String(x.calId));
+    // un RDV programmé n'a pas à être confirmé : seulement ceux du jour, sans ✓ ni retard
+    if(l.type==="rdv"){if(l.when&&l.when>=a)rows.push({t:l.when,time:hmOf(l.when),title:"RDV "+fullName(l),sub:l.reason||l.address||"",phone:l.phone,open:`data-ledit="${esc(l.id)}"`});return}
+    rows.push({t:l.when||0,time:l.when?(l.when<a?"Retard":hmOf(l.when)):"—",late:l.when&&l.when<now,title:"Rappeler "+fullName(l),sub:l.reason||l.address||"",phone:l.phone,id:l.id,done:"data-ldone",open:`data-ledit="${esc(l.id)}"`})});
+  appts.filter(x=>!x.done&&x.when&&x.when>=a&&x.when<b).forEach(x=>{if(x.calId)inCal.add(String(x.calId));
     const c=x.customerId&&customers.find(o=>o.id===x.customerId);
-    rows.push({t:x.when,time:x.when<a?"Retard":hmOf(x.when),late:x.when+durOf("appts",x)*6e4<now,title:apptName(x),sub:durLabel(durOf("appts",x))+((x.address||c&&c.address)?" · "+(x.address||c.address):""),phone:x.phone||c&&c.phone,id:x.id,done:"data-adone",open:`data-agref="appt:${esc(x.id)}"`})});
+    rows.push({t:x.when,time:hmOf(x.when),title:apptName(x),sub:durLabel(durOf("appts",x))+((x.address||c&&c.address)?" · "+(x.address||c.address):""),phone:x.phone||c&&c.phone,open:`data-agref="appt:${esc(x.id)}"`})});
   projects.filter(p=>p.rdv&&p.rdv>=a&&p.rdv<b).forEach(p=>{if(p.calId)inCal.add(String(p.calId));
     rows.push({t:p.rdv,time:hmOf(p.rdv),title:"RDV "+fullName(p),sub:p.address||"",phone:p.phone,open:`data-editp="${esc(p.id)}"`})});
   occCalIds().forEach(id=>inCal.add(id));
