@@ -842,26 +842,37 @@ async function vuePapiers() {
     <div class="stack">${liste.map(p => `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(p.libelle)}${p.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</b>${etatPapier(p.doc)}</div>
       ${p.aide ? `<p class="muted small">${esc(p.aide)}</p>` : ""}
       ${p.doc && p.doc.etat === "refuse" && p.doc.motif ? `<p class="err" style="min-height:0">${esc(p.doc.motif)}</p>` : ""}
-      ${!p.doc || p.doc.etat === "refuse" ? `<button class="btn primary" data-envoi="${p.id}"><span class="ic">📷</span>Envoyer</button>`
-        : p.doc.etat === "recu" ? `<button class="btn flat" data-envoi="${p.id}">Renvoyer une autre photo</button>` : ""}</div>`).join("")}</div>
+      ${p.modele && (!p.doc || p.doc.etat !== "valide") ? `<button class="btn" data-modele="${esc(p.modele)}"><span class="ic">📥</span>Télécharger le modèle à imprimer</button>` : ""}
+      ${!p.doc || p.doc.etat === "refuse" ? `<button class="btn primary" data-envoi="${p.id}"><span class="ic">📷</span>Envoyer${p.modele ? " le document signé" : ""}</button>`
+        : p.doc.etat === "recu" ? `<button class="btn flat" data-envoi="${p.id}">Ajouter une autre photo (page suivante…)</button>` : ""}</div>`).join("")}</div>
     <h2>Autres documents envoyés</h2>
     <div class="card">${autres.length ? autres.map(d => `<div class="ligne"><span>${esc(d.libelle)}<br><span class="muted small">${jourTxt(d.cree_le)}</span></span>${etatPapier(d)}</div>`).join("") : `<p class="muted small">Aucun.</p>`}</div>
     <button class="btn" id="autre" style="margin-top:12px"><span class="ic">➕</span>Envoyer un autre document</button>
-    <input type="file" id="fichier" accept="image/*,application/pdf" hidden>`);
+    <p class="muted small" style="margin-top:8px">Plusieurs pages ? Tu peux choisir plusieurs photos d'un coup.</p>
+    <input type="file" id="fichier" accept="image/*,application/pdf" multiple hidden>`);
   document.getElementById("retour").onclick = () => accueil("moi");
   const champ = document.getElementById("fichier");
   let cible = null;
-  document.getElementById("contenu").onclick = e => { const b = e.target.closest("[data-envoi]"); if (!b) return; cible = liste.find(p => p.id === b.dataset.envoi); champ.value = ""; champ.click(); };
+  document.getElementById("contenu").onclick = async e => {
+    const m = e.target.closest("[data-modele]");
+    if (m) {   // lien de téléchargement valable 10 minutes
+      const { data, error } = await sb.storage.from("modeles").createSignedUrl(m.dataset.modele, 600, { download: true });
+      if (error) return souci(error);
+      toast("Téléchargement du modèle…");
+      return location.assign(data.signedUrl);   // le fichier arrive dans Téléchargements, l'appli reste ouverte
+    }
+    const b = e.target.closest("[data-envoi]"); if (!b) return; cible = liste.find(p => p.id === b.dataset.envoi); champ.value = ""; champ.click();
+  };
   document.getElementById("autre").onclick = () => feuille(`<h2 style="margin:0">Autre document</h2>
     <form class="stack" id="fa"><label class="f">De quoi s'agit-il ?<input name="t" required placeholder="Ex. attestation Pôle emploi"></label>
     <button class="btn primary big" type="submit">Choisir le fichier</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
     el.querySelector("#fa").onsubmit = e => { e.preventDefault(); cible = { id: null, libelle: new FormData(e.target).get("t").trim() }; fermer(); champ.value = ""; champ.click(); };
   });
   champ.onchange = async () => {
-    const f = champ.files[0]; if (!f || !cible) return;
-    const fermer = feuille(`<h2 style="margin:0">Envoi en cours…</h2><p class="muted">${esc(cible.libelle)}</p>`);
-    try { await envoyerPapier(cible, f); fermer(); toast("Envoyé à OIKOS ✓"); accueil("papiers"); }
-    catch (e) { fermer(); souci(e); }
+    const fichiers = [...champ.files]; if (!fichiers.length || !cible) return;
+    const fermer = feuille(`<h2 style="margin:0">Envoi en cours…</h2><p class="muted">${esc(cible.libelle)} · ${fichiers.length} fichier${fichiers.length > 1 ? "s" : ""}</p>`);
+    try { for (const f of fichiers) await envoyerPapier(cible, f); fermer(); toast("Envoyé à OIKOS ✓"); accueil("papiers"); }
+    catch (e) { fermer(); souci(e); accueil("papiers"); }
   };
 }
 /* Photo réduite (2000 px) pour un envoi rapide, PDF tel quel ; 10 Mo au plus */
@@ -880,7 +891,7 @@ async function envoyerPapier(piece, brut) {
   if (f.size > 10 * 1024 * 1024) throw new Error("fichier trop gros (10 Mo au plus) : prends plutôt une photo.");
   const ext = (f.name.match(/\.(\w+)$/) || [, f.type === "application/pdf" ? "pdf" : "jpg"])[1].toLowerCase();
   const nom = piece.libelle.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40).toLowerCase() || "document";
-  const chemin = `${moi.id}/${Date.now()}-${nom}.${ext}`;
+  const chemin = `${moi.id}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${nom}.${ext}`;   // plusieurs pages d'un coup : jamais le même nom
   const up = await sb.storage.from("documents").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
   if (up.error) throw up.error;
   const { error } = await sb.from("documents").insert({ piece_id: piece.id, libelle: piece.libelle, fichier: chemin, nom_origine: brut.name });

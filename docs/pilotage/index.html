@@ -417,11 +417,29 @@ async function vuePapiers() {
     <td><select name="pour">${[["tous", "Toutes"], ["sous-traitant", "Auto-entrepreneuses"], ["salarie", "Salariées"]].map(([k, t]) => `<option value="${k}" ${p.pour === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
     <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "Si elle a une voiture"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
     <td><label class="chk"><input type="checkbox" name="obligatoire" ${p.obligatoire ? "checked" : ""}>obligatoire</label><label class="chk"><input type="checkbox" name="actif" ${p.actif ? "checked" : ""}>demandé</label></td>
+    <td>${p.modele ? `<span class="row"><button class="btn" data-mvoir>Voir</button><button class="btn" data-mdep>Remplacer</button><button class="btn flat stop" data-mret>Retirer</button></span>`
+      : `<button class="btn" data-mdep>📎 Ajouter</button>`}</td>
     <td><span class="row"><button class="btn flat" data-haut title="Monter">↑</button><button class="btn flat" data-bas title="Descendre">↓</button><button class="btn primary" data-enr>Enregistrer</button></span></td></tr>`;
   const el = contenu(`<h1>Papiers demandés</h1>
-    <p class="muted small" style="margin:6px 0 12px">Ce que l'appli demande à chaque intervenante selon son statut. Décocher « demandé » retire le papier de la liste sans effacer ceux déjà reçus.</p>
-    <section class="card"><table><tr><th>Papier</th><th>Pour</th><th>Quand</th><th>Options</th><th></th></tr>${pieces.map(ligne).join("")}</table>
-    <button class="btn" id="aj" style="margin-top:10px">➕ Ajouter un papier</button></section>`);
+    <p class="muted small" style="margin:6px 0 12px">Ce que l'appli demande à chaque intervenante selon son statut. Décocher « demandé » retire le papier de la liste sans effacer ceux déjà reçus.
+      Un <b>modèle</b> (PDF ou Word : contrat, droit à l'image…) se télécharge depuis l'appli : elle l'imprime, le signe et renvoie la photo.</p>
+    <section class="card"><table><tr><th>Papier</th><th>Pour</th><th>Quand</th><th>Options</th><th>Modèle</th><th></th></tr>${pieces.map(ligne).join("")}</table>
+    <button class="btn" id="aj" style="margin-top:10px">➕ Ajouter un papier</button>
+    <input type="file" id="fm" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" hidden></section>`);
+  let pourModele = null;
+  const champModele = el.querySelector("#fm");
+  champModele.onchange = async () => {
+    const f = champModele.files[0], p = pieces.find(x => x.id === pourModele); if (!f || !p) return;
+    const ancien = p.modele;
+    const nom = f.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9.]+/g, "-");
+    const chemin = `${p.id}/${Date.now()}-${nom}`;
+    toast("Envoi du modèle…");
+    const { error } = await sb.storage.from("modeles").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
+    if (error) return souci(error);
+    await maj(sb.from("pieces_demandees").update({ modele: chemin }).eq("id", p.id));
+    if (ancien) await sb.storage.from("modeles").remove([ancien]);
+    toast("Modèle en ligne : elles peuvent le télécharger"); afficher("papiers");
+  };
   const lire = tr => { const v = n => tr.querySelector(`[name=${n}]`); return { libelle: v("libelle").value.trim(), aide: v("aide").value.trim() || null, pour: v("pour").value,
     condition: v("condition").value || null, obligatoire: v("obligatoire").checked, actif: v("actif").checked }; };
   el.onclick = async e => {
@@ -429,6 +447,9 @@ async function vuePapiers() {
     if (b.id === "aj") { await maj(sb.from("pieces_demandees").insert({ libelle: "Nouveau papier", pour: "tous", ordre: (pieces.at(-1)?.ordre || 0) + 10 })); return afficher("papiers"); }
     const tr = b.closest("tr"); if (!tr) return;
     const i = pieces.findIndex(p => p.id === tr.dataset.id);
+    if (b.hasAttribute("data-mdep")) { pourModele = tr.dataset.id; champModele.value = ""; return champModele.click(); }
+    if (b.hasAttribute("data-mvoir")) { const { data, error } = await sb.storage.from("modeles").createSignedUrl(pieces[i].modele, 300); if (error) return souci(error); return window.open(data.signedUrl, "_blank", "noopener"); }
+    if (b.hasAttribute("data-mret")) { await maj(sb.from("pieces_demandees").update({ modele: null }).eq("id", tr.dataset.id)); await sb.storage.from("modeles").remove([pieces[i].modele]); toast("Modèle retiré"); return afficher("papiers"); }
     if (b.hasAttribute("data-enr")) { const d = lire(tr); if (!d.libelle) return toast("Le nom du papier est obligatoire"); await maj(sb.from("pieces_demandees").update(d).eq("id", tr.dataset.id)); toast("Enregistré"); }
     const j = b.hasAttribute("data-haut") ? i - 1 : b.hasAttribute("data-bas") ? i + 1 : -1;
     if (j >= 0 && j < pieces.length) {   // on échange les deux, puis on renumérote 10, 20, 30…
