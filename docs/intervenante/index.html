@@ -65,13 +65,59 @@ label.f textarea{min-height:90px;resize:vertical}
 .ligne{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .ligne:first-child{border-top:0}
 .ligne button{border:0;background:none;text-align:left;padding:0;cursor:pointer;flex:1}
-.total{font-size:30px;font-weight:800}
+.compteur{font-size:40px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--accent);margin:0}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.grid3 .btn{font-size:15px;padding:10px 6px;flex-direction:column;gap:2px}
+.lien{color:var(--accent);text-decoration:underline;text-underline-offset:3px;background:none;border:0;padding:0;cursor:pointer;text-align:left;font:inherit}
+.lien.client-nom{font-weight:800;font-size:19px;text-decoration:none;color:var(--ink)}
+a.lien.muted{color:var(--muted)}
+/* agenda : même présentation que Pense intelligent */
+.ag{display:flex;flex-direction:column;gap:10px}
+.ag-head{display:flex;align-items:center;gap:6px}
+.ag-title{font-weight:800;font-size:20px;flex:1;text-align:center;text-transform:capitalize}
+.ag-nav{border:0;background:none;color:var(--accent);font-size:32px;line-height:1;padding:2px 14px;cursor:pointer}
+.ag-auj{min-height:38px;padding:6px 12px;font-size:14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:12px;padding:3px;gap:3px}
+.seg button{border:0;background:none;border-radius:9px;padding:8px;font-weight:700;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgb(0 0 0 / .15)}
+.ag-week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.ag-d{display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:6px 0;cursor:pointer;min-width:0}
+.ag-d span{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em}
+.ag-d b{font-size:17px;font-variant-numeric:tabular-nums}
+.ag-d i{font-style:normal;color:var(--accent);font-size:11px;line-height:1;height:11px;letter-spacing:1px}
+.ag-d.today b{color:var(--accent)}
+.ag-d.sel{background:var(--ink);border-color:var(--ink)}
+.ag-d.sel span,.ag-d.sel b,.ag-d.sel i{color:var(--bg)}
+.ag-dayname{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ag-grid,.wk-body{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.ag-hour{position:absolute;left:0;right:0;height:56px;border-top:1px solid var(--line);pointer-events:none}
+.ag-hour:first-child{border-top:0}
+.ag-hour span{position:absolute;left:8px;top:3px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ag-hour::after{content:"";position:absolute;left:44px;right:0;top:50%;border-top:1px dashed var(--line)}
+.ag-ev,.wk-ev{position:absolute;border:0;border-left:4px solid var(--accent);background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:3px 7px;text-align:left;display:flex;flex-direction:column;overflow:hidden;cursor:pointer}
+.ag-ev b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-ev span{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.k-fait{border-left-color:var(--go);background:color-mix(in srgb,var(--go) 20%,var(--surface))}
+.ag-now,.wk-now{position:absolute;height:2px;background:var(--stop);pointer-events:none}
+.ag-now{left:40px;right:0}
+.ag-now::before{content:"";position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:var(--stop)}
+.wk{display:flex;flex-direction:column;gap:4px}
+.wk-hd{display:grid;grid-template-columns:30px repeat(7,1fr);gap:2px}
+.wk-day{border:0;background:none;display:flex;flex-direction:column;align-items:center;cursor:pointer;padding:4px 0;border-radius:10px;min-width:0}
+.wk-day span{font-size:11px;text-transform:uppercase;color:var(--muted)}
+.wk-day b{font-size:16px}
+.wk-day.today b{color:var(--accent)}
+.wk-hr{position:absolute;left:0;right:0;border-top:1px solid var(--line);pointer-events:none}
+.wk-hr span{position:absolute;left:4px;top:2px;font-size:11px;color:var(--muted)}
+.wk-ev{padding:2px 3px;border-left-width:3px;border-radius:5px}
+.wk-ev b{font-size:11px}
+.wk-ev span{font-size:10px;line-height:1.15;overflow:hidden}
 .info dt{font-size:13px;color:var(--muted);margin-top:8px}
 .info dd{margin:0;white-space:pre-wrap}
 /* barre d'onglets */
 .nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
-.nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
-.nav button{border:0;background:none;padding:9px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer}
+.nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+.nav button{border:0;background:none;padding:9px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
 .nav button .ic{font-size:24px;line-height:1.1}
 .nav button[aria-current="page"]{color:var(--accent)}
 /* clavier du code */
@@ -100,7 +146,7 @@ const JOURS_MDP = 30;            // mot de passe complet redemandé tous les 30 
 const ESSAIS_CODE = 5;           // erreurs de code à 4 chiffres avant de tout effacer
 const VERROU_MIN = 5;            // l'appli se reverrouille après 5 min en arrière-plan
 const ACTIVITES = ["Ménage", "Jardinage", "Bricolage"];
-const PRODUITS = ["Liquide vaisselle", "Sacs poubelle", "Produit pour le sol", "Éponges", "Papier toilette", "Produit vitres"];
+const RAYON_M = 300;             // « J'arrive / Je pars » vérifié à moins de 300 m de l'adresse du client
 
 const sb = window.supabase.createClient(SB_URL, SB_CLE, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: "oikos-int-session" }
@@ -118,7 +164,8 @@ function toast(t) { const e = document.getElementById("toast"); e.textContent = 
 const pad2 = n => String(n).padStart(2, "0");
 const heure = d => { d = new Date(d); return d.getHours() + " h " + pad2(d.getMinutes()); };
 const jourTxt = d => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-const duree = min => { min = Math.max(0, Math.round(min)); const h = Math.floor(min / 60), m = min % 60; return h ? h + " h" + (m ? " " + pad2(m) : "") : m + " min"; };
+/* Durées toujours en heures (comme dans la feuille d'heures) : 90 min → « 1,5 h » */
+const heuresTxt = min => (Math.round(Math.max(0, min) / 60 * 100) / 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " h";
 const minutesEntre = (a, b) => (new Date(b) - new Date(a)) / 60000;
 const debutJour = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const ajouterJours = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
@@ -129,6 +176,8 @@ const estIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 const lienSMS = (tel, texte) => "sms:" + String(tel || "").replace(/[^\d+]/g, "") + (estIOS ? "&" : "?") + "body=" + encodeURIComponent(texte);
 const lienItineraire = adr => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(adr || "");
 const lienTel = tel => "tel:" + String(tel || "").replace(/[^\d+]/g, "");
+const lienWaze = adr => "https://waze.com/ul?navigate=yes&q=" + encodeURIComponent(adr || "");
+const lienWhatsApp = tel => { let n = String(tel || "").replace(/[^\d+]/g, ""); n = n.startsWith("+") ? n.slice(1) : n.startsWith("00") ? n.slice(2) : n.startsWith("0") ? "33" + n.slice(1) : n; return "https://wa.me/" + n; };
 
 async function empreinte(texte) {
   const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texte));
@@ -336,11 +385,11 @@ function ecranProfil(premiere) {
 }
 
 /* ===================== Fenêtre du bas ===================== */
-function feuille(html, brancher) {
+function feuille(html, brancher, quandFerme) {
   const v = document.createElement("div"); v.className = "voile";
   v.innerHTML = `<div class="feuille" role="dialog" aria-modal="true">${html}</div>`;
   document.body.appendChild(v);
-  const fermer = () => v.remove();
+  const fermer = () => { v.remove(); if (quandFerme) quandFerme(); };
   v.addEventListener("click", e => { if (e.target === v || e.target.closest("[data-fermer]")) fermer(); });
   if (brancher) brancher(v.querySelector(".feuille"), fermer);
   return fermer;
@@ -348,7 +397,7 @@ function feuille(html, brancher) {
 const choixClient = (sel, nom = "client") => `<label class="f">Client<select name="${nom}" required>${clients.map(c => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>`;
 
 /* ===================== Accueil et onglets ===================== */
-const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["clients", "👥", "Mes clients"], ["mois", "🕒", "Mon mois"], ["moi", "👤", "Moi"]];
+const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["agenda", "📅", "Agenda"], ["clients", "👥", "Clients"], ["mois", "📊", "Reporting"], ["moi", "👤", "Moi"]];
 async function accueil(o) {
   if (o) onglet = o;
   app.innerHTML = `<main class="page" id="contenu"><p class="muted">Chargement…</p></main>
@@ -357,192 +406,344 @@ async function accueil(o) {
   try {
     if (!(await chargerMoi())) return;
     const [c, p] = await Promise.all([
-      sb.from("clients").select("id,nom,telephone,adresse,zone,activite,acces,cle,consignes").order("nom"),
+      sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,lat,lng").order("nom"),
       sb.from("pointages").select("*").eq("intervenante_id", moi.id).is("depart", null).order("arrivee", { ascending: false }).limit(1)
     ]);
     if (c.error) throw c.error; if (p.error) throw p.error;
     clients = c.data; ouvert = p.data[0] || null;
-    await ({ jour: vueJour, clients: vueClients, mois: vueMois, moi: vueMoi })[onglet]();
+    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi })[onglet]();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
 
+/* ---------- Présence vérifiée par le GPS ---------- */
+/* La position n'est lue qu'au moment où elle touche « J'arrive » ou « Je pars » */
+function maPosition() {
+  if (!navigator.geolocation) return Promise.resolve({ etat: "sans", raison: "indisponible" });
+  return new Promise(res => navigator.geolocation.getCurrentPosition(
+    p => res({ lat: p.coords.latitude, lng: p.coords.longitude, precision: Math.round(p.coords.accuracy) }),
+    e => res({ etat: "sans", raison: e.code === 1 ? "refus" : "introuvable" }),
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }));
+}
+const coordsVues = {};
+/* Position de l'adresse du client : celle de la base, sinon la Base Adresse Nationale */
+async function coordsClient(c) {
+  if (c.lat != null && c.lng != null) return { lat: c.lat, lng: c.lng };
+  if (!c.adresse) return null;
+  if (coordsVues[c.id]) return coordsVues[c.id];
+  for (const url of ["https://data.geopf.fr/geocodage/search?limit=1&q=", "https://api-adresse.data.gouv.fr/search/?limit=1&q="]) {
+    try {
+      const r = await fetch(url + encodeURIComponent(c.adresse)); if (!r.ok) continue;
+      const f = ((await r.json()).features || [])[0];
+      if (f) return coordsVues[c.id] = { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
+    } catch (e) {}
+  }
+  return null;
+}
+function metres(a, b) {
+  const R = 6371000, rad = x => x * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const distTxt = d => d < 1000 ? d + " m" : (d / 1000).toFixed(1).replace(".", ",") + " km";
+async function controleGPS(c) {
+  const [pos, cible] = await Promise.all([maPosition(), coordsClient(c)]);
+  if (pos.etat) return pos;
+  if (!cible) return { ...pos, etat: "adresse" };
+  const d = Math.round(metres(pos, cible));
+  return { ...pos, distance: d, etat: d <= RAYON_M ? "ok" : d - pos.precision <= RAYON_M ? "imprecis" : "loin" };
+}
+/* Renvoie la position à enregistrer, ou null si elle annule */
+async function verifierPresence(c, moment) {
+  for (;;) {
+    const fermer = feuille(`<h2 style="margin:0">📍 Vérification de ta position…</h2><p class="muted">Quelques secondes. Si le téléphone le demande, touche « Autoriser ».</p>`);
+    const g = await controleGPS(c);
+    fermer();
+    if (g.etat === "ok") return g;
+    const texte = {
+      loin: `Tu sembles être à <b>${distTxt(g.distance)}</b> de chez ${esc(c.nom)} (il faut être à moins de ${RAYON_M} m).`,
+      imprecis: `Le GPS est imprécis (à ± ${distTxt(g.precision)}) : ta présence chez ${esc(c.nom)} n'est pas sûre. Va près d'une fenêtre ou dehors, puis réessaie.`,
+      adresse: `L'adresse de ${esc(c.nom)} n'a pas été trouvée sur la carte : ta présence ne peut pas être vérifiée.`,
+      sans: g.raison === "refus" ? `La position n'est pas autorisée. Pour l'activer : réglages du téléphone › Applications › Chrome › Autorisations › Position › Autoriser.` : `Le téléphone ne trouve pas ta position. Vérifie que la localisation est allumée.`
+    }[g.etat];
+    const r = await new Promise(res => feuille(`<h2 style="margin:0">Présence non vérifiée</h2><p>${texte}</p>
+      <button class="btn primary big" data-r="re"><span class="ic">🔄</span>Réessayer</button>
+      <button class="btn" data-r="ok">Noter mon ${moment} quand même</button>
+      <p class="muted small">OIKOS sera prévenu que ta position n'a pas pu être vérifiée.</p>
+      <button class="btn flat" data-fermer>Annuler</button>`, (el, f) => { el.onclick = e => { const b = e.target.closest("[data-r]"); if (b) { res(b.dataset.r); f(); } }; }, () => res(null)));
+    if (r === "ok") return g;
+    if (r !== "re") return null;
+  }
+}
+const gpsBadge = g => !g ? "" : g.etat === "ok" ? `<span class="tag">📍 vérifié</span>` : `<span class="tag warn">📍 ${g.etat === "loin" && g.distance ? "à " + distTxt(g.distance) : "non vérifié"}</span>`;
+const gpsTxt = g => !g ? "pas de position (ancien pointage ou heure tapée à la main)" : g.etat === "ok" ? `vérifiée, à ${distTxt(g.distance)} du client`
+  : g.etat === "loin" ? `à ${distTxt(g.distance)} du client` : g.etat === "imprecis" ? `imprécise (± ${distTxt(g.precision)})` : g.etat === "adresse" ? "adresse du client introuvable" : "position refusée ou introuvable";
+
 /* ---------- Aujourd'hui ---------- */
+let minuteur;
 async function vueJour() {
-  const j0 = debutJour(), j7 = ajouterJours(j0, 7);
+  const j0 = debutJour(), j1 = ajouterJours(j0, 1);
   const { data: cr, error } = await sb.from("creneaux").select("*").eq("intervenante_id", moi.id).eq("annule", false)
-    .gte("debut", j0.toISOString()).lt("debut", j7.toISOString()).order("debut");
+    .gte("debut", j0.toISOString()).lt("debut", ajouterJours(j0, 7).toISOString()).order("debut");
   if (error) throw error;
-  const auj = cr.filter(x => new Date(x.debut) < ajouterJours(j0, 1)), suite7 = cr.filter(x => new Date(x.debut) >= ajouterJours(j0, 1));
+  const auj = cr.filter(x => new Date(x.debut) < j1), prochain = cr.find(x => new Date(x.debut) >= j1);
   const carteCreneau = x => { const c = clients.find(k => k.id === x.client_id) || {}; return `<div class="card">
-      <div class="row" style="justify-content:space-between"><span class="client-nom">${esc(c.nom || "Client")}</span><span class="tag">${heure(x.debut)} – ${heure(x.fin)}</span></div>
-      ${c.adresse ? `<p class="muted">${esc(c.adresse)}</p>` : ""}
+      <div class="row" style="justify-content:space-between"><button class="lien client-nom" data-fiche="${x.client_id}">${esc(c.nom || "Client")} ›</button><span class="tag">${heure(x.debut)} – ${heure(x.fin)}</span></div>
+      ${c.adresse ? `<a class="lien muted" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener">📍 ${esc(c.adresse)}</a>` : ""}
       <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : `<span></span>`}
-      <button class="btn go" data-arrive="${x.client_id}" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive</button></div>
-      <button class="btn flat" data-fiche="${x.client_id}">Voir la fiche (accès, clé, consignes)</button></div>`; };
+      <button class="btn go" data-arrive="${x.client_id}" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive</button></div></div>`; };
   contenu(`<h1>Bonjour ${esc(moi.prenom || "")}</h1><p class="muted" style="margin-bottom:14px">${jourTxt(new Date())}</p>
     ${ouvert ? (oubli(ouvert)
       ? `<div class="card" style="border:2px solid var(--warn)"><p><b>⚠️ Tu as oublié « Je pars »</b></p><p class="client-nom">${esc(nomClient(ouvert.client_id))}</p>
          <p class="muted">Arrivée ${jourTxt(ouvert.arrivee)} à ${heure(ouvert.arrivee)}</p>
          <button class="btn stop big" id="pars"><span class="ic">🕒</span>Indiquer mon heure de départ</button></div>`
-      : `<div class="card encours"><p class="muted">En cours depuis ${heure(ouvert.arrivee)}</p><p class="client-nom">${esc(nomClient(ouvert.client_id))}</p>
+      : `<div class="card encours"><div class="row" style="justify-content:space-between"><span class="muted">En cours depuis ${heure(ouvert.arrivee)}</span>${gpsBadge(ouvert.gps_arrivee)}</div>
+         <button class="lien client-nom" data-fiche="${ouvert.client_id}">${esc(nomClient(ouvert.client_id))} ›</button>
+         <p class="compteur"><span class="muted small">⏱ </span><span id="chrono">${heuresTxt(minutesEntre(ouvert.arrivee, new Date()))}</span></p>
          <button class="btn stop big" id="pars"><span class="ic">🏁</span>Je pars</button></div>`) : ""}
-    <div class="stack" style="margin-top:12px">
-      <button class="btn big" id="prevenir"><span class="ic">📣</span>Prévenir (retard, absence, problème…)</button>
-    </div>
     <h2>Aujourd'hui</h2>
     <div class="stack">${auj.length ? auj.map(carteCreneau).join("") : `<p class="muted">Rien de prévu dans ton planning aujourd'hui.</p>`}</div>
-    ${!ouvert && clients.length ? `<h2>J'arrive chez un autre client</h2><div class="stack">${clients.filter(c => !auj.some(x => x.client_id === c.id)).map(c => `<button class="btn" data-arrive="${c.id}"><span class="ic">✅</span>${esc(c.nom)}</button>`).join("")}</div>` : ""}
+    ${!ouvert && clients.some(c => !auj.some(x => x.client_id === c.id)) ? `<h2>J'arrive chez un autre client</h2><div class="stack">${clients.filter(c => !auj.some(x => x.client_id === c.id)).map(c => `<button class="btn" data-arrive="${c.id}"><span class="ic">✅</span>${esc(c.nom)}</button>`).join("")}</div>` : ""}
     ${!clients.length ? `<div class="card" style="margin-top:12px"><p>Aucun client ne t'est encore confié. OIKOS te préviendra.</p></div>` : ""}
-    <h2>Les 7 prochains jours</h2>
-    <div class="card">${suite7.length ? suite7.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b><br><span class="muted small">${jourTxt(x.debut)} · ${heure(x.debut)} – ${heure(x.fin)}</span></span>${sousTraitante() ? `<button class="btn flat" style="flex:none" data-annule="${x.id}">Annuler</button>` : ""}</div>`).join("") : `<p class="muted">Rien de prévu.</p>`}</div>
-    ${sousTraitante() && clients.length ? `<button class="btn primary" id="ajout" style="margin-top:12px"><span class="ic">➕</span>Ajouter un passage à mon planning</button>` : ""}
-    ${moi.statut === "salarie" ? `<p class="muted small" style="margin-top:8px">Ton planning est préparé par OIKOS.</p>` : ""}`);
+    <p class="muted small" style="margin-top:12px">📍 Ta position est vérifiée seulement au moment où tu touches « J'arrive » ou « Je pars » (à moins de ${RAYON_M} m du client).</p>
+    <h2>Ensuite</h2>
+    <div class="card">${prochain ? `<p><b>${esc(nomClient(prochain.client_id))}</b><br><span class="muted small">${jourTxt(prochain.debut)} · ${heure(prochain.debut)} – ${heure(prochain.fin)}</span></p>` : `<p class="muted">Rien de prévu dans les 7 prochains jours.</p>`}
+      <button class="btn" id="voir-agenda"><span class="ic">📅</span>Voir mon agenda</button></div>`);
   const c = document.getElementById("contenu");
-  c.onclick = async e => {
-    const a = e.target.closest("[data-arrive]"), f = e.target.closest("[data-fiche]"), an = e.target.closest("[data-annule]");
+  c.onclick = e => {
+    const a = e.target.closest("[data-arrive]"), f = e.target.closest("[data-fiche]");
     if (a) return arriver(a.dataset.arrive);
     if (f) return ficheClient(f.dataset.fiche);
-    if (an) { const { error } = await sb.from("creneaux").update({ annule: true }).eq("id", an.dataset.annule); if (error) return souci(error); toast("Passage annulé"); return accueil(); }
   };
   if (ouvert) document.getElementById("pars").onclick = partir;
-  document.getElementById("prevenir").onclick = prevenir;
-  if (document.getElementById("ajout")) document.getElementById("ajout").onclick = ajouterPassage;
+  document.getElementById("voir-agenda").onclick = () => accueil("agenda");
+  clearInterval(minuteur);
+  if (ouvert && !oubli(ouvert)) minuteur = setInterval(() => { const e = document.getElementById("chrono"); if (!e) return clearInterval(minuteur); e.textContent = heuresTxt(minutesEntre(ouvert.arrivee, new Date())); }, 30000);
 }
 async function arriver(clientId) {
   if (ouvert) return toast("Termine d'abord chez " + nomClient(ouvert.client_id));
-  const { error } = await sb.from("pointages").insert({ client_id: clientId });
+  const c = clients.find(k => k.id === clientId); if (!c) return;
+  const g = await verifierPresence(c, "arrivée"); if (!g) return;
+  const { error } = await sb.from("pointages").insert({ client_id: clientId, gps_arrivee: g });
   if (error) return souci(error);
-  toast("Arrivée notée à " + heure(new Date()) + " chez " + nomClient(clientId));
+  toast((g.etat === "ok" ? "✓ Présence vérifiée. " : "") + "Arrivée notée à " + heure(new Date()) + " chez " + c.nom);
   accueil("jour");
 }
 const oubli = p => p && (debutJour(new Date(p.arrivee)) < debutJour() || minutesEntre(p.arrivee, new Date()) > 12 * 60);
 async function partir() {
   if (!ouvert) return;
   if (oubli(ouvert)) { cache.mois = [ouvert]; return corrigerPointage(ouvert.id, "jour"); }   // « Je pars » oublié : elle indique l'heure réelle
+  const p = ouvert, c = clients.find(k => k.id === p.client_id) || { id: p.client_id, nom: nomClient(p.client_id) };
+  const g = await verifierPresence(c, "départ"); if (!g) return;
   const fin = new Date();
-  const { error } = await sb.from("pointages").update({ depart: fin.toISOString() }).eq("id", ouvert.id);
+  const { error } = await sb.from("pointages").update({ depart: fin.toISOString(), gps_depart: g }).eq("id", p.id);
   if (error) return souci(error);
-  toast("Départ noté : " + duree(minutesEntre(ouvert.arrivee, fin)) + " chez " + nomClient(ouvert.client_id));
   accueil("jour");
-}
-function ajouterPassage() {
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  feuille(`<h2 style="margin:0">Ajouter un passage</h2>
-    <form class="stack" id="fp">${choixClient(null)}
-      <div class="grid2"><label class="f">Jour<input name="jour" type="date" value="${versLocal(d).slice(0, 10)}" required></label>
-      <label class="f">Heure<input name="h" type="time" value="09:00" required></label></div>
-      <label class="f">Durée<select name="duree">${[60, 90, 120, 150, 180, 210, 240, 300].map(m => `<option value="${m}" ${m === 120 ? "selected" : ""}>${duree(m)}</option>`).join("")}</select></label>
-      <button class="btn primary big" type="submit">Ajouter</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
-    el.querySelector("#fp").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target);
-      const debut = new Date(f.get("jour") + "T" + f.get("h")), fin = new Date(debut.getTime() + Number(f.get("duree")) * 60000);
-      const { error } = await sb.from("creneaux").insert({ intervenante_id: moi.id, client_id: f.get("client"), debut: debut.toISOString(), fin: fin.toISOString() });
-      if (error) return souci(error);
-      fermer(); toast("Passage ajouté"); accueil("jour");
-    };
+  const fermer = feuille(`<h2 style="margin:0">Passage terminé ✓</h2>
+    <p>${esc(c.nom)} : <b>${heuresTxt(minutesEntre(p.arrivee, fin))}</b>${g.etat === "ok" ? " · départ vérifié 📍" : ""}</p>
+    <form class="stack" id="fn"><label class="f">Une remarque pour OIKOS sur ce passage ? (facultatif)<textarea name="t" placeholder="Ex. il manque du produit vitres, le client part en vacances…"></textarea></label>
+    <button class="btn primary big" type="submit">Envoyer à OIKOS</button><button class="btn flat" type="button" data-fermer>Non merci</button></form>`, el => {
+    el.querySelector("#fn").onsubmit = async e => { e.preventDefault(); if (await ajouterNote(c.id, p.id, new FormData(e.target).get("t"))) fermer(); };
   });
 }
 
-/* ---------- Prévenir ---------- */
-function prevenir() {
-  const defaut = ouvert ? ouvert.client_id : null;
-  feuille(`<h2 style="margin:0">Prévenir</h2>
-    <button class="btn big" data-p="retard"><span class="ic">⏰</span>Je suis en retard</button>
-    <button class="btn big" data-p="absence"><span class="ic">🚫</span>Je ne peux pas venir</button>
-    <button class="btn big" data-p="produits"><span class="ic">🧴</span>Il manque des produits</button>
-    <button class="btn big" data-p="probleme"><span class="ic">⚠️</span>Un problème (casse, clé, client absent…)</button>
-    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
-    el.onclick = e => { const b = e.target.closest("[data-p]"); if (!b) return; fermer(); ({ retard, absence, produits, probleme })[b.dataset.p](defaut); };
-  });
-  if (!clients.length) toast("Aucun client ne t'est encore confié.");
-}
-async function envoyerSignalement(d) {
-  const { error } = await sb.from("signalements").insert(d);
+/* ---------- Notes de terrain (lues par OIKOS, qui reçoit une alerte) ---------- */
+async function ajouterNote(clientId, pointageId, texte) {
+  texte = String(texte || "").trim();
+  if (!texte) { toast("Écris d'abord ta note."); return false; }
+  const { error } = await sb.from("notes_terrain").insert({ client_id: clientId, pointage_id: pointageId || null, texte });
   if (error) { souci(error); return false; }
-  return true;
+  toast("Note envoyée à OIKOS"); return true;
 }
-function proposerSMS(clientId, texte) {
-  const c = clients.find(k => k.id === clientId);
-  if (!c || !c.telephone) { toast("OIKOS est prévenu."); return; }
-  feuille(`<h2 style="margin:0">OIKOS est prévenu</h2><p>Envoyer aussi un SMS à ${esc(c.nom)} ?</p>
-    <div class="card"><p>${esc(texte)}</p></div>
-    <a class="btn primary big" href="${lienSMS(c.telephone, texte)}"><span class="ic">💬</span>Envoyer le SMS</a>
-    <button class="btn flat" data-fermer>Non merci</button>`);
+async function listeNotes(el, clientId, pointageId) {
+  let q = sb.from("notes_terrain").select("*").eq("client_id", clientId).order("cree_le", { ascending: false }).limit(30);
+  if (pointageId) q = q.eq("pointage_id", pointageId);
+  const { data, error } = await q;
+  el.innerHTML = error ? `<p class="muted small">${reseau(error) ? "Pas de réseau." : "Notes indisponibles."}</p>`
+    : data.length ? data.map(n => `<div class="ligne"><span><span class="muted small">${jourTxt(n.cree_le)} à ${heure(n.cree_le)}${n.pointage_id && !pointageId ? " · sur un passage" : ""}${n.vue_le ? " · lue par OIKOS ✓" : ""}</span><br>${esc(n.texte)}</span></div>`).join("")
+    : `<p class="muted small">Aucune note pour l'instant.</p>`;
 }
-const signature = () => (moi.prenom || "") + ", OIKOS";
-function retard(defaut) {
-  feuille(`<h2 style="margin:0">Je suis en retard</h2><form class="stack" id="fr">${choixClient(defaut)}
-    <p class="muted">De combien ?</p><div class="grid2">${[10, 20, 30, 45].map(m => `<button class="btn" type="submit" value="${m}">${m} min</button>`).join("")}</div>
-    <button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
-    el.querySelector("#fr").onsubmit = async e => {
-      e.preventDefault(); const cl = new FormData(e.target).get("client"), m = Number(e.submitter.value);
-      if (!(await envoyerSignalement({ type: "retard", minutes: m, client_id: cl }))) return;
-      fermer(); proposerSMS(cl, `Bonjour, j'aurai environ ${m} minutes de retard. Désolée pour ce contretemps. ${signature()}`);
-    };
-  });
-}
-function absence(defaut) {
-  feuille(`<h2 style="margin:0">Je ne peux pas venir</h2><form class="stack" id="fa">${choixClient(defaut)}
-    <label class="f">Quel jour ?<input name="jour" type="date" value="${versLocal(new Date()).slice(0, 10)}" required></label>
-    <label class="f">Pourquoi ? (pour OIKOS)<textarea name="msg" placeholder="Ex. malade, enfant malade…"></textarea></label>
-    <button class="btn primary big" type="submit">Prévenir OIKOS</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
-    el.querySelector("#fa").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target);
-      if (!(await envoyerSignalement({ type: "absence", client_id: f.get("client"), message: "Le " + f.get("jour") + (f.get("msg") ? " : " + f.get("msg") : "") }))) return;
-      fermer(); proposerSMS(f.get("client"), `Bonjour, je ne pourrai pas venir le ${new Date(f.get("jour") + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}. OIKOS vous recontacte. ${signature()}`);
-    };
-  });
-}
-function produits(defaut) {
-  feuille(`<h2 style="margin:0">Il manque des produits</h2><form class="stack" id="fm">${choixClient(defaut)}
-    <div>${PRODUITS.map(p => `<label class="chk"><input type="checkbox" name="p" value="${p}">${p}</label>`).join("")}</div>
-    <label class="f">Autre chose<input name="autre"></label>
-    <button class="btn primary big" type="submit">Envoyer</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
-    el.querySelector("#fm").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target), liste = [...f.getAll("p"), f.get("autre")].map(s => String(s || "").trim()).filter(Boolean);
-      if (!liste.length) return toast("Coche au moins un produit.");
-      if (!(await envoyerSignalement({ type: "produits", client_id: f.get("client"), message: liste.join(", ") }))) return;
-      fermer(); proposerSMS(f.get("client"), `Bonjour, pour mon prochain passage il manque : ${liste.join(", ")}. Merci ! ${signature()}`);
-    };
-  });
-}
-function probleme(defaut) {
-  feuille(`<h2 style="margin:0">Un problème</h2><form class="stack" id="fq">${choixClient(defaut)}
-    <label class="f">Que s'est-il passé ?<textarea name="msg" required placeholder="Ex. vase cassé, clé introuvable, personne à la maison…"></textarea></label>
-    <button class="btn primary big" type="submit">Prévenir OIKOS</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
-    el.querySelector("#fq").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target);
-      if (!(await envoyerSignalement({ type: "probleme", client_id: f.get("client"), message: f.get("msg") }))) return;
-      fermer(); toast("OIKOS est prévenu.");
-    };
-  });
+const blocNotes = (titre, aide) => `<h2 style="margin:6px 0 0">${titre}</h2>
+  <form class="stack" id="fnote"><label class="f">${aide}<textarea name="t" placeholder="Ex. chat à ne pas laisser sortir, clé changée, aspirateur en panne…"></textarea></label>
+  <button class="btn primary" type="submit"><span class="ic">✉️</span>Envoyer à OIKOS</button></form>
+  <div class="card" id="notes-liste"><p class="muted small">Chargement…</p></div>`;
+function brancherNotes(el, clientId, pointageId) {
+  const liste = el.querySelector("#notes-liste");
+  listeNotes(liste, clientId, pointageId);
+  el.querySelector("#fnote").onsubmit = async e => { e.preventDefault(); if (await ajouterNote(clientId, pointageId, new FormData(e.target).get("t"))) { e.target.reset(); listeNotes(liste, clientId, pointageId); } };
 }
 
-/* ---------- Mes clients ---------- */
+/* ---------- Clients ---------- */
 async function vueClients() {
-  contenu(`<h1>Mes clients</h1><p class="muted" style="margin-bottom:14px">Les clients que OIKOS t'a confiés.</p>
+  contenu(`<h1>Mes clients</h1><p class="muted" style="margin-bottom:14px">Les clients que OIKOS t'a confiés. Touche un client pour sa fiche.</p>
     <div class="stack">${clients.length ? clients.map(c => `<button class="card" style="text-align:left;cursor:pointer" data-fiche="${c.id}">
-      <span class="client-nom">${esc(c.nom)}</span><span class="muted">${esc(c.adresse || "")}</span>
+      <span class="client-nom">${esc(c.nom)} ›</span><span class="muted">${esc(c.adresse || "")}</span>
       <span class="row">${c.zone ? `<span class="tag">Zone ${c.zone}</span>` : ""}<span class="tag">${esc(c.activite || "")}</span></span></button>`).join("") : `<p class="muted">Aucun client pour l'instant.</p>`}</div>`);
   document.getElementById("contenu").onclick = e => { const f = e.target.closest("[data-fiche]"); if (f) ficheClient(f.dataset.fiche); };
 }
 function ficheClient(id) {
   const c = clients.find(k => k.id === id); if (!c) return;
+  const tel = c.telephone, lien = (h, t) => `<a class="lien" href="${h}" target="_blank" rel="noopener">${esc(t)}</a>`;
   feuille(`<h2 style="margin:0">${esc(c.nom)}</h2>
-    <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : ""}
-    ${c.telephone ? `<a class="btn" href="${lienTel(c.telephone)}"><span class="ic">📞</span>Appeler</a>` : ""}</div>
+    ${c.adresse ? `<div class="grid2"><a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Google Maps</a>
+      <a class="btn" href="${lienWaze(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🚗</span>Waze</a></div>` : ""}
+    ${tel ? `<div class="grid3"><a class="btn" href="${lienTel(tel)}"><span class="ic">📞</span>Appeler</a>
+      <a class="btn" href="${lienSMS(tel, "")}"><span class="ic">💬</span>SMS</a>
+      <a class="btn" href="${lienWhatsApp(tel)}" target="_blank" rel="noopener"><span class="ic">🟢</span>WhatsApp</a></div>` : ""}
     <dl class="info card">
-      <dt>Adresse</dt><dd>${esc(c.adresse || "—")}</dd>
+      <dt>Adresse</dt><dd>${c.adresse ? lien(lienItineraire(c.adresse), c.adresse) : "—"}</dd>
+      <dt>Téléphone</dt><dd>${tel ? `<a class="lien" href="${lienTel(tel)}">${esc(tel)}</a>` : "—"}</dd>
+      ${c.email ? `<dt>E-mail</dt><dd><a class="lien" href="mailto:${esc(c.email)}">${esc(c.email)}</a></dd>` : ""}
       <dt>Accès (digicode, étage…)</dt><dd>${esc(c.acces || "—")}</dd>
       <dt>Clé</dt><dd>${esc(c.cle || "—")}</dd>
       <dt>Consignes</dt><dd>${esc(c.consignes || "—")}</dd>
     </dl>
     <button class="btn go big" id="arr" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive ici</button>
-    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => { el.querySelector("#arr").onclick = () => { fermer(); arriver(id); }; });
+    ${blocNotes("Mes notes sur ce client", "Ce que OIKOS doit savoir sur ce client")}
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    el.querySelector("#arr").onclick = () => { fermer(); arriver(id); };
+    brancherNotes(el, id, null);
+  });
 }
 
-/* ---------- Mon mois ---------- */
+/* ---------- Agenda (même présentation que Pense intelligent) ---------- */
+let agJour = debutJour(), agVue = LS.get("agvue") || "jour", agVu = false;
+const AG_PX = 56, JOURS_C = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
+const debutSemaine = d => ajouterJours(debutJour(d), -((new Date(d).getDay() + 6) % 7));
+async function vueAgenda() {
+  const s0 = debutSemaine(agJour), s1 = ajouterJours(s0, 7), auj = debutJour();
+  const [cr, pt] = await Promise.all([
+    sb.from("creneaux").select("*").eq("intervenante_id", moi.id).eq("annule", false).gte("debut", s0.toISOString()).lt("debut", s1.toISOString()).order("debut"),
+    sb.from("pointages").select("*").eq("intervenante_id", moi.id).gte("arrivee", s0.toISOString()).lt("arrivee", s1.toISOString()).order("arrivee")
+  ]);
+  if (cr.error) throw cr.error; if (pt.error) throw pt.error;
+  cache.mois = pt.data;
+  // un passage prévu ET pointé le même jour = un seul bloc vert
+  const memeJour = (a, b) => debutJour(new Date(a)).getTime() === debutJour(new Date(b)).getTime();
+  const items = cr.data.map(x => {
+    const p = pt.data.find(q => q.client_id === x.client_id && memeJour(q.arrivee, x.debut));
+    return { t: +new Date(x.debut), end: +new Date(x.fin), titre: nomClient(x.client_id), k: p ? "fait" : "prevu", ref: "cr:" + x.id };
+  }).concat(pt.data.filter(p => !cr.data.some(x => x.client_id === p.client_id && memeJour(p.arrivee, x.debut)))
+    .map(p => ({ t: +new Date(p.arrivee), end: +new Date(p.depart || Date.now()), titre: nomClient(p.client_id), k: "fait", ref: "pt:" + p.id })));
+  const vue = agVue === "semaine" ? agSemaine(s0, items, auj) : agJourHtml(s0, items, auj);
+  contenu(`<div class="ag">${vue}
+    ${sousTraitante() && clients.length ? `<button class="btn primary" id="ajout"><span class="ic">➕</span>Ajouter un passage</button>` : ""}
+    ${moi.statut === "salarie" ? `<p class="muted small">Ton planning est préparé par OIKOS.</p>` : ""}
+    <p class="muted small">${moi.agenda_id ? `📅 Ton planning est aussi copié tout seul dans ton agenda Google « OIKOS – ${esc(moi.prenom || "")} ».` : "📅 Bientôt, ton planning sera aussi copié tout seul dans ton agenda Google."}</p></div>`);
+  const el = document.getElementById("contenu");
+  el.onclick = e => {
+    const nav = e.target.closest("[data-agnav]"), j = e.target.closest("[data-agjour]"), v = e.target.closest("[data-agvue]"), ev = e.target.closest("[data-agref]");
+    if (nav) { agJour = ajouterJours(agJour, Number(nav.dataset.agnav)); return accueil("agenda"); }
+    if (e.target.closest("[data-agauj]")) { agJour = debutJour(); return accueil("agenda"); }
+    if (j) { agJour = new Date(Number(j.dataset.agjour)); agVue = "jour"; LS.set("agvue", agVue); return accueil("agenda"); }
+    if (v) { agVue = v.dataset.agvue; LS.set("agvue", agVue); return accueil("agenda"); }
+    if (ev) return detailAgenda(ev.dataset.agref, cr.data);
+    const g = e.target.closest(".ag-grid,.wk-body");
+    if (g && sousTraitante() && clients.length) {   // créneau libre touché : on y ajoute un passage
+      const r = g.getBoundingClientRect(), h0 = Number(g.dataset.h0), px = Number(g.dataset.px);
+      let jour = agJour;
+      if (g.classList.contains("wk-body")) { const x = e.clientX - r.left - 30; if (x < 0) return; jour = ajouterJours(s0, Math.min(6, Math.floor(x / ((r.width - 30) / 7)))); }
+      const min = h0 * 60 + Math.floor((e.clientY - r.top) / px * 2) * 30;
+      ajouterPassage({ jour, h: pad2(Math.floor(min / 60)) + ":" + pad2(min % 60) });
+    }
+  };
+  if (document.getElementById("ajout")) document.getElementById("ajout").onclick = () => ajouterPassage({ jour: agJour < auj ? auj : agJour });
+  const n = el.querySelector(".ag-now") || el.querySelector(".ag-ev");
+  if (n && !agVu) { agVu = true; n.scrollIntoView({ block: "center" }); }
+}
+const agTete = (titre, s0, auj) => `<div class="ag-head"><button class="ag-nav" data-agnav="-7" aria-label="Semaine précédente">‹</button>
+  <div class="ag-title">${esc(titre)}</div><button class="ag-nav" data-agnav="7" aria-label="Semaine suivante">›</button>
+  ${(agVue === "jour" ? agJour.getTime() !== auj.getTime() : s0.getTime() !== debutSemaine(auj).getTime()) ? `<button class="btn ag-auj" data-agauj="1">Aujourd'hui</button>` : ""}</div>
+  <div class="seg" role="group" aria-label="Affichage"><button data-agvue="jour" aria-pressed="${agVue === "jour"}">Jour</button><button data-agvue="semaine" aria-pressed="${agVue === "semaine"}">Semaine</button></div>`;
+function couloirs(liste) {   // passages qui se chevauchent : côte à côte
+  let lanes = [], grp = [], fin = -Infinity;
+  const clore = () => { grp.forEach(x => x.nl = Math.max(1, lanes.length)); lanes = []; grp = []; };
+  liste.forEach(it => { if (it.t >= fin) clore(); let k = lanes.findIndex(e => e <= it.t); if (k < 0) { k = lanes.length; lanes.push(0); } lanes[k] = it.end; it.lane = k; grp.push(it); fin = Math.max(fin, it.end); });
+  clore();
+}
+function plage(liste) { let h0 = 7, h1 = 21; liste.forEach(it => { h0 = Math.min(h0, new Date(it.t).getHours()); h1 = Math.max(h1, Math.min(24, new Date(it.end - 1).getHours() + 1)); }); return [h0, h1]; }
+function agJourHtml(s0, items, auj) {
+  const d = agJour, d1 = ajouterJours(d, 1);
+  let h = agTete(d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }), s0, auj);
+  h += `<div class="ag-week">` + [0, 1, 2, 3, 4, 5, 6].map(i => { const t = ajouterJours(s0, i), n = items.filter(it => it.t >= t && it.t < ajouterJours(t, 1)).length;
+    return `<button class="ag-d${t.getTime() === d.getTime() ? " sel" : ""}${t.getTime() === auj.getTime() ? " today" : ""}" data-agjour="${t.getTime()}"><span>${JOURS_C[t.getDay()]}</span><b>${t.getDate()}</b><i>${n ? "•".repeat(Math.min(n, 3)) : "&nbsp;"}</i></button>`; }).join("") + `</div>`;
+  h += `<div class="ag-dayname">${esc(jourTxt(d))}${d.getTime() === auj.getTime() ? " · aujourd'hui" : ""}</div>`;
+  const jour = items.filter(it => it.t >= d && it.t < d1).sort((a, b) => a.t - b.t);
+  const [h0, h1] = plage(jour); couloirs(jour);
+  const y = t => ((t - d) / 36e5 - h0) * AG_PX;
+  let g = `<div class="ag-grid" data-h0="${h0}" data-px="${AG_PX}" style="height:${(h1 - h0) * AG_PX}px">`;
+  for (let hr = h0; hr < h1; hr++) g += `<div class="ag-hour" style="top:${(hr - h0) * AG_PX}px"><span>${hr}h</span></div>`;
+  jour.forEach(it => { const top = Math.max(0, y(it.t)), ht = Math.max(26, Math.min((h1 - h0) * AG_PX, y(it.end)) - top - 2);
+    g += `<button class="ag-ev k-${it.k}" data-agref="${it.ref}" style="top:${top}px;height:${ht}px;left:calc(44px + (100% - 48px) * ${it.lane} / ${it.nl});width:calc((100% - 48px) / ${it.nl} - 3px)">
+      <b>${heure(it.t).replace(" h ", "h")} ${esc(it.titre)}</b>${ht > 40 ? `<span>${it.k === "fait" ? "✓ pointé" : "prévu"} · ${heuresTxt((it.end - it.t) / 6e4)}</span>` : ""}</button>`; });
+  if (d.getTime() === auj.getTime()) { const n = y(Date.now()); if (n >= 0 && n <= (h1 - h0) * AG_PX) g += `<div class="ag-now" style="top:${n}px"></div>`; }
+  return h + g + `</div><p class="muted small">${sousTraitante() ? "Touche un créneau libre pour y ajouter un passage, ou un passage pour le détail." : "Touche un passage pour le détail."}</p>`;
+}
+function agSemaine(s0, items, auj) {
+  const PX = 30, s6 = ajouterJours(s0, 6);
+  const titre = s0.getMonth() === s6.getMonth() ? `${s0.getDate()} – ${s6.getDate()} ${s6.toLocaleDateString("fr-FR", { month: "long" })}`
+    : `${s0.getDate()} ${s0.toLocaleDateString("fr-FR", { month: "short" })} – ${s6.getDate()} ${s6.toLocaleDateString("fr-FR", { month: "short" })}`;
+  const jours = [0, 1, 2, 3, 4, 5, 6].map(i => ajouterJours(s0, i)), [h0, h1] = plage(items);
+  let h = agTete(titre, s0, auj) + `<div class="wk"><div class="wk-hd"><span></span>` + jours.map(t => `<button class="wk-day${t.getTime() === auj.getTime() ? " today" : ""}" data-agjour="${t.getTime()}"><span>${JOURS_C[t.getDay()]}</span><b>${t.getDate()}</b></button>`).join("") + `</div>`;
+  let g = `<div class="wk-body" data-h0="${h0}" data-px="${PX}" style="height:${(h1 - h0) * PX}px">`;
+  for (let hr = h0; hr < h1; hr++) g += `<div class="wk-hr" style="top:${(hr - h0) * PX}px;height:${PX}px"><span>${hr}</span></div>`;
+  jours.forEach((t, i) => {
+    const col = items.filter(it => it.t >= t && it.t < ajouterJours(t, 1)).sort((a, b) => a.t - b.t); couloirs(col);
+    col.forEach(it => { const top = Math.max(0, ((it.t - t) / 36e5 - h0) * PX), ht = Math.max(16, ((it.end - t) / 36e5 - h0) * PX - top - 1);
+      g += `<button class="wk-ev k-${it.k}" data-agref="${it.ref}" title="${esc(it.titre)}" style="top:${top}px;height:${ht}px;left:calc(30px + (100% - 30px) * ${i}/7 + (100% - 30px) / 7 * ${it.lane}/${it.nl} + 1px);width:calc((100% - 30px) / 7 / ${it.nl} - 2px)"><b>${new Date(it.t).getHours()}h${new Date(it.t).getMinutes() ? pad2(new Date(it.t).getMinutes()) : ""}</b>${ht > 26 ? `<span>${esc(it.titre)}</span>` : ""}</button>`; });
+    if (t.getTime() === auj.getTime()) { const n = ((Date.now() - t) / 36e5 - h0) * PX; if (n >= 0 && n <= (h1 - h0) * PX) g += `<div class="wk-now" style="top:${n}px;left:calc(30px + (100% - 30px) * ${i}/7);width:calc((100% - 30px) / 7)"></div>`; }
+  });
+  return h + g + `</div></div><p class="muted small">Touche un jour pour le voir en détail${sousTraitante() ? ", ou un créneau libre pour ajouter un passage" : ""}.</p>`;
+}
+function detailAgenda(ref, creneaux) {
+  const [type, id] = ref.split(":");
+  if (type === "pt") return feuillePassage(id);
+  const x = creneaux.find(k => k.id === id); if (!x) return;
+  const c = clients.find(k => k.id === x.client_id) || {}, futur = new Date(x.fin) > new Date(), ajd = debutJour(new Date(x.debut)).getTime() === debutJour().getTime();
+  feuille(`<h2 style="margin:0">${esc(c.nom || "Client")}</h2><p class="muted">${jourTxt(x.debut)} · ${heure(x.debut)} – ${heure(x.fin)}</p>
+    ${x.note ? `<div class="card"><p>${esc(x.note)}</p></div>` : ""}
+    ${ajd && !ouvert ? `<button class="btn go big" id="arr"><span class="ic">✅</span>J'arrive</button>` : ""}
+    <div class="grid2"><button class="btn" id="fiche"><span class="ic">👤</span>Fiche client</button>
+    ${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : ""}</div>
+    ${sousTraitante() && futur ? `<button class="btn" id="annule" style="color:var(--stop)">Annuler ce passage</button>` : ""}
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    el.querySelector("#fiche").onclick = () => { fermer(); ficheClient(x.client_id); };
+    if (el.querySelector("#arr")) el.querySelector("#arr").onclick = () => { fermer(); arriver(x.client_id); };
+    if (el.querySelector("#annule")) el.querySelector("#annule").onclick = async () => {
+      const { error } = await sb.from("creneaux").update({ annule: true }).eq("id", x.id);
+      if (error) return souci(error);
+      fermer(); toast("Passage annulé"); accueil("agenda");
+    };
+  });
+}
+function ajouterPassage(pre = {}) {
+  const j = pre.jour || ajouterJours(debutJour(), 1);
+  feuille(`<h2 style="margin:0">Ajouter un passage</h2>
+    <form class="stack" id="fp">${choixClient(null)}
+      <div class="grid2"><label class="f">Jour<input name="jour" type="date" value="${versLocal(j).slice(0, 10)}" required></label>
+      <label class="f">Heure<input name="h" type="time" value="${pre.h || "09:00"}" required></label></div>
+      <label class="f">Durée<select name="duree">${[60, 90, 120, 150, 180, 210, 240, 300, 360, 420].map(m => `<option value="${m}" ${m === 120 ? "selected" : ""}>${heuresTxt(m)}</option>`).join("")}</select></label>
+      <div class="grid2"><label class="f">Répéter<select name="tous"><option value="0">Une seule fois</option><option value="7">Chaque semaine</option><option value="14">Toutes les 2 semaines</option></select></label>
+      <label class="f">Pendant<select name="nb">${[4, 8, 12, 26].map(n => `<option value="${n}">${n} semaines</option>`).join("")}</select></label></div>
+      <button class="btn primary big" type="submit">Ajouter</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fp").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), pas = Number(f.get("tous")), dur = Number(f.get("duree")) * 60000;
+      const d0 = new Date(f.get("jour") + "T" + f.get("h")), lignes = [];
+      for (let k = 0; pas ? k * pas < Number(f.get("nb")) * 7 : k < 1; k++) {
+        const debut = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + k * pas, d0.getHours(), d0.getMinutes());
+        lignes.push({ intervenante_id: moi.id, client_id: f.get("client"), debut: debut.toISOString(), fin: new Date(debut.getTime() + dur).toISOString() });
+      }
+      e.submitter.disabled = true;
+      const { error } = await sb.from("creneaux").insert(lignes);
+      e.submitter.disabled = false;
+      if (error) return souci(error);
+      fermer(); toast(lignes.length > 1 ? lignes.length + " passages ajoutés" : "Passage ajouté");
+      agJour = debutJour(d0); accueil("agenda");
+    };
+  });
+}
+
+/* ---------- Reporting (le mois en heures, envoyé dans sa feuille d'heures) ---------- */
 async function vueMois() {
   const m0 = moisVu, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
   const { data: pt, error } = await sb.from("pointages").select("*").eq("intervenante_id", moi.id)
@@ -555,18 +756,20 @@ async function vueMois() {
   const titre = m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   contenu(`<div class="row" style="justify-content:space-between"><button class="btn flat" id="prec" aria-label="Mois précédent">◀</button>
       <h1 style="text-transform:capitalize">${titre}</h1><button class="btn flat" id="suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>▶</button></div>
-    <div class="card" style="margin-top:10px;align-items:center"><span class="muted">Total du mois</span><span class="total">${duree(total)}</span>
+    <div class="card" style="margin-top:10px;align-items:center"><span class="muted">Heures du mois</span><span class="compteur">${heuresTxt(total)}</span>
+      <span class="muted small">${finis.length} passage${finis.length > 1 ? "s" : ""} · ${Object.keys(parClient).length} client${Object.keys(parClient).length > 1 ? "s" : ""}</span>
       ${tousValides ? `<span class="tag">✓ Tu as validé ces heures</span>` : ""}</div>
     ${sansDepart.length ? `<div class="card" style="margin-top:10px;border-color:var(--warn)"><b>⚠️ ${sansDepart.length} passage${sansDepart.length > 1 ? "s" : ""} sans heure de départ</b><span class="muted small">Touche la ligne pour l'indiquer.</span></div>` : ""}
-    <h2>Par client</h2><div class="card">${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${duree(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</div>
-    <h2>Chaque passage</h2><div class="card">${pt.length ? pt.map(p => `<div class="ligne"><button data-pt="${p.id}" ${p.verrouille ? "disabled" : ""}>
-        <b>${esc(nomClient(p.client_id))}</b><br><span class="muted small">${jourTxt(p.arrivee)} · ${heure(p.arrivee)} → ${p.depart ? heure(p.depart) : "?"}${p.corrige_par_gerant ? " · corrigé par OIKOS" : ""}${p.verrouille ? " · facturé" : ""}</span></button>
-        <b>${p.depart ? duree(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</div>
-    ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px" ${sansDepart.length ? "disabled" : ""}><span class="ic">👍</span>Mes heures du mois sont justes</button>
-      <p class="muted small" style="margin-top:6px">OIKOS fait ta facture à partir de ces heures.</p>` : ""}`);
+    <h2>Par client</h2><div class="card">${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${heuresTxt(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</div>
+    <h2>Chaque passage</h2><div class="card">${pt.length ? pt.map(p => `<div class="ligne"><button data-pt="${p.id}">
+        <b>${esc(nomClient(p.client_id))} ›</b><br><span class="muted small">${jourTxt(p.arrivee)} · ${heure(p.arrivee)} → ${p.depart ? heure(p.depart) : "?"}</span>
+        <span class="row" style="gap:4px;margin-top:3px">${gpsBadge([p.gps_arrivee, p.gps_depart].find(g => g && g.etat !== "ok") || p.gps_arrivee)}${p.corrige_par_intervenante ? `<span class="tag warn">✏️ tapé à la main</span>` : ""}${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans mon rapport</span>` : ""}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></button>
+        <b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</div>
+    ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px" ${sansDepart.length ? "disabled" : ""}><span class="ic">👍</span>Mes heures du mois sont justes</button>` : ""}
+    <p class="muted small" style="margin-top:8px">Chaque passage terminé part tout seul dans ton rapport d'activité (ta feuille d'heures OIKOS). OIKOS fait ta facture à partir de ces heures.</p>`);
   document.getElementById("prec").onclick = () => { moisVu = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); accueil("mois"); };
   document.getElementById("suiv").onclick = () => { moisVu = m1; accueil("mois"); };
-  document.getElementById("contenu").addEventListener("click", e => { const b = e.target.closest("[data-pt]"); if (b) corrigerPointage(b.dataset.pt); });
+  document.getElementById("contenu").onclick = e => { const b = e.target.closest("[data-pt]"); if (b) feuillePassage(b.dataset.pt); };
   const v = document.getElementById("valider");
   if (v) v.onclick = async () => {
     const { error } = await sb.from("pointages").update({ valide_par_intervenante: true }).eq("intervenante_id", moi.id)
@@ -575,12 +778,27 @@ async function vueMois() {
     toast("Merci, tes heures sont validées"); accueil("mois");
   };
 }
-function corrigerPointage(id, retour = "mois") {
+function feuillePassage(id) {
+  const p = (cache.mois || []).find(x => x.id === id); if (!p) return;
+  if (!p.depart && (!ouvert || ouvert.id !== p.id)) return corrigerPointage(id);
+  feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2><p class="muted">${jourTxt(p.arrivee)}</p>
+    <dl class="info card"><dt>Horaires</dt><dd>${heure(p.arrivee)} → ${p.depart ? heure(p.depart) + " · <b>" + heuresTxt(minutesEntre(p.arrivee, p.depart)) + "</b>" : "en cours"}</dd>
+      <dt>Position à l'arrivée</dt><dd>${gpsTxt(p.gps_arrivee)}</dd>${p.depart ? `<dt>Position au départ</dt><dd>${gpsTxt(p.gps_depart)}</dd>` : ""}
+      <dt>Rapport d'activité</dt><dd>${p.exporte_le ? "✓ écrit dans ta feuille d'heures" : "en attente (quelques minutes)"}</dd></dl>
+    ${p.verrouille ? `<p class="muted small">Ce passage est facturé : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : p.depart ? `<button class="btn" id="corr"><span class="ic">✏️</span>Corriger les heures</button>` : ""}
+    ${blocNotes("Notes sur ce passage", "Une remarque pour OIKOS sur ce passage")}
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    if (el.querySelector("#corr")) el.querySelector("#corr").onclick = () => { fermer(); corrigerPointage(id); };
+    brancherNotes(el, p.client_id, p.id);
+  });
+}
+function corrigerPointage(id, retour) {
   const p = (cache.mois || []).find(x => x.id === id); if (!p) return;
   const jour = versLocal(p.arrivee).slice(0, 10);
   feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2><p class="muted">${jourTxt(p.arrivee)}</p>
     <form class="stack" id="fc"><div class="grid2"><label class="f">Arrivée<input name="a" type="time" value="${versLocal(p.arrivee).slice(11)}" required></label>
     <label class="f">Départ<input name="d" type="time" value="${p.depart ? versLocal(p.depart).slice(11) : ""}" required></label></div>
+    <p class="muted small">Une heure tapée à la main n'est pas vérifiée par le GPS : OIKOS en est prévenu.</p>
     <p class="err" id="err"></p>
     <button class="btn primary big" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
     el.querySelector("#fc").onsubmit = async e => {
@@ -589,7 +807,7 @@ function corrigerPointage(id, retour = "mois") {
       if (d <= a) { el.querySelector("#err").textContent = "Le départ doit être après l'arrivée."; return; }
       const { error } = await sb.from("pointages").update({ arrivee: a.toISOString(), depart: d.toISOString(), valide_par_intervenante: false }).eq("id", id);
       if (error) return souci(error);
-      fermer(); toast("Enregistré : " + duree(minutesEntre(a, d))); accueil(retour);
+      fermer(); toast("Enregistré : " + heuresTxt(minutesEntre(a, d))); accueil(retour || onglet);
     };
   });
 }

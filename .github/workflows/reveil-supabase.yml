@@ -1,0 +1,20 @@
+# Réveil de la base Supabase de l'appli des intervenantes OIKOS.
+# Le projet gratuit se met en pause après 7 jours sans activité :
+# on l'appelle tous les 3 jours (fonction ping() du SQL 07, aucune donnée).
+# La clé est la clé PUBLIQUE, déjà présente dans l'appli.
+name: Réveil base Supabase
+
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler ping()
+        run: |
+          curl -fsS -X POST "https://nzxphozupnmqyikitwhv.supabase.co/rest/v1/rpc/ping" \
+            -H "apikey: sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q" \
+            -H "Content-Type: application/json" -d '{}'
