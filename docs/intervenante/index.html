@@ -411,7 +411,7 @@ async function accueil(o) {
     ]);
     if (c.error) throw c.error; if (p.error) throw p.error;
     clients = c.data; ouvert = p.data[0] || null;
-    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi })[onglet]();
+    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi, papiers: vuePapiers })[onglet]();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
@@ -517,6 +517,14 @@ async function vueJour() {
   };
   if (ouvert) document.getElementById("pars").onclick = partir;
   document.getElementById("voir-agenda").onclick = () => accueil("agenda");
+  chargerPapiers().then(p => {   // rappel des papiers manquants, sans ralentir l'écran
+    const n = p.liste.filter(x => x.obligatoire && (!x.doc || x.doc.etat === "refuse")).length;
+    if (!n || !document.getElementById("voir-agenda")) return;
+    const d = document.createElement("button"); d.className = "card"; d.style.cssText = "text-align:left;cursor:pointer;border-color:var(--warn);margin-bottom:12px;width:100%";
+    d.innerHTML = `<b>📄 ${n} papier${n > 1 ? "s" : ""} à envoyer à OIKOS ›</b><span class="muted small">Une photo suffit.</span>`;
+    d.onclick = () => accueil("papiers");
+    c.querySelector("h1").nextElementSibling.after(d);
+  }).catch(() => {});
   clearInterval(minuteur);
   if (ouvert && !oubli(ouvert)) minuteur = setInterval(() => { const e = document.getElementById("chrono"); if (!e) return clearInterval(minuteur); e.textContent = heuresTxt(minutesEntre(ouvert.arrivee, new Date())); }, 30000);
 }
@@ -812,6 +820,73 @@ function corrigerPointage(id, retour) {
   });
 }
 
+/* ---------- Mes papiers (liste réglée par OIKOS selon le statut) ---------- */
+async function chargerPapiers() {
+  const [pi, dc] = await Promise.all([
+    sb.from("pieces_demandees").select("*").eq("actif", true).order("ordre"),
+    sb.from("documents").select("*").eq("intervenante_id", moi.id).order("cree_le", { ascending: false })
+  ]);
+  if (pi.error) throw pi.error; if (dc.error) throw dc.error;
+  const pour = p => (p.pour === "tous" || p.pour === moi.statut)
+    && (!p.condition || (p.condition === "ae_a_creer" ? moi.ae_a_creer : p.condition === "voiture" ? moi.transport === "Voiture" : true));
+  const liste = pi.data.filter(pour).map(p => ({ ...p, doc: dc.data.find(d => d.piece_id === p.id) }));
+  return { liste, autres: dc.data.filter(d => !d.piece_id || !liste.some(p => p.id === d.piece_id)) };
+}
+const etatPapier = d => !d ? `<span class="tag warn">à envoyer</span>` : d.etat === "valide" ? `<span class="tag">✓ validé</span>`
+  : d.etat === "refuse" ? `<span class="tag warn">refusé</span>` : `<span class="tag">reçu, OIKOS vérifie</span>`;
+async function vuePapiers() {
+  const { liste, autres } = await chargerPapiers();
+  const reste = liste.filter(p => p.obligatoire && (!p.doc || p.doc.etat === "refuse")).length;
+  contenu(`<button class="btn flat" id="retour" style="padding-left:0">‹ Moi</button>
+    <h1>Mes papiers</h1><p class="muted" style="margin:6px 0 14px">${reste ? `Il en manque ${reste}. Touche « Envoyer » : une photo nette suffit.` : "Tout est envoyé, merci !"} OIKOS les range dans ton dossier.</p>
+    <div class="stack">${liste.map(p => `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(p.libelle)}${p.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</b>${etatPapier(p.doc)}</div>
+      ${p.aide ? `<p class="muted small">${esc(p.aide)}</p>` : ""}
+      ${p.doc && p.doc.etat === "refuse" && p.doc.motif ? `<p class="err" style="min-height:0">${esc(p.doc.motif)}</p>` : ""}
+      ${!p.doc || p.doc.etat === "refuse" ? `<button class="btn primary" data-envoi="${p.id}"><span class="ic">📷</span>Envoyer</button>`
+        : p.doc.etat === "recu" ? `<button class="btn flat" data-envoi="${p.id}">Renvoyer une autre photo</button>` : ""}</div>`).join("")}</div>
+    <h2>Autres documents envoyés</h2>
+    <div class="card">${autres.length ? autres.map(d => `<div class="ligne"><span>${esc(d.libelle)}<br><span class="muted small">${jourTxt(d.cree_le)}</span></span>${etatPapier(d)}</div>`).join("") : `<p class="muted small">Aucun.</p>`}</div>
+    <button class="btn" id="autre" style="margin-top:12px"><span class="ic">➕</span>Envoyer un autre document</button>
+    <input type="file" id="fichier" accept="image/*,application/pdf" hidden>`);
+  document.getElementById("retour").onclick = () => accueil("moi");
+  const champ = document.getElementById("fichier");
+  let cible = null;
+  document.getElementById("contenu").onclick = e => { const b = e.target.closest("[data-envoi]"); if (!b) return; cible = liste.find(p => p.id === b.dataset.envoi); champ.value = ""; champ.click(); };
+  document.getElementById("autre").onclick = () => feuille(`<h2 style="margin:0">Autre document</h2>
+    <form class="stack" id="fa"><label class="f">De quoi s'agit-il ?<input name="t" required placeholder="Ex. attestation Pôle emploi"></label>
+    <button class="btn primary big" type="submit">Choisir le fichier</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#fa").onsubmit = e => { e.preventDefault(); cible = { id: null, libelle: new FormData(e.target).get("t").trim() }; fermer(); champ.value = ""; champ.click(); };
+  });
+  champ.onchange = async () => {
+    const f = champ.files[0]; if (!f || !cible) return;
+    const fermer = feuille(`<h2 style="margin:0">Envoi en cours…</h2><p class="muted">${esc(cible.libelle)}</p>`);
+    try { await envoyerPapier(cible, f); fermer(); toast("Envoyé à OIKOS ✓"); accueil("papiers"); }
+    catch (e) { fermer(); souci(e); }
+  };
+}
+/* Photo réduite (2000 px) pour un envoi rapide, PDF tel quel ; 10 Mo au plus */
+async function preparerFichier(f) {
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 1.5e6) return f;
+  try {
+    const img = await createImageBitmap(f), k = Math.min(1, 2000 / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    const b = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+    return b ? new File([b], f.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : f;
+  } catch (e) { return f; }
+}
+async function envoyerPapier(piece, brut) {
+  const f = await preparerFichier(brut);
+  if (f.size > 10 * 1024 * 1024) throw new Error("fichier trop gros (10 Mo au plus) : prends plutôt une photo.");
+  const ext = (f.name.match(/\.(\w+)$/) || [, f.type === "application/pdf" ? "pdf" : "jpg"])[1].toLowerCase();
+  const nom = piece.libelle.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40).toLowerCase() || "document";
+  const chemin = `${moi.id}/${Date.now()}-${nom}.${ext}`;
+  const up = await sb.storage.from("documents").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
+  if (up.error) throw up.error;
+  const { error } = await sb.from("documents").insert({ piece_id: piece.id, libelle: piece.libelle, fichier: chemin, nom_origine: brut.name });
+  if (error) throw error;
+}
+
 /* ---------- Moi ---------- */
 async function vueMoi() {
   const statut = { "sous-traitant": "Sous-traitante (auto-entrepreneuse)", salarie: "Salariée" }[moi.statut] || "Statut à préciser par OIKOS";
@@ -825,7 +900,9 @@ async function vueMoi() {
       <button class="btn" id="mdp"><span class="ic">🔑</span>Changer mon mot de passe</button>
       <button class="btn" id="sortir"><span class="ic">🚪</span>Me déconnecter de ce téléphone</button>
     </div>
-    <p class="muted small" style="margin-top:18px">Mes papiers et mes factures arriveront ici prochainement.</p>`);
+    <button class="btn primary" id="papiers" style="margin-top:14px;width:100%"><span class="ic">📄</span>Mes papiers pour OIKOS</button>
+    <p class="muted small" style="margin-top:18px">Mes factures arriveront ici prochainement.</p>`);
+  document.getElementById("papiers").onclick = () => accueil("papiers");
   document.getElementById("infos").onclick = () => ecranProfil(false);
   document.getElementById("pin").onclick = () => ecranChoisirPin(true);
   document.getElementById("mdp").onclick = () => ecranNouveauMdp(false);

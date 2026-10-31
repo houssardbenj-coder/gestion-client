@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0E6266">
+<title>OIKOS Pilotage</title>
+<link rel="icon" href="../intervenante/icone-192.png">
+<style>
+/* Tableau de bord du gérant : un onglet par sujet en haut, des listes et des fiches qui s'ouvrent sur place.
+   Même base que l'appli des intervenantes ; seul le compte gérant peut entrer (la base le vérifie aussi). */
+:root{
+  --bg:#EEF2F1; --surface:#FFFFFF; --sunk:#E3E9E7; --ink:#17242A; --muted:#55646B; --line:#C8D1CE;
+  --accent:#0E6266; --accent-ink:#FFFFFF; --accent-soft:#D3E6E5;
+  --go:#2E8B3E; --stop:#B8432F; --warn:#9A6A00; --warn-soft:#F6EBCB;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#111A1D; --surface:#18242A; --sunk:#0C1417; --ink:#E4ECEA; --muted:#9AABB0; --line:#2C3C42;
+  --accent:#5BC0BE; --accent-ink:#0C1417; --accent-soft:#173A3C;
+  --go:#4CC453; --stop:#E9775F; --warn:#E2B341; --warn-soft:#3A3115; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#111A1D; --surface:#18242A; --sunk:#0C1417; --ink:#E4ECEA; --muted:#9AABB0; --line:#2C3C42;
+  --accent:#5BC0BE; --accent-ink:#0C1417; --accent-soft:#173A3C;
+  --go:#4CC453; --stop:#E9775F; --warn:#E2B341; --warn-soft:#3A3115; color-scheme:dark }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+h1{font-size:24px;margin:0} h2{font-size:18px;margin:20px 0 8px} h3{font-size:15px;margin:14px 0 6px}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:13px}
+.wrap{max-width:1150px;margin:0 auto;padding:16px}
+header.top{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header.top .wrap{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding-block:10px}
+.marque{font-weight:800;font-size:18px;display:flex;gap:8px;align-items:center}
+.marque img{width:28px;height:28px;border-radius:8px}
+nav.onglets{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+nav.onglets button{border:0;background:none;padding:8px 12px;border-radius:10px;font-weight:700;color:var(--muted);cursor:pointer}
+nav.onglets button[aria-current="page"]{background:var(--accent-soft);color:var(--ink)}
+.bulle{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--stop);color:#fff;font-size:12px;margin-left:4px;text-align:center}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.deux{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media (max-width:760px){.deux{grid-template-columns:1fr}}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer;text-decoration:none;color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.go{background:var(--go);border-color:var(--go);color:#fff}
+.btn.stop{color:var(--stop)}
+.btn.flat{border-color:transparent;background:none;color:var(--accent);padding-inline:6px}
+.btn:disabled{opacity:.45;cursor:default}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent-soft)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.off{background:var(--sunk);color:var(--muted)}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+input[type=text],input[type=email],input[type=tel],input[type=password],input[type=number],select,textarea{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);width:100%}
+textarea{min-height:80px;resize:vertical}
+.chk{display:flex;gap:8px;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-top:0}
+.ligne{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.ligne:first-child{border-top:0}
+.cliquable{cursor:pointer} .cliquable:hover{border-color:var(--accent)}
+.err{color:var(--stop);font-weight:700}
+.diff del{color:var(--stop)} .diff ins{color:var(--go);text-decoration:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;z-index:30;max-width:92vw}
+.voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px}
+.fenetre{background:var(--bg);border-radius:16px;padding:18px;width:100%;max-width:820px;display:flex;flex-direction:column;gap:12px}
+.connexion{max-width:380px;margin:12vh auto;display:flex;flex-direction:column;gap:12px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ===================== Réglages ===================== */
+const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
+const SB_CLE = "sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q";
+const SUPABASE_USERS = "https://supabase.com/dashboard/project/nzxphozupnmqyikitwhv/auth/users";
+const sb = window.supabase.createClient(SB_URL, SB_CLE, { auth: { persistSession: true, storageKey: "oikos-gerant-session" } });
+
+/* ===================== Outils ===================== */
+const app = document.getElementById("app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let tt; function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 3800); }
+const souci = e => toast("Ça n'a pas marché : " + ((e && e.message) || e));
+const pad2 = n => String(n).padStart(2, "0");
+const jour = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+const hm = d => { d = new Date(d); return d.getHours() + "h" + pad2(d.getMinutes()); };
+const heures = min => (Math.round(min / 60 * 100) / 100).toLocaleString("fr-FR") + " h";
+const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const chiffres = s => String(s || "").replace(/\D/g, "").slice(-9);
+const nomPers = p => ((p.prenom || "") + " " + (p.nom || "")).trim() || p.email || "?";
+const STATUTS = { "sous-traitant": "Sous-traitante", salarie: "Salariée" };
+async function q(promesse) { const { data, error } = await promesse; if (error) throw error; return data; }
+function fenetre(html, brancher) {
+  const v = document.createElement("div"); v.className = "voile";
+  v.innerHTML = `<div class="fenetre" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(v);
+  const fermer = () => v.remove();
+  v.addEventListener("click", e => { if (e.target === v || e.target.closest("[data-fermer]")) fermer(); });
+  if (brancher) brancher(v.querySelector(".fenetre"), fermer);
+  return fermer;
+}
+
+/* ===================== Connexion (compte gérant seulement) ===================== */
+let moi = null, onglet = "avoir";
+async function demarrer() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return ecranConnexion();
+  const p = await sb.from("profils").select("*").eq("id", session.user.id).maybeSingle();
+  if (p.error) return ecranConnexion("Pas de réseau ou base en pause : " + p.error.message);
+  if (!p.data || p.data.role !== "gerant" || !p.data.actif) { await sb.auth.signOut(); return ecranConnexion("Ce compte n'est pas le compte gérant."); }
+  moi = p.data; afficher();
+}
+function ecranConnexion(msg) {
+  app.innerHTML = `<form class="connexion card" id="f"><div class="marque"><img src="../intervenante/icone-192.png" alt="">OIKOS Pilotage</div>
+    <p class="muted">Réservé au gérant.</p>${msg ? `<p class="err">${esc(msg)}</p>` : ""}
+    <label class="f">E-mail<input type="email" id="e" autocomplete="username" required></label>
+    <label class="f">Mot de passe<input type="password" id="m" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Entrer</button></form>`;
+  document.getElementById("f").onsubmit = async ev => {
+    ev.preventDefault();
+    const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("e").value.trim().toLowerCase(), password: document.getElementById("m").value });
+    if (error) return ecranConnexion("E-mail ou mot de passe incorrect.");
+    demarrer();
+  };
+}
+
+/* ===================== Cadre et onglets ===================== */
+const ONGLETS = [["avoir", "À voir"], ["intervenantes", "Intervenantes"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
+async function afficher(o) {
+  if (o) onglet = o;
+  app.innerHTML = `<header class="top"><div class="wrap"><div class="marque"><img src="../intervenante/icone-192.png" alt="">OIKOS Pilotage</div>
+    <nav class="onglets">${ONGLETS.map(([k, t]) => `<button data-o="${k}" ${k === onglet ? 'aria-current="page"' : ""}>${t}<span id="b-${k}"></span></button>`).join("")}</nav>
+    <button class="btn flat" id="sortir">Se déconnecter</button></div></header>
+    <main class="wrap" id="contenu"><p class="muted">Chargement…</p></main>`;
+  app.querySelector("nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) afficher(b.dataset.o); };
+  document.getElementById("sortir").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
+  compteurAVoir();
+  try { await ({ avoir: vueAVoir, intervenantes: vueIntervenantes, clients: vueClients, papiers: vuePapiers })[onglet](); }
+  catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
+}
+const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
+async function compteurAVoir() {
+  try {
+    const [n, d] = await Promise.all([
+      sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
+      sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu")]);
+    const t = (n.count || 0) + (d.count || 0), e = document.getElementById("b-avoir");
+    if (e) e.innerHTML = t ? `<span class="bulle">${t}</span>` : "";
+  } catch (e) {}
+}
+let cacheProfils = [], cacheClients = [];
+async function chargerBase() {
+  [cacheProfils, cacheClients] = await Promise.all([
+    q(sb.from("profils").select("*").order("prenom")),
+    q(sb.from("clients").select("*").order("nom"))]);
+}
+const nomClient = id => (cacheClients.find(c => c.id === id) || {}).nom || "?";
+const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
+
+/* ===================== À voir ===================== */
+async function vueAVoir() {
+  await chargerBase();
+  const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
+  const [notes, docs, pts] = await Promise.all([
+    q(sb.from("notes_terrain").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
+    q(sb.from("documents").select("*").eq("etat", "recu").order("cree_le")),
+    q(sb.from("pointages").select("*").gte("arrivee", depuis).order("arrivee", { ascending: false }))]);
+  const douteux = pts.filter(p => p.corrige_par_intervenante || [p.gps_arrivee, p.gps_depart].some(g => g && g.etat !== "ok"));
+  const enCours = pts.filter(p => !p.depart);
+  const el = contenu(`<h1>À voir</h1>
+    <div class="deux" style="margin-top:12px">
+      <section class="card"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
+        ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${esc(nomInterv(n.intervenante_id))}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
+          <button class="btn" data-lu="${n.id}">Lu ✓</button></div>`).join("") : `<p class="muted">Rien de nouveau.</p>`}</section>
+      <section class="card"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${docs.length}</span></h2>
+        ${docs.length ? docs.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
+          <span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
+    </div>
+    <section class="card" style="margin-top:12px"><h2 style="margin-top:0">En cours chez un client</h2>
+      ${enCours.length ? enCours.map(p => `<div class="ligne"><span><b>${esc(nomInterv(p.intervenante_id))}</b> chez ${esc(nomClient(p.client_id))}</span><span class="muted">depuis ${jour(p.arrivee)} ${hm(p.arrivee)}</span></div>`).join("") : `<p class="muted">Personne en ce moment.</p>`}</section>
+    <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Pointages à vérifier (31 derniers jours)</h2>
+      ${douteux.length ? `<table><tr><th>Qui</th><th>Client</th><th>Quand</th><th>Pourquoi</th></tr>${douteux.map(p => `<tr><td>${esc(nomInterv(p.intervenante_id))}</td><td>${esc(nomClient(p.client_id))}</td><td>${jour(p.arrivee)} ${hm(p.arrivee)}–${p.depart ? hm(p.depart) : "?"}</td><td>${esc(raisonDoute(p))}</td></tr>`).join("")}</table>` : `<p class="muted">Tout est vérifié par le GPS.</p>`}</section>`);
+  el.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); afficher(); }
+    if (b.dataset.voir) voirFichier(b.dataset.voir);
+    if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); afficher(); }
+    if (b.dataset.ko) refuserDoc(b.dataset.ko, () => afficher());
+  };
+}
+const dist = g => g && g.distance != null ? (g.distance >= 1000 ? (g.distance / 1000).toFixed(1).replace(".", ",") + " km" : g.distance + " m") : "";
+function raisonDoute(p) {
+  const t = [];
+  [["arrivée", p.gps_arrivee], ["départ", p.gps_depart]].forEach(([k, g]) => { if (g && g.etat !== "ok") t.push(k + " : " + ({ loin: "à " + dist(g), imprecis: "GPS imprécis", adresse: "adresse introuvable", sans: "pas de GPS" }[g.etat] || g.etat)); });
+  if (p.corrige_par_intervenante) t.push("heures tapées à la main");
+  return t.join(" · ");
+}
+async function maj(promesse) { const { error } = await promesse; if (error) { souci(error); throw error; } }
+async function voirFichier(chemin) {
+  const { data, error } = await sb.storage.from("documents").createSignedUrl(chemin, 300);
+  if (error) return souci(error);
+  window.open(data.signedUrl, "_blank", "noopener");
+}
+function refuserDoc(id, apres) {
+  fenetre(`<h2 style="margin:0">Refuser ce papier</h2><label class="f">Pourquoi ? (elle le lira dans son appli)<input type="text" id="mo" placeholder="Ex. photo floue, document périmé…"></label>
+    <div class="row"><button class="btn stop" id="ok">Refuser</button><button class="btn flat" data-fermer>Annuler</button></div>`, (el, fermer) => {
+    el.querySelector("#ok").onclick = async () => { await maj(sb.from("documents").update({ etat: "refuse", motif: el.querySelector("#mo").value.trim() || null, traite_le: new Date().toISOString() }).eq("id", id)); fermer(); toast("Refusé : elle doit le renvoyer"); apres(); };
+  });
+}
+
+/* ===================== Intervenantes ===================== */
+async function vueIntervenantes() {
+  await chargerBase();
+  const gens = cacheProfils.filter(p => p.role === "intervenante");
+  const [docs, pieces] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true))]);
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Intervenantes</h1>
+      <a class="btn" href="${SUPABASE_USERS}" target="_blank" rel="noopener">➕ Créer un compte (Supabase)</a></div>
+    <p class="muted small" style="margin:6px 0 12px">Nouvelle personne : crée son compte dans Supabase (e-mail + code d'accès, « Auto Confirm User »), puis règle-la ici.</p>
+    <div class="grille">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
+      <b>${esc(nomPers(p))}</b><br><span class="muted small">${esc(p.email || "")}</span><br>
+      <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
+      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>`; }).join("") || `<p class="muted">Aucune intervenante.</p>`}</div>`);
+  el.onclick = e => { const b = e.target.closest("[data-p]"); if (b) ficheIntervenante(b.dataset.p); };
+}
+function piecesPour(p, pieces) {
+  return pieces.filter(x => x.actif && (x.pour === "tous" || x.pour === p.statut)
+    && (!x.condition || (x.condition === "ae_a_creer" ? p.ae_a_creer : x.condition === "voiture" ? p.transport === "Voiture" : true)));
+}
+function papiersDe(p, pieces, docs) {
+  const liste = piecesPour(p, pieces).filter(x => x.obligatoire);
+  const ok = liste.filter(x => docs.some(d => d.intervenante_id === p.id && d.piece_id === x.id && d.etat === "valide")).length;
+  return { ok, total: liste.length, manque: ok < liste.length };
+}
+async function ficheIntervenante(id) {
+  const p = cacheProfils.find(x => x.id === id); if (!p) return;
+  const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const [pieces, docs, attrib, pts] = await Promise.all([
+    q(sb.from("pieces_demandees").select("*").eq("actif", true).order("ordre")),
+    q(sb.from("documents").select("*").eq("intervenante_id", id).order("cree_le", { ascending: false })),
+    q(sb.from("attributions").select("*").eq("intervenante_id", id)),
+    q(sb.from("pointages").select("*").eq("intervenante_id", id).gte("arrivee", m0).order("arrivee"))]);
+  const aujourd = new Date().toISOString().slice(0, 10);
+  const actives = attrib.filter(a => !a.fin || a.fin >= aujourd);
+  const total = pts.filter(x => x.depart).reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
+  const liste = piecesPour(p, pieces);
+  const champ = (k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
+  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}</h1><button class="btn flat" data-fermer>Fermer ✕</button></div>
+    <div class="deux">
+      <section class="card"><h3 style="margin-top:0">Réglages</h3>
+        <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
+        <label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
+        <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici.</p>
+        <button class="btn primary" id="enr" style="margin-top:10px">Enregistrer</button>
+        <h3>Liens</h3>
+        <div class="row">${p.feuille_heures ? `<a class="btn" href="${esc(p.feuille_heures)}" target="_blank" rel="noopener">📊 Feuille d'heures</a>` : `<span class="muted small">Feuille d'heures : créée par le pont Google</span>`}
+        ${p.dossier_drive ? `<a class="btn" href="https://drive.google.com/drive/folders/${esc(p.dossier_drive)}" target="_blank" rel="noopener">📁 Dossier Drive</a>` : ""}</div>
+        <h3>Heures du mois</h3><p><b>${heures(total)}</b> <span class="muted small">· ${pts.length} passage(s)</span></p></section>
+      <section class="card"><h3 style="margin-top:0">Ses informations</h3>
+        ${champ("email", "E-mail")}${champ("telephone", "Téléphone")}${champ("adresse", "Adresse")}${champ("date_naissance", "Naissance")}${champ("siret", "SIRET")}
+        ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
+        ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par elle.</p>`}</section>
+    </div>
+    <section class="card"><h3 style="margin-top:0">Papiers</h3>
+      ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
+        <span class="row">${!d ? `<span class="tag warn">pas envoyé</span>` : `<span class="tag ${d.etat === "refuse" ? "warn" : ""}">${{ recu: "reçu", valide: "✓ validé", refuse: "refusé" }[d.etat]}</span>
+        <button class="btn" data-voir="${esc(d.fichier)}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
+      ${docs.filter(d => !d.piece_id).map(d => `<div class="ligne"><span>${esc(d.libelle)} <span class="muted small">(autre)</span></span><span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button></span></div>`).join("")}</section>
+    <section class="card"><h3 style="margin-top:0">Clients confiés</h3>
+      ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
+      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${cacheClients.filter(c => !actives.some(a => a.client_id === c.id)).map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
+    const recharger = () => { fermer(); ficheIntervenante(id); };
+    el.querySelector("#enr").onclick = async () => {
+      await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked }).eq("id", id));
+      toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
+    el.querySelector("#conf").onclick = async () => {
+      const c = el.querySelector("#nc").value; if (!c) return;
+      await maj(sb.from("attributions").upsert({ client_id: c, intervenante_id: id, debut: aujourd, fin: null }, { onConflict: "client_id,intervenante_id,debut" }));
+      toast("Client confié"); recharger(); };
+    el.onclick = async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.voir) voirFichier(b.dataset.voir);
+      if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); recharger(); }
+      if (b.dataset.ko) refuserDoc(b.dataset.ko, recharger);
+      if (b.dataset.retire) { const hier = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+        await maj(sb.from("attributions").update({ fin: hier }).eq("id", b.dataset.retire)); toast("Client retiré"); recharger(); }
+    };
+  });
+}
+
+/* ===================== Clients + zone tampon ===================== */
+const CHAMPS_CLIENT = [["nom", "Nom"], ["telephone", "Téléphone"], ["email", "E-mail"], ["adresse", "Adresse"], ["activite", "Activité"]];
+async function vueClients() {
+  await chargerBase();
+  const tampon = await q(sb.from("clients_import").select("*").in("etat", ["nouveau", "different", "a_verifier"]).order("nom"));
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1>
+      <span class="row"><button class="btn primary" id="imp">📥 Importer une extraction</button><button class="btn" id="nv">➕ Nouveau client</button></span></div>
+    <p class="muted small" style="margin:6px 0 0">Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenantes ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    ${tampon.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Zone tampon : ${tampon.length} ligne(s) à traiter</h2>
+      <table><tr><th>Extraction</th><th>Rapprochement</th><th></th></tr>${tampon.map(t => { const c = cacheClients.find(k => k.id === t.client_id);
+        return `<tr><td><b>${esc(t.nom)}</b><br><span class="muted small">${esc([t.telephone, t.email, t.adresse].filter(Boolean).join(" · "))}</span></td>
+        <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
+        <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
+    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Clients enregistrés (${cacheClients.length})</h2><input type="text" id="cherche" placeholder="Chercher…" style="max-width:240px"></div>
+      <table id="tc"><tr><th>Nom</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${cacheClients.map(c => `<tr class="cliquable" data-c="${c.id}"><td><b>${esc(c.nom)}</b></td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
+  el.querySelector("#cherche").oninput = e => { const v = norm(e.target.value); el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = v && !norm(r.textContent).includes(v)); };
+  el.querySelector("#imp").onclick = importer;
+  el.querySelector("#nv").onclick = () => ficheClient(null);
+  el.onclick = async e => {
+    const r = e.target.closest("[data-c]"); if (r) return ficheClient(r.dataset.c);
+    const b = e.target.closest("button"); if (!b) return;
+    const t = tampon.find(x => x.id === (b.dataset.cree || b.dataset.majc || b.dataset.ign));
+    if (b.dataset.ign) { await maj(sb.from("clients_import").update({ etat: "ignore" }).eq("id", t.id)); afficher(); }
+    if (b.dataset.cree) { const { data, error } = await sb.from("clients").insert(propres(t)).select().single(); if (error) return souci(error);
+      await maj(sb.from("clients_import").update({ etat: "fait", client_id: data.id }).eq("id", t.id)); toast("Client créé : complète sa zone et ses consignes"); afficher(); }
+    if (b.dataset.majc) { const c = cacheClients.find(k => k.id === t.client_id), d = {};
+      CHAMPS_CLIENT.forEach(([k]) => { if (t[k] && k !== "nom" && norm(t[k]) !== norm(c[k])) d[k] = t[k]; });
+      if (Object.keys(d).length) await maj(sb.from("clients").update(d).eq("id", c.id));
+      await maj(sb.from("clients_import").update({ etat: "fait" }).eq("id", t.id)); toast("Client mis à jour"); afficher(); }
+  };
+}
+const propres = t => { const d = {}; CHAMPS_CLIENT.forEach(([k]) => { if (t[k]) d[k] = t[k]; }); if (!d.activite) d.activite = "Ménage"; return d; };
+function diffClient(c, t) {
+  if (!c) return "";
+  return CHAMPS_CLIENT.filter(([k]) => k !== "nom" && t[k] && norm(t[k]) !== norm(c[k])).map(([k, l]) => `${l} : <del>${esc(c[k] || "vide")}</del> → <ins>${esc(t[k])}</ins>`).join("<br>") || `<span class="muted">identique</span>`;
+}
+/* Le client enregistré qui correspond : même téléphone, même e-mail ou même nom (mots dans n'importe quel ordre) */
+function rapprocher(t) {
+  const tel = chiffres(t.telephone), mel = norm(t.email), mots = norm(t.nom).split(" ").sort().join(" ");
+  return cacheClients.find(c => (tel.length === 9 && chiffres(c.telephone) === tel) || (mel && norm(c.email) === mel))
+    || cacheClients.find(c => norm(c.nom).split(" ").sort().join(" ") === mots);
+}
+const TITRES = { nom: ["nom", "client", "name", "raison sociale"], prenom: ["prenom", "first name"], telephone: ["tel", "telephone", "portable", "mobile", "phone"],
+  email: ["mail", "e mail", "email", "courriel"], adresse: ["adresse", "address", "rue"], cp: ["cp", "code postal", "postal"], ville: ["ville", "commune", "city"], activite: ["activite", "service", "prestation"] };
+function colonnes(entetes) {
+  const c = {};
+  entetes.forEach((h, i) => { const n = norm(h); for (const [k, mots] of Object.entries(TITRES)) if (c[k] == null && mots.some(m => n === m || n.startsWith(m + " ") || n.endsWith(" " + m))) { c[k] = i; break; } });
+  return c;
+}
+function lignesDepuis(rangs) {
+  const i0 = rangs.findIndex(r => { const c = colonnes(r); return c.nom != null; });
+  if (i0 < 0) throw new Error("je ne trouve pas de colonne « Nom » ou « Client » dans les premières lignes");
+  const c = colonnes(rangs[i0]), v = (r, k) => c[k] != null ? String(r[c[k]] ?? "").trim() : "";
+  return rangs.slice(i0 + 1).map(r => ({
+    nom: [v(r, "nom"), v(r, "prenom")].filter(Boolean).join(" "), telephone: v(r, "telephone"), email: v(r, "email").toLowerCase(),
+    adresse: [v(r, "adresse"), [v(r, "cp"), v(r, "ville")].filter(Boolean).join(" ")].filter(Boolean).join(", "), activite: v(r, "activite")
+  })).filter(l => l.nom);
+}
+function importer() {
+  fenetre(`<h2 style="margin:0">Importer une extraction clients</h2>
+    <p class="muted small">Un fichier Excel ou CSV, ou un copier-coller depuis Excel (avec la ligne des titres : Nom, Téléphone, E-mail, Adresse…).</p>
+    <label class="f">Nom de l'extraction<input type="text" id="lot" value="Extraction du ${new Date().toLocaleDateString("fr-FR")}"></label>
+    <input type="file" id="fi" accept=".xlsx,.xls,.csv,.txt">
+    <label class="f">… ou colle ici<textarea id="tx" placeholder="Nom	Téléphone	E-mail	Adresse"></textarea></label>
+    <p class="err" id="er"></p>
+    <div class="row"><button class="btn primary" id="go">Analyser</button><button class="btn flat" data-fermer>Annuler</button></div>`, (el, fermer) => {
+    el.querySelector("#go").onclick = async () => {
+      try {
+        let rangs;
+        const f = el.querySelector("#fi").files[0];
+        if (f) { const wb = XLSX.read(await f.arrayBuffer(), { type: "array" }); rangs = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" }); }
+        else { const t = el.querySelector("#tx").value; if (!t.trim()) throw new Error("choisis un fichier ou colle des lignes");
+          const sep = t.includes("\t") ? "\t" : t.includes(";") ? ";" : ",";
+          rangs = t.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, ""))); }
+        const lignes = lignesDepuis(rangs);
+        if (!lignes.length) throw new Error("aucune ligne avec un nom");
+        const lot = el.querySelector("#lot").value.trim() || "Extraction";
+        const rows = lignes.map(l => { const c = rapprocher(l); const etat = !c ? "nouveau" : CHAMPS_CLIENT.some(([k]) => k !== "nom" && l[k] && norm(l[k]) !== norm(c[k])) ? "different" : "identique";
+          return { ...l, lot, client_id: c ? c.id : null, etat }; });
+        await maj(sb.from("clients_import").insert(rows));
+        const n = k => rows.filter(r => r.etat === k).length;
+        fermer(); toast(`${rows.length} lignes : ${n("nouveau")} nouveaux, ${n("different")} à mettre à jour, ${n("identique")} identiques`); afficher("clients");
+      } catch (e) { el.querySelector("#er").textContent = e.message || e; }
+    };
+  });
+}
+function ficheClient(id) {
+  const c = cacheClients.find(k => k.id === id) || { activite: "Ménage", etat: "actif" };
+  const ch = (k, t, type = "text") => `<label class="f">${t}<input type="${type}" name="${k}" value="${esc(c[k] || "")}"></label>`;
+  fenetre(`<h2 style="margin:0">${id ? esc(c.nom) : "Nouveau client"}</h2>
+    <form id="fc" style="display:flex;flex-direction:column;gap:10px">
+      <div class="deux">${ch("nom", "Nom")}${ch("telephone", "Téléphone", "tel")}</div>
+      <div class="deux">${ch("email", "E-mail", "email")}${ch("adresse", "Adresse")}</div>
+      <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
+        <label class="f">Activité<select name="activite">${["Ménage", "Jardinage", "Bricolage"].map(a => `<option ${c.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
+      <label class="f">État<select name="etat">${["prospect", "avance_attente", "actif", "pause", "termine"].map(a => `<option ${c.etat === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
+      <label class="f">Accès (digicode, étage…) — vu par l'intervenante<textarea name="acces">${esc(c.acces || "")}</textarea></label>
+      <label class="f">Clé — vu par l'intervenante<textarea name="cle">${esc(c.cle || "")}</textarea></label>
+      <label class="f">Consignes — vu par l'intervenante<textarea name="consignes">${esc(c.consignes || "")}</textarea></label>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fc").onsubmit = async e => {
+      e.preventDefault(); const d = {};
+      for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
+      d.zone = d.zone ? Number(d.zone) : null;
+      if (!d.nom) return toast("Le nom est obligatoire");
+      if (id && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
+      await maj(id ? sb.from("clients").update(d).eq("id", id) : sb.from("clients").insert(d));
+      fermer(); toast("Enregistré"); afficher("clients");
+    };
+  });
+}
+
+/* ===================== Papiers demandés (réglages) ===================== */
+async function vuePapiers() {
+  const pieces = await q(sb.from("pieces_demandees").select("*").order("ordre"));
+  const ligne = p => `<tr data-id="${p.id}">
+    <td><input type="text" name="libelle" value="${esc(p.libelle)}"><input type="text" name="aide" value="${esc(p.aide || "")}" placeholder="Aide affichée (facultatif)" style="margin-top:4px;font-size:13px"></td>
+    <td><select name="pour">${[["tous", "Toutes"], ["sous-traitant", "Auto-entrepreneuses"], ["salarie", "Salariées"]].map(([k, t]) => `<option value="${k}" ${p.pour === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "Si elle a une voiture"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><label class="chk"><input type="checkbox" name="obligatoire" ${p.obligatoire ? "checked" : ""}>obligatoire</label><label class="chk"><input type="checkbox" name="actif" ${p.actif ? "checked" : ""}>demandé</label></td>
+    <td><span class="row"><button class="btn flat" data-haut title="Monter">↑</button><button class="btn flat" data-bas title="Descendre">↓</button><button class="btn primary" data-enr>Enregistrer</button></span></td></tr>`;
+  const el = contenu(`<h1>Papiers demandés</h1>
+    <p class="muted small" style="margin:6px 0 12px">Ce que l'appli demande à chaque intervenante selon son statut. Décocher « demandé » retire le papier de la liste sans effacer ceux déjà reçus.</p>
+    <section class="card"><table><tr><th>Papier</th><th>Pour</th><th>Quand</th><th>Options</th><th></th></tr>${pieces.map(ligne).join("")}</table>
+    <button class="btn" id="aj" style="margin-top:10px">➕ Ajouter un papier</button></section>`);
+  const lire = tr => { const v = n => tr.querySelector(`[name=${n}]`); return { libelle: v("libelle").value.trim(), aide: v("aide").value.trim() || null, pour: v("pour").value,
+    condition: v("condition").value || null, obligatoire: v("obligatoire").checked, actif: v("actif").checked }; };
+  el.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.id === "aj") { await maj(sb.from("pieces_demandees").insert({ libelle: "Nouveau papier", pour: "tous", ordre: (pieces.at(-1)?.ordre || 0) + 10 })); return afficher("papiers"); }
+    const tr = b.closest("tr"); if (!tr) return;
+    const i = pieces.findIndex(p => p.id === tr.dataset.id);
+    if (b.hasAttribute("data-enr")) { const d = lire(tr); if (!d.libelle) return toast("Le nom du papier est obligatoire"); await maj(sb.from("pieces_demandees").update(d).eq("id", tr.dataset.id)); toast("Enregistré"); }
+    const j = b.hasAttribute("data-haut") ? i - 1 : b.hasAttribute("data-bas") ? i + 1 : -1;
+    if (j >= 0 && j < pieces.length) {   // on échange les deux, puis on renumérote 10, 20, 30…
+      [pieces[i], pieces[j]] = [pieces[j], pieces[i]];
+      for (let k = 0; k < pieces.length; k++) if (pieces[k].ordre !== (k + 1) * 10) await maj(sb.from("pieces_demandees").update({ ordre: (k + 1) * 10 }).eq("id", pieces[k].id));
+      afficher("papiers");
+    }
+  };
+}
+
+demarrer();
+</script>
+</body>
+</html>
