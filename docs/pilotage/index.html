@@ -206,6 +206,7 @@ function raisonDoute(p) {
 }
 async function maj(promesse) { const { error } = await promesse; if (error) { souci(error); throw error; } }
 async function voirFichier(chemin) {
+  if (/^https?:/.test(chemin)) return window.open(chemin, "_blank", "noopener");   // papier retrouvé dans son dossier Drive
   const { data, error } = await sb.storage.from("documents").createSignedUrl(chemin, 300);
   if (error) return souci(error);
   window.open(data.signedUrl, "_blank", "noopener");
@@ -243,11 +244,14 @@ function papiersDe(p, pieces, docs) {
 async function ficheIntervenante(id) {
   const p = cacheProfils.find(x => x.id === id); if (!p) return;
   const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const [pieces, docs, attrib, pts] = await Promise.all([
+  const [pieces, docs, attrib, pts, props] = await Promise.all([
     q(sb.from("pieces_demandees").select("*").eq("actif", true).order("ordre")),
     q(sb.from("documents").select("*").eq("intervenante_id", id).order("cree_le", { ascending: false })),
     q(sb.from("attributions").select("*").eq("intervenante_id", id)),
-    q(sb.from("pointages").select("*").eq("intervenante_id", id).gte("arrivee", m0).order("arrivee"))]);
+    q(sb.from("pointages").select("*").eq("intervenante_id", id).gte("arrivee", m0).order("arrivee")),
+    q(sb.from("propositions_drive").select("*").eq("intervenante_id", id).eq("etat", "a_voir").order("nom_fichier"))]);
+  const lien = d => d.fichier.startsWith("drive:") && d.drive_url ? d.drive_url : d.fichier;
+  const enCours = p.scan_demande_le && (!p.scan_fait_le || new Date(p.scan_demande_le) > new Date(p.scan_fait_le));
   const aujourd = new Date().toISOString().slice(0, 10);
   const actives = attrib.filter(a => !a.fin || a.fin >= aujourd);
   const total = pts.filter(x => x.depart).reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
@@ -273,8 +277,16 @@ async function ficheIntervenante(id) {
     <section class="card"><h3 style="margin-top:0">Papiers</h3>
       ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
         <span class="row">${!d ? `<span class="tag warn">pas envoyé</span>` : `<span class="tag ${d.etat === "refuse" ? "warn" : ""}">${{ recu: "reçu", valide: "✓ validé", refuse: "refusé" }[d.etat]}</span>
-        <button class="btn" data-voir="${esc(d.fichier)}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
-      ${docs.filter(d => !d.piece_id).map(d => `<div class="ligne"><span>${esc(d.libelle)} <span class="muted small">(autre)</span></span><span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button></span></div>`).join("")}</section>
+        <button class="btn" data-voir="${esc(lien(d))}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
+      ${docs.filter(d => !d.piece_id).map(d => `<div class="ligne"><span>${esc(d.libelle)} <span class="muted small">(autre)</span></span><span class="row"><button class="btn" data-voir="${esc(lien(d))}">Voir</button></span></div>`).join("")}
+      <div class="row" style="justify-content:space-between;margin-top:10px">
+        <span class="muted small">${enCours ? "🔎 Recherche demandée : résultat dans 5 minutes environ (pont Google)." : p.scan_message ? "Dernière recherche" + (p.scan_fait_le ? " le " + jour(p.scan_fait_le) : "") + " : " + esc(p.scan_message) : "Papiers déjà rangés dans son dossier Drive ?"}</span>
+        <button class="btn flat" id="scan" ${enCours ? "disabled" : ""}>🔎 Chercher dans son dossier Drive</button></div>
+      ${props.length ? `<h3>Trouvés dans son dossier : est-ce bien ça ?</h3>${props.map(x => `<div class="ligne" data-prop="${x.id}"><span style="min-width:0">
+          <a href="${esc(x.drive_url)}" target="_blank" rel="noopener">${esc(x.nom_fichier)}</a><br><span class="muted small">${esc(x.raison || "")}${x.date_doc ? " · daté du " + new Date(x.date_doc).toLocaleDateString("fr-FR") : ""}</span>
+          ${x.perime ? ` <span class="tag warn">périmé ?</span>` : ""}</span>
+        <span class="row"><select data-choix style="max-width:230px"><option value="">— pas un papier demandé —</option>${liste.map(k => `<option value="${k.id}" ${k.id === x.piece_id ? "selected" : ""}>${esc(k.libelle)}</option>`).join("")}</select>
+          <button class="btn go" data-pok>Oui</button><button class="btn flat" data-pko>Non</button></span></div>`).join("")}` : ""}</section>
     <section class="card"><h3 style="margin-top:0">Clients confiés</h3>
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
       <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${cacheClients.filter(c => !actives.some(a => a.client_id === c.id)).map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
@@ -286,8 +298,21 @@ async function ficheIntervenante(id) {
       const c = el.querySelector("#nc").value; if (!c) return;
       await maj(sb.from("attributions").upsert({ client_id: c, intervenante_id: id, debut: aujourd, fin: null }, { onConflict: "client_id,intervenante_id,debut" }));
       toast("Client confié"); recharger(); };
+    el.querySelector("#scan").onclick = async () => {
+      await maj(sb.from("profils").update({ scan_demande_le: new Date().toISOString() }).eq("id", id));
+      p.scan_demande_le = new Date().toISOString(); toast("Demandé : le pont Google regarde son dossier au prochain passage"); recharger(); };
     el.onclick = async e => {
       const b = e.target.closest("button"); if (!b) return;
+      const ligne = b.closest("[data-prop]"), x = ligne && props.find(k => k.id === ligne.dataset.prop);
+      if (x && b.hasAttribute("data-pko")) { await maj(sb.from("propositions_drive").update({ etat: "refuse" }).eq("id", x.id)); return recharger(); }
+      if (x && b.hasAttribute("data-pok")) {
+        const piece = liste.find(k => k.id === ligne.querySelector("[data-choix]").value);
+        if (!piece) return toast("Choisis de quel papier il s'agit, ou touche « Non »");
+        await maj(sb.from("documents").insert({ intervenante_id: id, piece_id: piece.id, libelle: piece.libelle, fichier: "drive:" + x.drive_id, nom_origine: x.nom_fichier,
+          drive_url: x.drive_url, etat: "valide", traite_le: new Date().toISOString() }));
+        await maj(sb.from("propositions_drive").update({ etat: "accepte", piece_id: piece.id }).eq("id", x.id));
+        toast("« " + piece.libelle + " » validé : l'appli ne le lui demande plus"); return recharger();
+      }
       if (b.dataset.voir) voirFichier(b.dataset.voir);
       if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); recharger(); }
       if (b.dataset.ko) refuserDoc(b.dataset.ko, recharger);
@@ -413,7 +438,9 @@ function ficheClient(id) {
 async function vuePapiers() {
   const pieces = await q(sb.from("pieces_demandees").select("*").order("ordre"));
   const ligne = p => `<tr data-id="${p.id}">
-    <td><input type="text" name="libelle" value="${esc(p.libelle)}"><input type="text" name="aide" value="${esc(p.aide || "")}" placeholder="Aide affichée (facultatif)" style="margin-top:4px;font-size:13px"></td>
+    <td><input type="text" name="libelle" value="${esc(p.libelle)}"><input type="text" name="aide" value="${esc(p.aide || "")}" placeholder="Aide affichée (facultatif)" style="margin-top:4px;font-size:13px">
+      <input type="text" name="mots" value="${esc(p.mots || "")}" placeholder="Mots pour le reconnaître dans le Drive : rib, iban…" title="Mots ou expressions séparés par des virgules, cherchés dans le nom du fichier puis dans le texte lu" style="margin-top:4px;font-size:13px">
+      <label class="small muted row" style="margin-top:4px">Valable <input type="number" name="validite_mois" min="1" max="120" value="${p.validite_mois || ""}" placeholder="—" style="width:70px"> mois (vide = sans limite)</label></td>
     <td><select name="pour">${[["tous", "Toutes"], ["sous-traitant", "Auto-entrepreneuses"], ["salarie", "Salariées"]].map(([k, t]) => `<option value="${k}" ${p.pour === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
     <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "Si elle a une voiture"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
     <td><label class="chk"><input type="checkbox" name="obligatoire" ${p.obligatoire ? "checked" : ""}>obligatoire</label><label class="chk"><input type="checkbox" name="actif" ${p.actif ? "checked" : ""}>demandé</label></td>
@@ -441,6 +468,7 @@ async function vuePapiers() {
     toast("Modèle en ligne : elles peuvent le télécharger"); afficher("papiers");
   };
   const lire = tr => { const v = n => tr.querySelector(`[name=${n}]`); return { libelle: v("libelle").value.trim(), aide: v("aide").value.trim() || null, pour: v("pour").value,
+    mots: v("mots").value.trim() || null, validite_mois: Number(v("validite_mois").value) || null,
     condition: v("condition").value || null, obligatoire: v("obligatoire").checked, actif: v("actif").checked }; };
   el.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
