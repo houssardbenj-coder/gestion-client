@@ -146,7 +146,6 @@ const JOURS_MDP = 30;            // mot de passe complet redemandé tous les 30 
 const ESSAIS_CODE = 5;           // erreurs de code à 4 chiffres avant de tout effacer
 const VERROU_MIN = 5;            // l'appli se reverrouille après 5 min en arrière-plan
 const ACTIVITES = ["Ménage", "Jardinage", "Bricolage"];
-const RAYON_M = 300;             // « J'arrive / Je pars » vérifié à moins de 300 m de l'adresse du client
 
 const sb = window.supabase.createClient(SB_URL, SB_CLE, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: "oikos-int-session" }
@@ -187,12 +186,12 @@ async function empreinte(texte) {
 function toutEffacer() {
   try { Object.keys(localStorage).filter(k => k.startsWith("oikos-int")).forEach(k => localStorage.removeItem(k)); } catch (e) {}
   try { sessionStorage.clear(); } catch (e) {}
-  moi = null; clients = []; ouvert = null;
+  moi = null; clients = []; brouillon = [];
 }
 async function sortir() { try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toutEffacer(); }
 
 /* ===================== État ===================== */
-let moi = null, clients = [], ouvert = null, onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
+let moi = null, clients = [], onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
 let cache = {};   // créneaux, pointages du mois… rechargés à chaque affichage
 const nomClient = id => (clients.find(c => c.id === id) || {}).nom || "Client";
 const sousTraitante = () => moi && moi.statut === "sous-traitant";
@@ -405,117 +404,51 @@ async function accueil(o) {
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) accueil(b.dataset.onglet); };
   try {
     if (!(await chargerMoi())) return;
-    const [c, p] = await Promise.all([
-      sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,lat,lng").order("nom"),
-      sb.from("pointages").select("*").eq("intervenante_id", moi.id).is("depart", null).order("arrivee", { ascending: false }).limit(1)
-    ]);
-    if (c.error) throw c.error; if (p.error) throw p.error;
-    clients = c.data; ouvert = p.data[0] || null;
+    const c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes").order("nom");
+    if (c.error) throw c.error;
+    clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi, papiers: vuePapiers })[onglet]();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
 
-/* ---------- Présence vérifiée par le GPS ---------- */
-/* La position n'est lue qu'au moment où elle touche « J'arrive » ou « Je pars » */
-function maPosition() {
-  if (!navigator.geolocation) return Promise.resolve({ etat: "sans", raison: "indisponible" });
-  return new Promise(res => navigator.geolocation.getCurrentPosition(
-    p => res({ lat: p.coords.latitude, lng: p.coords.longitude, precision: Math.round(p.coords.accuracy) }),
-    e => res({ etat: "sans", raison: e.code === 1 ? "refus" : "introuvable" }),
-    { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }));
-}
-const coordsVues = {};
-/* Position de l'adresse du client : celle de la base, sinon la Base Adresse Nationale */
-async function coordsClient(c) {
-  if (c.lat != null && c.lng != null) return { lat: c.lat, lng: c.lng };
-  if (!c.adresse) return null;
-  if (coordsVues[c.id]) return coordsVues[c.id];
-  for (const url of ["https://data.geopf.fr/geocodage/search?limit=1&q=", "https://api-adresse.data.gouv.fr/search/?limit=1&q="]) {
-    try {
-      const r = await fetch(url + encodeURIComponent(c.adresse)); if (!r.ok) continue;
-      const f = ((await r.json()).features || [])[0];
-      if (f) return coordsVues[c.id] = { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
-    } catch (e) {}
-  }
-  return null;
-}
-function metres(a, b) {
-  const R = 6371000, rad = x => x * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-const distTxt = d => d < 1000 ? d + " m" : (d / 1000).toFixed(1).replace(".", ",") + " km";
-async function controleGPS(c) {
-  const [pos, cible] = await Promise.all([maPosition(), coordsClient(c)]);
-  if (pos.etat) return pos;
-  if (!cible) return { ...pos, etat: "adresse" };
-  const d = Math.round(metres(pos, cible));
-  return { ...pos, distance: d, etat: d <= RAYON_M ? "ok" : d - pos.precision <= RAYON_M ? "imprecis" : "loin" };
-}
-/* Renvoie la position à enregistrer, ou null si elle annule */
-async function verifierPresence(c, moment) {
-  for (;;) {
-    const fermer = feuille(`<h2 style="margin:0">📍 Vérification de ta position…</h2><p class="muted">Quelques secondes. Si le téléphone le demande, touche « Autoriser ».</p>`);
-    const g = await controleGPS(c);
-    fermer();
-    if (g.etat === "ok") return g;
-    const texte = {
-      loin: `Tu sembles être à <b>${distTxt(g.distance)}</b> de chez ${esc(c.nom)} (il faut être à moins de ${RAYON_M} m).`,
-      imprecis: `Le GPS est imprécis (à ± ${distTxt(g.precision)}) : ta présence chez ${esc(c.nom)} n'est pas sûre. Va près d'une fenêtre ou dehors, puis réessaie.`,
-      adresse: `L'adresse de ${esc(c.nom)} n'a pas été trouvée sur la carte : ta présence ne peut pas être vérifiée.`,
-      sans: g.raison === "refus" ? `La position n'est pas autorisée. Pour l'activer : réglages du téléphone › Applications › Chrome › Autorisations › Position › Autoriser.` : `Le téléphone ne trouve pas ta position. Vérifie que la localisation est allumée.`
-    }[g.etat];
-    const r = await new Promise(res => feuille(`<h2 style="margin:0">Présence non vérifiée</h2><p>${texte}</p>
-      <button class="btn primary big" data-r="re"><span class="ic">🔄</span>Réessayer</button>
-      <button class="btn" data-r="ok">Noter mon ${moment} quand même</button>
-      <p class="muted small">OIKOS sera prévenu que ta position n'a pas pu être vérifiée.</p>
-      <button class="btn flat" data-fermer>Annuler</button>`, (el, f) => { el.onclick = e => { const b = e.target.closest("[data-r]"); if (b) { res(b.dataset.r); f(); } }; }, () => res(null)));
-    if (r === "ok") return g;
-    if (r !== "re") return null;
-  }
-}
-const gpsBadge = g => !g ? "" : g.etat === "ok" ? `<span class="tag">📍 vérifié</span>` : `<span class="tag warn">📍 ${g.etat === "loin" && g.distance ? "à " + distTxt(g.distance) : "non vérifié"}</span>`;
-const gpsTxt = g => !g ? "pas de position (ancien pointage ou heure tapée à la main)" : g.etat === "ok" ? `vérifiée, à ${distTxt(g.distance)} du client`
-  : g.etat === "loin" ? `à ${distTxt(g.distance)} du client` : g.etat === "imprecis" ? `imprécise (± ${distTxt(g.precision)})` : g.etat === "adresse" ? "adresse du client introuvable" : "position refusée ou introuvable";
-
-/* ---------- Aujourd'hui ---------- */
-let minuteur;
+/* ---------- Aujourd'hui : son planning du jour, et ce qui reste à déclarer ---------- */
 async function vueJour() {
-  const j0 = debutJour(), j1 = ajouterJours(j0, 1);
-  const { data: cr, error } = await sb.from("creneaux").select("*").eq("intervenante_id", moi.id).eq("annule", false)
-    .gte("debut", j0.toISOString()).lt("debut", ajouterJours(j0, 7).toISOString()).order("debut");
-  if (error) throw error;
-  const auj = cr.filter(x => new Date(x.debut) < j1), prochain = cr.find(x => new Date(x.debut) >= j1);
+  const j0 = debutJour(), j1 = ajouterJours(j0, 1), il7 = ajouterJours(j0, -7);
+  const [cr, pt] = await Promise.all([
+    sb.from("creneaux").select("*").eq("intervenante_id", moi.id).eq("annule", false).gte("debut", il7.toISOString()).lt("debut", ajouterJours(j0, 7).toISOString()).order("debut"),
+    sb.from("pointages").select("client_id,arrivee").eq("intervenante_id", moi.id).gte("arrivee", il7.toISOString())
+  ]);
+  if (cr.error) throw cr.error; if (pt.error) throw pt.error;
+  const auj = cr.data.filter(x => new Date(x.debut) >= j0 && new Date(x.debut) < j1), prochain = cr.data.find(x => new Date(x.debut) >= j1);
+  const declare = x => pt.data.some(p => p.client_id === x.client_id && debutJour(new Date(p.arrivee)).getTime() === debutJour(new Date(x.debut)).getTime());
+  const aDeclarer = cr.data.filter(x => new Date(x.fin) <= new Date() && !declare(x));
   const carteCreneau = x => { const c = clients.find(k => k.id === x.client_id) || {}; return `<div class="card">
       <div class="row" style="justify-content:space-between"><button class="lien client-nom" data-fiche="${x.client_id}">${esc(c.nom || "Client")} ›</button><span class="tag">${heure(x.debut)} – ${heure(x.fin)}</span></div>
       ${c.adresse ? `<a class="lien muted" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener">📍 ${esc(c.adresse)}</a>` : ""}
       <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : `<span></span>`}
-      <button class="btn go" data-arrive="${x.client_id}" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive</button></div></div>`; };
+      <button class="btn" data-fiche="${x.client_id}"><span class="ic">👤</span>Fiche</button></div></div>`; };
   contenu(`<h1>Bonjour ${esc(moi.prenom || "")}</h1><p class="muted" style="margin-bottom:14px">${jourTxt(new Date())}</p>
-    ${ouvert ? (oubli(ouvert)
-      ? `<div class="card" style="border:2px solid var(--warn)"><p><b>⚠️ Tu as oublié « Je pars »</b></p><p class="client-nom">${esc(nomClient(ouvert.client_id))}</p>
-         <p class="muted">Arrivée ${jourTxt(ouvert.arrivee)} à ${heure(ouvert.arrivee)}</p>
-         <button class="btn stop big" id="pars"><span class="ic">🕒</span>Indiquer mon heure de départ</button></div>`
-      : `<div class="card encours"><div class="row" style="justify-content:space-between"><span class="muted">En cours depuis ${heure(ouvert.arrivee)}</span>${gpsBadge(ouvert.gps_arrivee)}</div>
-         <button class="lien client-nom" data-fiche="${ouvert.client_id}">${esc(nomClient(ouvert.client_id))} ›</button>
-         <p class="compteur"><span class="muted small">⏱ </span><span id="chrono">${heuresTxt(minutesEntre(ouvert.arrivee, new Date()))}</span></p>
-         <button class="btn stop big" id="pars"><span class="ic">🏁</span>Je pars</button></div>`) : ""}
+    <button class="btn primary big" id="declarer" style="width:100%"><span class="ic">✍️</span>Déclarer mes heures</button>
+    ${aDeclarer.length ? `<h2>Pas encore déclaré</h2><div class="card">${aDeclarer.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b><br><span class="muted small">${jourTxt(x.debut)} · ${heure(x.debut)} – ${heure(x.fin)}</span></span>
+      <button class="btn" style="flex:none" data-decl="${x.id}">Déclarer</button></div>`).join("")}</div>` : ""}
     <h2>Aujourd'hui</h2>
     <div class="stack">${auj.length ? auj.map(carteCreneau).join("") : `<p class="muted">Rien de prévu dans ton planning aujourd'hui.</p>`}</div>
-    ${!ouvert && clients.some(c => !auj.some(x => x.client_id === c.id)) ? `<h2>J'arrive chez un autre client</h2><div class="stack">${clients.filter(c => !auj.some(x => x.client_id === c.id)).map(c => `<button class="btn" data-arrive="${c.id}"><span class="ic">✅</span>${esc(c.nom)}</button>`).join("")}</div>` : ""}
     ${!clients.length ? `<div class="card" style="margin-top:12px"><p>Aucun client ne t'est encore confié. OIKOS te préviendra.</p></div>` : ""}
-    <p class="muted small" style="margin-top:12px">📍 Ta position est vérifiée seulement au moment où tu touches « J'arrive » ou « Je pars » (à moins de ${RAYON_M} m du client).</p>
     <h2>Ensuite</h2>
     <div class="card">${prochain ? `<p><b>${esc(nomClient(prochain.client_id))}</b><br><span class="muted small">${jourTxt(prochain.debut)} · ${heure(prochain.debut)} – ${heure(prochain.fin)}</span></p>` : `<p class="muted">Rien de prévu dans les 7 prochains jours.</p>`}
       <button class="btn" id="voir-agenda"><span class="ic">📅</span>Voir mon agenda</button></div>`);
   const c = document.getElementById("contenu");
   c.onclick = e => {
-    const a = e.target.closest("[data-arrive]"), f = e.target.closest("[data-fiche]");
-    if (a) return arriver(a.dataset.arrive);
+    const f = e.target.closest("[data-fiche]"), d = e.target.closest("[data-decl]");
     if (f) return ficheClient(f.dataset.fiche);
+    if (d) {   // le passage prévu devient une ligne à vérifier dans Reporting
+      const x = cr.data.find(k => k.id === d.dataset.decl);
+      ajouterAuBrouillon([{ client_id: x.client_id, jour: versLocal(x.debut).slice(0, 10), debut: versLocal(x.debut).slice(11), fin: versLocal(x.fin).slice(11), minutes: minutesEntre(x.debut, x.fin), note: "" }]);
+      return accueil("mois");
+    }
   };
-  if (ouvert) document.getElementById("pars").onclick = partir;
+  document.getElementById("declarer").onclick = () => accueil("mois");
   document.getElementById("voir-agenda").onclick = () => accueil("agenda");
   chargerPapiers().then(p => {   // rappel des papiers manquants, sans ralentir l'écran
     const n = p.liste.filter(x => x.obligatoire && (!x.doc || x.doc.etat === "refuse")).length;
@@ -525,35 +458,103 @@ async function vueJour() {
     d.onclick = () => accueil("papiers");
     c.querySelector("h1").nextElementSibling.after(d);
   }).catch(() => {});
-  clearInterval(minuteur);
-  if (ouvert && !oubli(ouvert)) minuteur = setInterval(() => { const e = document.getElementById("chrono"); if (!e) return clearInterval(minuteur); e.textContent = heuresTxt(minutesEntre(ouvert.arrivee, new Date())); }, 30000);
 }
-async function arriver(clientId) {
-  if (ouvert) return toast("Termine d'abord chez " + nomClient(ouvert.client_id));
-  const c = clients.find(k => k.id === clientId); if (!c) return;
-  const g = await verifierPresence(c, "arrivée"); if (!g) return;
-  const { error } = await sb.from("pointages").insert({ client_id: clientId, gps_arrivee: g });
-  if (error) return souci(error);
-  toast((g.etat === "ok" ? "✓ Présence vérifiée. " : "") + "Arrivée notée à " + heure(new Date()) + " chez " + c.nom);
-  accueil("jour");
+
+/* ---------- Lecture d'une déclaration : « Bibas 3h ce matin, Haddad 9h-12h hier » ---------- */
+/* Chaque morceau donne un client (reconnu parmi SES clients, même mal écrit), un jour, une durée ou un créneau. */
+const MOIS_FR = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
+const JOURS_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const NOMBRES = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8 };
+const VIDES = new Set("le la les l du de des d chez pour avec et puis ensuite apres un une a au aux ce cet cette matin midi soir aprem apresmidi j ai fait fais vu menage passage heure heures h min minutes mn aujourd hui aujourdhui hier avant demi demie quart madame monsieur mme mr m".split(" "));
+const sansAcc = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function distance(a, b) {   // nombre de lettres à changer pour passer de a à b
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
 }
-const oubli = p => p && (debutJour(new Date(p.arrivee)) < debutJour() || minutesEntre(p.arrivee, new Date()) > 12 * 60);
-async function partir() {
-  if (!ouvert) return;
-  if (oubli(ouvert)) { cache.mois = [ouvert]; return corrigerPointage(ouvert.id, "jour"); }   // « Je pars » oublié : elle indique l'heure réelle
-  const p = ouvert, c = clients.find(k => k.id === p.client_id) || { id: p.client_id, nom: nomClient(p.client_id) };
-  const g = await verifierPresence(c, "départ"); if (!g) return;
-  const fin = new Date();
-  const { error } = await sb.from("pointages").update({ depart: fin.toISOString(), gps_depart: g }).eq("id", p.id);
-  if (error) return souci(error);
-  accueil("jour");
-  const fermer = feuille(`<h2 style="margin:0">Passage terminé ✓</h2>
-    <p>${esc(c.nom)} : <b>${heuresTxt(minutesEntre(p.arrivee, fin))}</b>${g.etat === "ok" ? " · départ vérifié 📍" : ""}</p>
-    <form class="stack" id="fn"><label class="f">Une remarque pour OIKOS sur ce passage ? (facultatif)<textarea name="t" placeholder="Ex. il manque du produit vitres, le client part en vacances…"></textarea></label>
-    <button class="btn primary big" type="submit">Envoyer à OIKOS</button><button class="btn flat" type="button" data-fermer>Non merci</button></form>`, el => {
-    el.querySelector("#fn").onsubmit = async e => { e.preventDefault(); if (await ajouterNote(c.id, p.id, new FormData(e.target).get("t"))) fermer(); };
+/* Comme ça se prononce : « lieutot » = « Lieutaud », « bibasse » = « Bibas » */
+const oreille = w => w.replace(/ph/g, "f").replace(/qu/g, "k").replace(/c([eiy])/g, "s$1").replace(/(eau|ault|aud|aut|au)/g, "o").replace(/(.)\1+/g, "$1").replace(/[dtsxe]+$/, "");
+const proche = (a, b) => a === b ? 1 : (a.length >= 3 && b.startsWith(a)) || (b.length >= 3 && a.startsWith(b)) ? .9 : 1 - distance(a, b) / Math.max(a.length, b.length);
+const ressemblance = (a, b) => Math.max(proche(a, b), a.length >= 3 && b.length >= 3 ? proche(oreille(a), oreille(b)) * .95 : 0);
+function devinerClient(mots) {
+  let mieux = null, second = 0;
+  clients.forEach(c => {
+    const siens = sansAcc(c.nom).split(/[^a-z0-9]+/).filter(m => m.length >= 2);
+    const score = Math.max(0, ...mots.map(m => Math.max(0, ...siens.map(s => ressemblance(m, s)))));
+    if (!mieux || score > mieux.score) { second = mieux ? mieux.score : 0; mieux = { c, score }; } else second = Math.max(second, score);
   });
+  return mieux && mieux.score >= .75 && mieux.score - second > .05 ? mieux.c.id : "";
 }
+function lireDate(t, aujourdhui) {
+  let m;
+  if (/avant[- ]?hier/.test(t)) return [ajouterJours(aujourdhui, -2), /avant[- ]?hier/];
+  if (/\bhier\b/.test(t)) return [ajouterJours(aujourdhui, -1), /\bhier\b/];
+  if (/aujourd ?'?hui/.test(t)) return [aujourdhui, /aujourd ?'?hui/];
+  if (/\bce (matin|midi|soir)\b|\bcet apres ?-?midi\b/.test(t)) return [aujourdhui, /\bce (matin|midi|soir)\b|\bcet apres ?-?midi\b/];
+  if ((m = /\b(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?\b/.exec(t))) {
+    let a = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : aujourdhui.getFullYear(), d = new Date(a, +m[2] - 1, +m[1]);
+    if (!m[3] && d > aujourdhui) d = new Date(a - 1, +m[2] - 1, +m[1]);
+    return [d, m[0]];
+  }
+  if ((m = new RegExp("\\b(\\d{1,2}|1er) (" + MOIS_FR.join("|") + ")\\b").exec(t))) {
+    let d = new Date(aujourdhui.getFullYear(), MOIS_FR.indexOf(m[2]), parseInt(m[1]));
+    if (d > aujourdhui) d = new Date(aujourdhui.getFullYear() - 1, MOIS_FR.indexOf(m[2]), parseInt(m[1]));
+    return [d, m[0]];
+  }
+  if ((m = new RegExp("\\b(" + JOURS_FR.join("|") + ")\\b").exec(t))) {
+    const recul = (aujourdhui.getDay() - JOURS_FR.indexOf(m[1]) + 7) % 7;
+    return [ajouterJours(aujourdhui, -recul), m[0]];
+  }
+  if ((m = /\ble (\d{1,2})(?![\dh:.,])/.exec(t))) {
+    let d = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), +m[1]);
+    if (d > aujourdhui) d = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() - 1, +m[1]);
+    return [d, m[0]];
+  }
+  return [null, null];
+}
+function lireMorceau(brut, jourParDefaut) {
+  let t = " " + sansAcc(brut).replace(/[’']/g, " ").replace(/\s+/g, " ") + " ", m;
+  const l = { client_id: "", jour: "", debut: "", fin: "", minutes: 0, note: "" };
+  const [d, trouve] = lireDate(t, debutJour());
+  if (d) { l.jour = versLocal(d).slice(0, 10); t = t.replace(trouve, " "); } else l.jour = jourParDefaut;
+  // créneau : 9h-12h, 9h30 à 12h, de 14 h à 16h30
+  if ((m = /(?:de )?(\d{1,2}) ?[h:] ?(\d{2})? ?(?:-|a|au|jusqu a) ?(\d{1,2}) ?[h:]? ?(\d{2})?(?![\d])/.exec(t))) {
+    const a = +m[1] * 60 + +(m[2] || 0), b = +m[3] * 60 + +(m[4] || 0);
+    if (b > a && b <= 24 * 60) { l.debut = pad2(m[1]) + ":" + pad2(m[2] || 0); l.fin = pad2(m[3]) + ":" + pad2(m[4] || 0); l.minutes = b - a; t = t.replace(m[0], " "); }
+  }
+  if (!l.minutes) {   // durée : 3h, 3h30, 2,5h, 45 min, trois heures et demie
+    if ((m = /(\d{1,2})[.,](\d{1,2}) ?h\b/.exec(t))) l.minutes = Math.round(parseFloat(m[1] + "." + m[2]) * 60);
+    else if ((m = /(\d{1,2}) ?h ?(\d{2})?(?!\d)/.exec(t))) l.minutes = +m[1] * 60 + +(m[2] || 0);
+    else if ((m = /(\d{1,3}) ?(?:min|mn|minutes?)\b/.exec(t))) l.minutes = +m[1];
+    else if ((m = new RegExp("\\b(" + Object.keys(NOMBRES).join("|") + ") heures?( et demie?| et quart)?").exec(t))) l.minutes = NOMBRES[m[1]] * 60 + (m[2] ? (/quart/.test(m[2]) ? 15 : 30) : 0);
+    if (m) { t = t.replace(m[0], " "); if (/et demie?/.test(t) && !/et demie?|et quart/.test(m[0])) { l.minutes += 30; t = t.replace(/et demie?/, " "); } }
+  }
+  const mots = t.split(/[^a-z0-9]+/).filter(x => x.length >= 2 && !VIDES.has(x) && !/^\d+$/.test(x));
+  l.client_id = devinerClient(mots);
+  l.lu = brut.trim();
+  return l;
+}
+function lireDeclaration(texte) {
+  const lignes = [];
+  texte.split(/\n+/).forEach(ligne => {
+    // virgule, point-virgule, « puis », « et » séparent les passages (mais pas « 2,5h » ni « 3h et demie »)
+    const morceaux = ligne.split(/,(?!\d)|(?<!\d),|;| puis | ensuite | et (?!demi|quart)/i).map(s => s.trim()).filter(Boolean);
+    let jourLigne = versLocal(debutJour()).slice(0, 10);   // « hier : Bibas 3h, Haddad 2h » : le jour vaut aussi pour les suivants
+    morceaux.forEach(mc => {
+      const l = lireMorceau(mc, jourLigne);
+      jourLigne = l.jour;
+      if (l.client_id || l.minutes) lignes.push(l);
+      else if (lignes.length) lignes[lignes.length - 1].note = ((lignes[lignes.length - 1].note || "") + " " + mc).trim();   // reste = remarque
+    });
+  });
+  return lignes;
+}
+/* Brouillon des lignes à vérifier : gardé sur le téléphone jusqu'à l'envoi */
+let brouillon = LS.get("brouillon") || [];
+const garderBrouillon = () => LS.set("brouillon", brouillon);
+function ajouterAuBrouillon(lignes) { brouillon = brouillon.concat(lignes.map(l => ({ ...l, cle: Math.random().toString(36).slice(2) }))); garderBrouillon(); }
 
 /* ---------- Notes de terrain (lues par OIKOS, qui reçoit une alerte) ---------- */
 async function ajouterNote(clientId, pointageId, texte) {
@@ -606,10 +607,8 @@ function ficheClient(id) {
       <dt>Clé</dt><dd>${esc(c.cle || "—")}</dd>
       <dt>Consignes</dt><dd>${esc(c.consignes || "—")}</dd>
     </dl>
-    <button class="btn go big" id="arr" ${ouvert ? "disabled" : ""}><span class="ic">✅</span>J'arrive ici</button>
     ${blocNotes("Mes notes sur ce client", "Ce que OIKOS doit savoir sur ce client")}
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
-    el.querySelector("#arr").onclick = () => { fermer(); arriver(id); };
     brancherNotes(el, id, null);
   });
 }
@@ -683,7 +682,7 @@ function agJourHtml(s0, items, auj) {
   for (let hr = h0; hr < h1; hr++) g += `<div class="ag-hour" style="top:${(hr - h0) * AG_PX}px"><span>${hr}h</span></div>`;
   jour.forEach(it => { const top = Math.max(0, y(it.t)), ht = Math.max(26, Math.min((h1 - h0) * AG_PX, y(it.end)) - top - 2);
     g += `<button class="ag-ev k-${it.k}" data-agref="${it.ref}" style="top:${top}px;height:${ht}px;left:calc(44px + (100% - 48px) * ${it.lane} / ${it.nl});width:calc((100% - 48px) / ${it.nl} - 3px)">
-      <b>${heure(it.t).replace(" h ", "h")} ${esc(it.titre)}</b>${ht > 40 ? `<span>${it.k === "fait" ? "✓ pointé" : "prévu"} · ${heuresTxt((it.end - it.t) / 6e4)}</span>` : ""}</button>`; });
+      <b>${heure(it.t).replace(" h ", "h")} ${esc(it.titre)}</b>${ht > 40 ? `<span>${it.k === "fait" ? "✓ déclaré" : "prévu"} · ${heuresTxt((it.end - it.t) / 6e4)}</span>` : ""}</button>`; });
   if (d.getTime() === auj.getTime()) { const n = y(Date.now()); if (n >= 0 && n <= (h1 - h0) * AG_PX) g += `<div class="ag-now" style="top:${n}px"></div>`; }
   return h + g + `</div><p class="muted small">${sousTraitante() ? "Touche un créneau libre pour y ajouter un passage, ou un passage pour le détail." : "Touche un passage pour le détail."}</p>`;
 }
@@ -707,16 +706,14 @@ function detailAgenda(ref, creneaux) {
   const [type, id] = ref.split(":");
   if (type === "pt") return feuillePassage(id);
   const x = creneaux.find(k => k.id === id); if (!x) return;
-  const c = clients.find(k => k.id === x.client_id) || {}, futur = new Date(x.fin) > new Date(), ajd = debutJour(new Date(x.debut)).getTime() === debutJour().getTime();
+  const c = clients.find(k => k.id === x.client_id) || {}, futur = new Date(x.fin) > new Date();
   feuille(`<h2 style="margin:0">${esc(c.nom || "Client")}</h2><p class="muted">${jourTxt(x.debut)} · ${heure(x.debut)} – ${heure(x.fin)}</p>
     ${x.note ? `<div class="card"><p>${esc(x.note)}</p></div>` : ""}
-    ${ajd && !ouvert ? `<button class="btn go big" id="arr"><span class="ic">✅</span>J'arrive</button>` : ""}
     <div class="grid2"><button class="btn" id="fiche"><span class="ic">👤</span>Fiche client</button>
     ${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : ""}</div>
     ${sousTraitante() && futur ? `<button class="btn" id="annule" style="color:var(--stop)">Annuler ce passage</button>` : ""}
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
     el.querySelector("#fiche").onclick = () => { fermer(); ficheClient(x.client_id); };
-    if (el.querySelector("#arr")) el.querySelector("#arr").onclick = () => { fermer(); arriver(x.client_id); };
     if (el.querySelector("#annule")) el.querySelector("#annule").onclick = async () => {
       const { error } = await sb.from("creneaux").update({ annule: true }).eq("id", x.id);
       if (error) return souci(error);
@@ -751,7 +748,11 @@ function ajouterPassage(pre = {}) {
   });
 }
 
-/* ---------- Reporting (le mois en heures, envoyé dans sa feuille d'heures) ---------- */
+/* ---------- Reporting : elle déclare ses passages (comme l'appli Reporting d'OIKOS), puis voit son mois ---------- */
+const DICTEE = window.SpeechRecognition || window.webkitSpeechRecognition;
+const heuresSaisie = min => min ? String(Math.round(min / 60 * 100) / 100).replace(".", ",") : "";
+const minutesSaisie = v => { v = String(v || "").trim().toLowerCase().replace(",", "."); const m = /^(\d+)\s*h\s*(\d{1,2})$/.exec(v); return m ? +m[1] * 60 + +m[2] : Math.round(parseFloat(v) * 60) || 0; };
+const ligneOk = l => l.client_id && l.minutes > 0 && l.jour && l.jour <= versLocal(new Date()).slice(0, 10);
 async function vueMois() {
   const m0 = moisVu, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
   const { data: pt, error } = await sb.from("pointages").select("*").eq("intervenante_id", moi.id)
@@ -760,24 +761,86 @@ async function vueMois() {
   cache.mois = pt;
   const finis = pt.filter(p => p.depart), total = finis.reduce((s, p) => s + minutesEntre(p.arrivee, p.depart), 0);
   const parClient = {}; finis.forEach(p => parClient[p.client_id] = (parClient[p.client_id] || 0) + minutesEntre(p.arrivee, p.depart));
-  const tousValides = finis.length && finis.every(p => p.valide_par_intervenante), sansDepart = pt.filter(p => !p.depart && (!ouvert || p.id !== ouvert.id));
+  const tousValides = finis.length && finis.every(p => p.valide_par_intervenante);
   const titre = m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-  contenu(`<div class="row" style="justify-content:space-between"><button class="btn flat" id="prec" aria-label="Mois précédent">◀</button>
-      <h1 style="text-transform:capitalize">${titre}</h1><button class="btn flat" id="suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>▶</button></div>
+  const choix = sel => `<option value="">— quel client ? —</option>` + clients.map(c => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nom)}</option>`).join("");
+  const carte = l => `<div class="card" data-cle="${l.cle}" style="${ligneOk(l) ? "" : "border-color:var(--warn)"}">
+      ${l.lu ? `<p class="muted small">« ${esc(l.lu)} »</p>` : ""}
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><select name="client_id" style="border:1px solid var(--line);border-radius:10px;padding:9px;background:var(--surface);flex:1;min-width:0">${choix(l.client_id)}</select>
+        <button class="btn flat" style="flex:none" data-suppr aria-label="Retirer cette ligne">✕</button></div>
+      <div class="grid2"><label class="f">Jour<input name="jour" type="date" value="${l.jour}" max="${versLocal(new Date()).slice(0, 10)}"></label>
+        <label class="f">Heures<input name="heures" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label></div>
+      <div class="grid2"><label class="f">Début (facultatif)<input name="debut" type="time" value="${l.debut || ""}"></label>
+        <label class="f">Fin (facultatif)<input name="fin" type="time" value="${l.fin || ""}"></label></div>
+      <label class="f">Remarque (facultatif)<input name="note" value="${esc(l.note || "")}"></label></div>`;
+  contenu(`<h1>Reporting</h1>
+    <div class="card" style="margin-top:10px">
+      <label class="f" for="dire">Ce que tu as fait</label>
+      <textarea id="dire" rows="3" style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);font-size:17px;width:100%" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier"></textarea>
+      <div class="grid2">${DICTEE ? `<button class="btn" id="micro"><span class="ic">🎤</span>Dicter</button>` : `<span class="muted small">Astuce : le micro 🎤 de ton clavier marche aussi.</span>`}
+        <button class="btn primary" id="verifier">Vérifier</button></div>
+      <button class="btn flat" id="vide">➕ Ajouter une ligne à la main</button></div>
+    ${brouillon.length ? `<h2>À vérifier avant d'envoyer</h2><div class="stack" id="brouillon">${brouillon.map(carte).join("")}</div>
+      <button class="btn go big" id="envoyer" style="margin-top:12px;width:100%"><span class="ic">📤</span>Envoyer ${brouillon.length} passage${brouillon.length > 1 ? "s" : ""}</button>
+      <p class="muted small" style="margin-top:6px">Une ligne orange est incomplète : choisis le client, le jour et les heures.</p>` : ""}
+    <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn flat" id="prec" aria-label="Mois précédent">◀</button>
+      <h2 style="margin:0;text-transform:capitalize">${titre}</h2><button class="btn flat" id="suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>▶</button></div>
     <div class="card" style="margin-top:10px;align-items:center"><span class="muted">Heures du mois</span><span class="compteur">${heuresTxt(total)}</span>
       <span class="muted small">${finis.length} passage${finis.length > 1 ? "s" : ""} · ${Object.keys(parClient).length} client${Object.keys(parClient).length > 1 ? "s" : ""}</span>
       ${tousValides ? `<span class="tag">✓ Tu as validé ces heures</span>` : ""}</div>
-    ${sansDepart.length ? `<div class="card" style="margin-top:10px;border-color:var(--warn)"><b>⚠️ ${sansDepart.length} passage${sansDepart.length > 1 ? "s" : ""} sans heure de départ</b><span class="muted small">Touche la ligne pour l'indiquer.</span></div>` : ""}
     <h2>Par client</h2><div class="card">${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${heuresTxt(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</div>
     <h2>Chaque passage</h2><div class="card">${pt.length ? pt.map(p => `<div class="ligne"><button data-pt="${p.id}">
-        <b>${esc(nomClient(p.client_id))} ›</b><br><span class="muted small">${jourTxt(p.arrivee)} · ${heure(p.arrivee)} → ${p.depart ? heure(p.depart) : "?"}</span>
-        <span class="row" style="gap:4px;margin-top:3px">${gpsBadge([p.gps_arrivee, p.gps_depart].find(g => g && g.etat !== "ok") || p.gps_arrivee)}${p.corrige_par_intervenante ? `<span class="tag warn">✏️ tapé à la main</span>` : ""}${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans mon rapport</span>` : ""}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></button>
+        <b>${esc(nomClient(p.client_id))} ›</b><br><span class="muted small">${jourTxt(p.arrivee)}${p.creneau_connu !== false ? " · " + heure(p.arrivee) + " → " + (p.depart ? heure(p.depart) : "?") : ""}</span>
+        <span class="row" style="gap:4px;margin-top:3px">${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans mon rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></button>
         <b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</div>
-    ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px" ${sansDepart.length ? "disabled" : ""}><span class="ic">👍</span>Mes heures du mois sont justes</button>` : ""}
-    <p class="muted small" style="margin-top:8px">Chaque passage terminé part tout seul dans ton rapport d'activité (ta feuille d'heures OIKOS). OIKOS fait ta facture à partir de ces heures.</p>`);
+    ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px;width:100%"><span class="ic">👍</span>Mes heures du mois sont justes</button>` : ""}
+    <p class="muted small" style="margin-top:8px">Chaque passage envoyé part tout seul dans ton rapport d'activité (ta feuille d'heures OIKOS). OIKOS fait ta facture à partir de ces heures.</p>`);
+  const el = document.getElementById("contenu"), zone = document.getElementById("dire");
+  document.getElementById("verifier").onclick = () => {
+    const lignes = lireDeclaration(zone.value);
+    if (!lignes.length) return toast("Écris par exemple : Bibas 3h ce matin");
+    ajouterAuBrouillon(lignes); zone.value = "";
+    const manque = lignes.filter(l => !ligneOk(l)).length;
+    toast(lignes.length + " passage" + (lignes.length > 1 ? "s" : "") + " à vérifier" + (manque ? " (" + manque + " à compléter)" : ""));
+    accueil("mois");
+  };
+  document.getElementById("vide").onclick = () => { ajouterAuBrouillon([{ client_id: "", jour: versLocal(new Date()).slice(0, 10), minutes: 0, debut: "", fin: "", note: "" }]); accueil("mois"); };
+  if (document.getElementById("micro")) document.getElementById("micro").onclick = e => {
+    const b = e.currentTarget, rec = new DICTEE(); rec.lang = "fr-FR"; rec.interimResults = false;
+    rec.onresult = r => { const dit = r.results[0][0].transcript; zone.value = (zone.value.trim() ? zone.value.trim() + ", " : "") + dit; };
+    rec.onerror = () => toast("Je n'ai pas entendu : réessaie, ou tape le texte.");
+    rec.onend = () => { b.disabled = false; b.lastChild.textContent = "Dicter"; };
+    b.disabled = true; b.lastChild.textContent = "J'écoute…"; rec.start();
+  };
+  // chaque changement dans une ligne est gardé tout de suite
+  el.addEventListener("input", e => {
+    const c = e.target.closest("[data-cle]"); if (!c) return;
+    const l = brouillon.find(x => x.cle === c.dataset.cle), n = e.target.name;
+    if (n === "heures") l.minutes = minutesSaisie(e.target.value);
+    else if (n) l[n] = e.target.value;
+    if ((n === "debut" || n === "fin") && l.debut && l.fin) {
+      const [ha, ma] = l.debut.split(":").map(Number), [hb, mb] = l.fin.split(":").map(Number), mn = hb * 60 + mb - ha * 60 - ma;
+      if (mn > 0) { l.minutes = mn; c.querySelector("[name=heures]").value = heuresSaisie(mn); }
+    }
+    c.style.borderColor = ligneOk(l) ? "" : "var(--warn)";
+    garderBrouillon();
+  });
+  el.addEventListener("click", async e => {
+    const s = e.target.closest("[data-suppr]");
+    if (s) { brouillon = brouillon.filter(x => x.cle !== s.closest("[data-cle]").dataset.cle); garderBrouillon(); return accueil("mois"); }
+    const b = e.target.closest("[data-pt]"); if (b) feuillePassage(b.dataset.pt);
+  });
+  if (document.getElementById("envoyer")) document.getElementById("envoyer").onclick = async e => {
+    const prets = brouillon.filter(ligneOk);
+    if (prets.length < brouillon.length) return toast("Complète les lignes en orange (client, jour, heures) ou retire-les ✕");
+    e.currentTarget.disabled = true;
+    const { error } = await sb.from("pointages").insert(prets.map(versPassage));
+    if (error) { e.currentTarget.disabled = false; return souci(error); }
+    brouillon = []; garderBrouillon();
+    toast("Envoyé ✓ " + prets.length + " passage" + (prets.length > 1 ? "s" : "") + " : ils arrivent dans ton rapport d'ici quelques minutes"); accueil("mois");
+  };
   document.getElementById("prec").onclick = () => { moisVu = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); accueil("mois"); };
   document.getElementById("suiv").onclick = () => { moisVu = m1; accueil("mois"); };
-  document.getElementById("contenu").onclick = e => { const b = e.target.closest("[data-pt]"); if (b) feuillePassage(b.dataset.pt); };
   const v = document.getElementById("valider");
   if (v) v.onclick = async () => {
     const { error } = await sb.from("pointages").update({ valide_par_intervenante: true }).eq("intervenante_id", moi.id)
@@ -786,14 +849,20 @@ async function vueMois() {
     toast("Merci, tes heures sont validées"); accueil("mois");
   };
 }
+/* Une ligne → un passage : avec un créneau, les vraies heures ; sinon midi + la durée (seule la durée compte) */
+function versPassage(l) {
+  const avecCreneau = !!(l.debut && l.fin);
+  const a = new Date(l.jour + "T" + (avecCreneau ? l.debut : "12:00"));
+  return { client_id: l.client_id, arrivee: a.toISOString(), depart: new Date(a.getTime() + l.minutes * 60000).toISOString(),
+    source: "declaration", creneau_connu: avecCreneau, note: (l.note || "").trim() || null };
+}
 function feuillePassage(id) {
   const p = (cache.mois || []).find(x => x.id === id); if (!p) return;
-  if (!p.depart && (!ouvert || ouvert.id !== p.id)) return corrigerPointage(id);
   feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2><p class="muted">${jourTxt(p.arrivee)}</p>
-    <dl class="info card"><dt>Horaires</dt><dd>${heure(p.arrivee)} → ${p.depart ? heure(p.depart) + " · <b>" + heuresTxt(minutesEntre(p.arrivee, p.depart)) + "</b>" : "en cours"}</dd>
-      <dt>Position à l'arrivée</dt><dd>${gpsTxt(p.gps_arrivee)}</dd>${p.depart ? `<dt>Position au départ</dt><dd>${gpsTxt(p.gps_depart)}</dd>` : ""}
+    <dl class="info card"><dt>${p.creneau_connu !== false ? "Horaires" : "Durée"}</dt><dd>${p.creneau_connu !== false ? heure(p.arrivee) + " → " + (p.depart ? heure(p.depart) : "?") + " · " : ""}<b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : "à compléter"}</b></dd>
+      ${p.note ? `<dt>Remarque</dt><dd>${esc(p.note)}</dd>` : ""}
       <dt>Rapport d'activité</dt><dd>${p.exporte_le ? "✓ écrit dans ta feuille d'heures" : "en attente (quelques minutes)"}</dd></dl>
-    ${p.verrouille ? `<p class="muted small">Ce passage est facturé : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : p.depart ? `<button class="btn" id="corr"><span class="ic">✏️</span>Corriger les heures</button>` : ""}
+    ${p.verrouille ? `<p class="muted small">Ce passage est facturé : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : `<button class="btn" id="corr"><span class="ic">✏️</span>Corriger</button>`}
     ${blocNotes("Notes sur ce passage", "Une remarque pour OIKOS sur ce passage")}
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
     if (el.querySelector("#corr")) el.querySelector("#corr").onclick = () => { fermer(); corrigerPointage(id); };
@@ -802,20 +871,23 @@ function feuillePassage(id) {
 }
 function corrigerPointage(id, retour) {
   const p = (cache.mois || []).find(x => x.id === id); if (!p) return;
-  const jour = versLocal(p.arrivee).slice(0, 10);
-  feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2><p class="muted">${jourTxt(p.arrivee)}</p>
-    <form class="stack" id="fc"><div class="grid2"><label class="f">Arrivée<input name="a" type="time" value="${versLocal(p.arrivee).slice(11)}" required></label>
-    <label class="f">Départ<input name="d" type="time" value="${p.depart ? versLocal(p.depart).slice(11) : ""}" required></label></div>
-    <p class="muted small">Une heure tapée à la main n'est pas vérifiée par le GPS : OIKOS en est prévenu.</p>
+  const avec = p.creneau_connu !== false;
+  feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2>
+    <form class="stack" id="fc"><label class="f">Jour<input name="jour" type="date" value="${versLocal(p.arrivee).slice(0, 10)}" max="${versLocal(new Date()).slice(0, 10)}" required></label>
+    <label class="f">Heures<input name="heures" inputmode="decimal" value="${p.depart ? heuresSaisie(minutesEntre(p.arrivee, p.depart)) : ""}"></label>
+    <div class="grid2"><label class="f">Début (facultatif)<input name="debut" type="time" value="${avec ? versLocal(p.arrivee).slice(11) : ""}"></label>
+    <label class="f">Fin (facultatif)<input name="fin" type="time" value="${avec && p.depart ? versLocal(p.depart).slice(11) : ""}"></label></div>
     <p class="err" id="err"></p>
     <button class="btn primary big" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
     el.querySelector("#fc").onsubmit = async e => {
       e.preventDefault(); const f = new FormData(e.target);
-      const a = new Date(jour + "T" + f.get("a")), d = new Date(jour + "T" + f.get("d"));
-      if (d <= a) { el.querySelector("#err").textContent = "Le départ doit être après l'arrivée."; return; }
-      const { error } = await sb.from("pointages").update({ arrivee: a.toISOString(), depart: d.toISOString(), valide_par_intervenante: false }).eq("id", id);
+      const l = { client_id: p.client_id, jour: f.get("jour"), debut: f.get("debut"), fin: f.get("fin"), minutes: minutesSaisie(f.get("heures")), note: p.note };
+      if (l.debut && l.fin) { const [ha, ma] = l.debut.split(":").map(Number), [hb, mb] = l.fin.split(":").map(Number); l.minutes = hb * 60 + mb - ha * 60 - ma; }
+      if (!(l.minutes > 0)) { el.querySelector("#err").textContent = "Indique les heures, ou un début et une fin."; return; }
+      const d = versPassage(l);
+      const { error } = await sb.from("pointages").update({ arrivee: d.arrivee, depart: d.depart, creneau_connu: d.creneau_connu, valide_par_intervenante: false }).eq("id", id);
       if (error) return souci(error);
-      fermer(); toast("Enregistré : " + heuresTxt(minutesEntre(a, d))); accueil(retour || onglet);
+      fermer(); toast("Enregistré : " + heuresTxt(l.minutes)); accueil(retour || onglet);
     };
   });
 }
