@@ -82,6 +82,8 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .pk{display:flex;flex-direction:column;gap:8px;color:var(--ink)}
 .pk-tete{display:flex;gap:6px;align-items:center}
 .pk-tete .chips{flex:1;justify-content:center}
+.pk-autre{display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--sunk);border-radius:10px}
+.pk-autre .pk-tete b{flex:1;text-align:center}
 .pk-jours{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .pk-j{display:flex;flex-direction:column;align-items:center;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:5px 0;cursor:pointer}
 .pk-j span{font-size:11px;text-transform:uppercase;color:var(--muted)}
@@ -339,6 +341,7 @@ async function vuePlanning() {
 const DUREES = [1, 1.5, 2, 2.5, 3, 4];
 const aMinutes = (j, m) => { const d = new Date(j); d.setHours(0, m, 0, 0); return d; };
 const minutesDe = d => d.getHours() * 60 + d.getMinutes();
+const semainesDuMois = m => { const l = [], fin = new Date(m.getFullYear(), m.getMonth() + 1, 1); for (let d = lundi(m); d < fin; d = plusJours(d, 7)) l.push(d); return l; };
 function lireQuand(txt) {
   const s = String(txt).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’']/g, " "), auj = plusJours(new Date(), 0);
   let j = null, mins = null;
@@ -364,7 +367,7 @@ async function fichePassagePrevu(x, interv, jourTxt) {
   const aujourd = ymd(new Date()), siens = cacheClients.filter(c => attrib.some(a => a.client_id === c.id && (!a.fin || a.fin >= aujourd)));
   const choix = siens.length ? siens : cacheClients, dur = x ? (new Date(x.fin) - new Date(x.debut)) / 6e4 : 120;
   let client = x ? x.client_id : (choix.length === 1 ? choix[0].id : "");
-  let quand = x ? new Date(x.debut) : null, vue = plusJours(quand || new Date(jourTxt + "T12:00"), 0), incompris = false, tour = 0;
+  let quand = x ? new Date(x.debut) : null, vue = plusJours(quand || new Date(jourTxt + "T12:00"), 0), incompris = false, tour = 0, moisAutre = null;
   const semaines = {};   // ses passages déjà prévus, par semaine (pour voir la journée et les chevauchements)
   fenetre(`<h2 style="margin:0">${x ? "Passage prévu" : "Ajouter un passage"} · ${esc(nomInterv(id))}</h2>
     <form id="fp" style="display:flex;flex-direction:column;gap:12px">
@@ -399,8 +402,11 @@ async function fichePassagePrevu(x, interv, jourTxt) {
       const passages = semaines[cle] || [], auj = ymd(new Date()), ecart = Math.round((lun - lundi(new Date())) / (7 * 864e5));
       const duJour = j => passages.filter(c => ymd(new Date(c.debut)) === ymd(j));
       $("#pk-haut").innerHTML = `<div class="pk-tete"><button type="button" class="btn" data-pknav="-7" aria-label="Semaine précédente">‹</button>
-          <div class="chips">${[[0, "Cette sem."], [1, "Sem. pro"], [2, "Dans 2 sem."]].map(([n, l]) => `<button type="button" class="chip" data-pksem="${n}" aria-pressed="${ecart === n}">${l}</button>`).join("")}</div>
+          <div class="chips">${[[0, "Cette sem."], [1, "Sem. pro"], [2, "Dans 2 sem."]].map(([n, l]) => `<button type="button" class="chip" data-pksem="${n}" aria-pressed="${ecart === n}">${l}</button>`).join("")}
+            <button type="button" class="chip" data-pkautre aria-expanded="${!!moisAutre}" aria-pressed="${ecart < 0 || ecart > 2}">📅 ${ecart < 0 || ecart > 2 ? "Sem. du " + esc(jour(lun)) : "Autre semaine"}</button></div>
           <button type="button" class="btn" data-pknav="7" aria-label="Semaine suivante">›</button></div>
+        ${moisAutre ? `<div class="pk-autre"><div class="pk-tete"><button type="button" class="btn" data-pkmois="-1" aria-label="Mois précédent">‹</button><b>${esc(moisAutre.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }))}</b><button type="button" class="btn" data-pkmois="1" aria-label="Mois suivant">›</button></div>
+          <div class="chips">${semainesDuMois(moisAutre).map(l => `<button type="button" class="chip" data-pksemaine="${ymd(l)}" aria-pressed="${ymd(l) === cle}">${esc(jour(l))} – ${esc(jour(plusJours(l, 6)))}</button>`).join("")}</div></div>` : ""}
         <div class="pk-jours">${[0, 1, 2, 3, 4, 5, 6].map(i => { const j = plusJours(lun, i), n = duJour(j).length, y = ymd(j);
           return `<button type="button" class="pk-j${y === ymd(vue) ? " sel" : ""}${y === auj ? " auj" : ""}${y < auj ? " passe" : ""}" data-pkjour="${y}" aria-pressed="${y === ymd(vue)}"><span>${j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span><b>${j.getDate()}</b><i>${"•".repeat(Math.min(n, 3))}</i></button>`; }).join("")}</div>
         <div class="chips">${[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(h => `<button type="button" class="chip" data-pkh="${h}" aria-pressed="${!!quand && quand.getHours() === h}">${h}h</button>`).join("")}</div>
@@ -433,7 +439,10 @@ async function fichePassagePrevu(x, interv, jourTxt) {
       else if ((t = b("[data-client]"))) { client = t.dataset.client; peindreClient(); }
       else if (b("[data-changer]")) { client = ""; peindreClient(); $("#cl-q").focus(); }
       else if ((t = b("[data-pknav]"))) allerAuJour(plusJours(vue, Number(t.dataset.pknav)));
-      else if ((t = b("[data-pksem]"))) allerAuJour(plusJours(lundi(new Date()), 7 * Number(t.dataset.pksem) + Math.round((plusJours(vue, 0) - lundi(vue)) / 864e5)));
+      else if ((t = b("[data-pksem]"))) { moisAutre = null; allerAuJour(plusJours(lundi(new Date()), 7 * Number(t.dataset.pksem) + Math.round((plusJours(vue, 0) - lundi(vue)) / 864e5))); }
+      else if (b("[data-pkautre]")) { moisAutre = moisAutre ? null : new Date(vue.getFullYear(), vue.getMonth(), 1); peindre(); }
+      else if ((t = b("[data-pkmois]"))) { moisAutre = new Date(moisAutre.getFullYear(), moisAutre.getMonth() + Number(t.dataset.pkmois), 1); peindre(); }
+      else if ((t = b("[data-pksemaine]"))) { const decale = Math.round((plusJours(vue, 0) - lundi(vue)) / 864e5); moisAutre = null; allerAuJour(plusJours(new Date(t.dataset.pksemaine + "T12:00"), decale)); }
       else if ((t = b("[data-pkjour]"))) allerAuJour(new Date(t.dataset.pkjour + "T12:00"));
       else if ((t = b("[data-pkh]"))) choisir(aMinutes(vue, Number(t.dataset.pkh) * 60 + (quand ? quand.getMinutes() : 0)));
       else if ((t = b("[data-pkm]"))) choisir(aMinutes(vue, quand.getHours() * 60 + Number(t.dataset.pkm)));
