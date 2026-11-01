@@ -87,7 +87,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 /* ===================== Réglages ===================== */
 const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
 const SB_CLE = "sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q";
-const ANALYSE_IA = "https://claude.ai/artifact/7rdJyKKdipwtb5QNnWAnyV";   // page Claude (ton abonnement) qui analyse les photos du Drive
+const ANALYSE_IA = "https://claude.ai/artifact/7rdJyKKdipwtb5QNnWAnyV";   // page Claude « Analyse et devis » (ton abonnement, compte claude.ai OIKOS)
 const SUPABASE_USERS ="https://supabase.com/dashboard/project/nzxphozupnmqyikitwhv/auth/users";
 const sb = window.supabase.createClient(SB_URL, SB_CLE, { auth: { persistSession: true, storageKey: "oikos-gerant-session" } });
 
@@ -618,6 +618,7 @@ function ficheClient(id, ong = "fiche") {
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
       ${c.dossier_drive ? `<a class="btn" href="${ANALYSE_IA}#${esc(c.dossier_drive)}" target="_blank" rel="noopener" title="Rapport jardin ou ménage par Claude, à partir des photos">🤖 Analyse IA</a>
+        <a class="btn" href="${ANALYSE_IA}#devis~${esc(c.dossier_drive)}" target="_blank" rel="noopener" title="Devis VosFactures : tu donnes ton prix, il n'est créé qu'après ton Oui">🧾 Faire un devis</a>
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">📁 Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
     <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
