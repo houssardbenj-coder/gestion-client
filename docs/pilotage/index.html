@@ -150,11 +150,13 @@ async function afficher(o) {
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
 async function compteurAVoir() {
   try {
-    const [n, d] = await Promise.all([
+    const [n, d, c] = await Promise.all([
       sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
-      sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu")]);
-    const t = (n.count || 0) + (d.count || 0), e = document.getElementById("b-avoir");
+      sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu"),
+      sb.from("clients_import").select("id", { count: "exact", head: true }).in("etat", ["nouveau", "different", "a_verifier"])]);
+    const t = (n.count || 0) + (d.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
     if (e) e.innerHTML = t ? `<span class="bulle">${t}</span>` : "";
+    if (ec) ec.innerHTML = c.count ? `<span class="bulle">${c.count}</span>` : "";
   } catch (e) {}
 }
 let cacheProfils = [], cacheClients = [];
@@ -171,6 +173,7 @@ async function vueAVoir() {
   await chargerBase();
   const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
   const il7 = new Date(Date.now() - 7 * 864e5).toISOString(), maintenant = new Date().toISOString();
+  const tampon = await q(sb.from("clients_import").select("id", { count: "exact" }).in("etat", ["nouveau", "different", "a_verifier"]));
   const [notes, docs, pts, prevus] = await Promise.all([
     q(sb.from("notes_terrain").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("documents").select("*").eq("etat", "recu").order("cree_le")),
@@ -180,6 +183,8 @@ async function vueAVoir() {
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const nonDeclares = prevus.filter(x => !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut)));
   const el = contenu(`<h1>À voir</h1>
+    ${tampon.length ? `<button class="card cliquable" data-o="clients" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
+      <b>📥 ${tampon.length} client${tampon.length > 1 ? "s" : ""} à traiter dans la zone tampon ›</b> <span class="muted small">(nouveaux clients VosFactures ou extraction)</span></button>` : ""}
     <div class="deux" style="margin-top:12px">
       <section class="card"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
         ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${esc(nomInterv(n.intervenante_id))}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
@@ -194,6 +199,7 @@ async function vueAVoir() {
       <table><tr><th>Qui</th><th>Client</th><th>Quand</th><th>Pourquoi</th></tr>${douteux.map(p => `<tr><td>${esc(nomInterv(p.intervenante_id))}</td><td>${esc(nomClient(p.client_id))}</td><td>${jour(p.arrivee)} ${hm(p.arrivee)}–${p.depart ? hm(p.depart) : "?"}</td><td>${esc(raisonDoute(p))}</td></tr>`).join("")}</table></section>` : ""}`);
   el.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.o) return afficher(b.dataset.o);
     if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); afficher(); }
     if (b.dataset.voir) voirFichier(b.dataset.voir);
     if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); afficher(); }
