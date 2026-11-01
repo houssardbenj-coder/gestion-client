@@ -71,6 +71,11 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px}
 .fenetre{background:var(--bg);border-radius:16px;padding:18px;width:100%;max-width:820px;display:flex;flex-direction:column;gap:12px}
 .connexion{max-width:380px;margin:12vh auto;display:flex;flex-direction:column;gap:12px}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:12px}
+.photo{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.vignette{display:block;width:100%;border:0;padding:0;cursor:zoom-in;background:var(--sunk)}
+.vignette img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.photo figcaption{padding:8px 10px;font-size:13px}
 </style>
 </head>
 <body>
@@ -150,12 +155,14 @@ async function afficher(o) {
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
 async function compteurAVoir() {
   try {
-    const [n, d, c, ta] = await Promise.all([
+    const [n, d, c, ta, ph, ju] = await Promise.all([
       sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
       sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu"),
       sb.from("clients_import").select("id", { count: "exact", head: true }).in("etat", ["nouveau", "different", "a_verifier"]),
-      sb.from("taches").select("id", { count: "exact", head: true }).is("vue_le", null)]);
-    const t = (n.count || 0) + (d.count || 0) + (ta.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
+      sb.from("taches").select("id", { count: "exact", head: true }).is("vue_le", null),
+      sb.from("client_photos").select("id", { count: "exact", head: true }).is("vue_le", null).is("supprime_le", null),
+      sb.from("client_juridique").select("id", { count: "exact", head: true }).eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7)))]);
+    const t = (n.count || 0) + (d.count || 0) + (ta.count || 0) + (ph.count || 0) + (ju.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
     if (e) e.innerHTML = t ? `<span class="bulle">${t}</span>` : "";
     if (ec) ec.innerHTML = c.count ? `<span class="bulle">${c.count}</span>` : "";
   } catch (e) {}
@@ -175,12 +182,15 @@ async function vueAVoir() {
   const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
   const il7 = new Date(Date.now() - 7 * 864e5).toISOString(), maintenant = new Date().toISOString();
   const tampon = await q(sb.from("clients_import").select("id", { count: "exact" }).in("etat", ["nouveau", "different", "a_verifier"]));
-  const [notes, docs, pts, prevus, taches] = await Promise.all([
+  const [notes, docs, pts, prevus, taches, photos, echeances] = await Promise.all([
     q(sb.from("notes_terrain").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("documents").select("*").eq("etat", "recu").order("cree_le")),
     q(sb.from("pointages").select("*").gte("arrivee", depuis).order("arrivee", { ascending: false })),
     q(sb.from("creneaux").select("*").eq("annule", false).gte("debut", il7).lt("fin", maintenant).order("debut")),
-    q(sb.from("taches").select("*").is("vue_le", null).order("cree_le", { ascending: false }))]);
+    q(sb.from("taches").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
+    q(sb.from("client_photos").select("*").is("vue_le", null).is("supprime_le", null).order("prise_le", { ascending: false })),
+    q(sb.from("client_juridique").select("*").eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7))).order("echeance"))]);
+  const apercusAVoir = await urlsSignees(photos.slice(0, 12).map(p => p.apercu));
   const douteux = pts.filter(p => p.corrige_par_intervenante || [p.gps_arrivee, p.gps_depart].some(g => g && g.etat !== "ok"));
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const nonDeclares = prevus.filter(x => !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut)));
@@ -200,6 +210,15 @@ async function vueAVoir() {
       ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté à sa liste" : "a remis à faire"} : ${esc(t.texte)}
           ${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
         <button class="btn" data-tlu="${t.id}">Lu ✓</button></div>`).join("")}</section>` : ""}
+    ${echeances.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">⚖️ Rappels juridiques (7 prochains jours ou en retard) <span class="tag warn">${echeances.length}</span></h2>
+      ${echeances.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b> · ${esc(TYPES_J[x.type])} : ${esc(x.titre)}<br><span class="muted small">rappel le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span></span>
+        <span class="row"><button class="btn" data-dossier="${x.client_id}|juridique">Ouvrir le dossier</button><button class="btn go" data-jtraite="${x.id}">Traité ✓</button></span></div>`).join("")}</section>` : ""}
+    ${photos.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📷 Nouvelles photos des intervenantes <span class="tag">${photos.length}</span></h2>
+        <button class="btn" data-phlu="tout">Tout marquer vu ✓</button></div>
+      <div class="photos">${photos.slice(0, 12).map(p => `<figure class="photo"><button class="vignette" data-dossier="${p.client_id}|photos" title="Ouvrir le dossier"><img src="${esc(apercusAVoir[p.apercu] || "")}" alt="" loading="lazy"></button>
+        <figcaption><b>${esc(nomClient(p.client_id))}</b> · ${CATS[p.categorie] || "Photo"}${p.legende ? " · " + esc(p.legende) : ""}<br><span class="muted small">${esc(nomInterv(p.auteur))} · ${jour(p.prise_le)} ${hm(p.prise_le)}</span>
+          <div><button class="btn" data-phlu="${p.id}" style="margin-top:4px">Vu ✓</button></div></figcaption></figure>`).join("")}</div>
+      ${photos.length > 12 ? `<p class="muted small" style="margin-top:6px">… et ${photos.length - 12} autre(s) : « Tout marquer vu » ou ouvre le dossier du client.</p>` : ""}</section>` : ""}
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Prévus mais pas encore déclarés (7 derniers jours)</h2>
       ${nonDeclares.length ? nonDeclares.map(x => `<div class="ligne"><span><b>${esc(nomInterv(x.intervenante_id))}</b> chez ${esc(nomClient(x.client_id))}</span><span class="muted">${jour(x.debut)} ${hm(x.debut)}–${hm(x.fin)}</span></div>`).join("") : `<p class="muted">Tout ce qui était prévu a été déclaré.</p>`}</section>
     ${douteux.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Anciens pointages GPS à vérifier</h2>
@@ -208,6 +227,10 @@ async function vueAVoir() {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.o) return afficher(b.dataset.o);
     if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); afficher(); }
+    if (b.dataset.dossier) { const [id, o] = b.dataset.dossier.split("|"); return ficheClient(id, o); }
+    if (b.dataset.jtraite) { await maj(sb.from("client_juridique").update({ traite: true }).eq("id", b.dataset.jtraite)); afficher(); }
+    if (b.dataset.phlu) { const r = sb.from("client_photos").update({ vue_le: new Date().toISOString() });
+      await maj(b.dataset.phlu === "tout" ? r.in("id", photos.map(p => p.id)) : r.eq("id", b.dataset.phlu)); afficher(); }
     if (b.dataset.tlu) { const r = sb.from("taches").update({ vue_le: new Date().toISOString() });
       await maj(b.dataset.tlu === "tout" ? r.in("id", taches.map(t => t.id)) : r.eq("id", b.dataset.tlu)); afficher(); }
     if (b.dataset.voir) voirFichier(b.dataset.voir);
@@ -564,11 +587,174 @@ function importer() {
     };
   });
 }
-function ficheClient(id) {
-  const c = cacheClients.find(k => k.id === id) || { activite: "Ménage", etat: "actif" };
+/* ===================== Dossier client : fiche, commentaires, photos, juridique ===================== */
+/* Photos : la base garde un aperçu ; la photo complète passe par le stockage « dossiers » puis le
+   « Pont photos OIKOS » (compte OIKOS) la range dans le Drive d'OIKOS : CLIENTS OIKOS › NOM › Photos. */
+const CATS = { etat_des_lieux: "État des lieux", avant: "Avant", apres: "Après", degat: "Dégât", acces: "Accès", autre: "Autre" };
+const TYPES_J = { note: "Note", contrat: "Contrat", litige: "Litige", reclamation: "Réclamation", sinistre: "Sinistre", impaye: "Impayé", courrier: "Courrier", autre: "Autre" };
+const DOS_ONGLETS = [["fiche", "Fiche"], ["fil", "Commentaires"], ["photos", "Photos"], ["juridique", "Juridique 🔒"]];
+async function reduire(f, max, qualite) {
+  const img = await createImageBitmap(f), k = Math.min(1, max / Math.max(img.width, img.height));
+  const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+  cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+  return new Promise((ok, ko) => cv.toBlob(b => b ? ok(b) : ko(new Error("image illisible")), "image/jpeg", qualite));
+}
+const nomFichier = () => Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+async function urlsSignees(chemins) {
+  const o = {}; chemins = chemins.filter(Boolean); if (!chemins.length) return o;
+  const { data, error } = await sb.storage.from("dossiers").createSignedUrls(chemins, 3600);
+  if (!error) data.forEach(x => { if (x.signedUrl) o[x.path] = x.signedUrl; });
+  return o;
+}
+async function ouvrirStockage(chemin) {
+  const { data, error } = await sb.storage.from("dossiers").createSignedUrl(chemin, 300);
+  if (error) return souci(error);
+  window.open(data.signedUrl, "_blank", "noopener");
+}
+function ficheClient(id, ong = "fiche") {
+  const c = cacheClients.find(k => k.id === id);
+  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activite: "Ménage", etat: "actif" })}`, (el, fermer) =>
+    brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
+  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
+      ${c.dossier_drive ? `<a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">📁 Son dossier Drive</a>` : ""}
+      <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
+    <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
+    <div id="dos-corps"></div>`, el => {
+    const corps = el.querySelector("#dos-corps");
+    const aller = async o => {
+      ong = o; el.querySelectorAll("[data-dos]").forEach(b => b.dataset.dos === o ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+      corps.innerHTML = `<p class="muted">Chargement…</p>`; corps.onclick = null;
+      try { await ({ fiche: dosFiche, fil: dosFil, photos: dosPhotos, juridique: dosJuridique })[o](c, corps, () => aller(o)); }
+      catch (e) { corps.innerHTML = `<p class="err">${esc(e.message || e)}</p>`; }
+    };
+    el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
+    aller(ong);
+  });
+}
+async function dosFiche(c, corps, re) {
+  corps.innerHTML = formClient(c);
+  brancherFormClient(corps, c, async () => { await chargerBase(); Object.assign(c, cacheClients.find(k => k.id === c.id)); afficher(onglet); re(); });
+}
+/* Fil : tes commentaires (toi seul ou partagés) + les notes de terrain des intervenantes */
+async function dosFil(c, corps, re) {
+  const [com, notes] = await Promise.all([q(sb.from("client_commentaires").select("*").eq("client_id", c.id)), q(sb.from("notes_terrain").select("*").eq("client_id", c.id))]);
+  const fil = com.map(x => ({ ...x, k: "com" })).concat(notes.map(x => ({ ...x, k: "note" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
+  corps.innerHTML = `<form id="fcom" class="card" style="display:flex;flex-direction:column;gap:8px">
+      <label class="f">Nouveau commentaire<textarea name="texte" required maxlength="4000" placeholder="Un fait précis et daté : « clé rendue par sa fille le 3/11 », « préfère qu'on passe le matin »…"></textarea></label>
+      <label class="chk"><input type="checkbox" name="partage">Partager avec les intervenantes qui ont ce client</label>
+      <p class="muted small">Reste factuel : le client peut demander à lire ce qui est écrit sur lui (RGPD). Santé : seulement le strict utile au travail.</p>
+      <div><button class="btn primary" type="submit">Ajouter</button></div></form>
+    <section class="card" style="margin-top:12px">${fil.length ? fil.map(x => `<div class="ligne"><span style="min-width:0">
+        <span class="muted small">${jour(x.cree_le)} ${hm(x.cree_le)} · ${x.k === "note" ? "📝 note de " + esc(nomInterv(x.intervenante_id)) + (x.pointage_id ? " (sur un passage)" : "")
+          : "toi " + (x.partage ? `<span class="tag">partagé</span>` : `<span class="tag off">toi seul</span>`)}</span><br><span style="white-space:pre-wrap">${esc(x.texte)}</span></span>
+        ${x.k === "com" ? `<span class="row" style="flex:none"><button class="btn flat" data-part="${x.id}">${x.partage ? "Ne plus partager" : "Partager"}</button><button class="btn flat stop" data-sup="${x.id}">Supprimer</button></span>`
+          : x.vue_le ? "" : `<button class="btn" data-lu="${x.id}">Lu ✓</button>`}</div>`).join("") : `<p class="muted">Aucun commentaire pour l'instant.</p>`}</section>`;
+  corps.querySelector("#fcom").onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(e.target), texte = String(f.get("texte")).trim(); if (!texte) return;
+    await maj(sb.from("client_commentaires").insert({ client_id: c.id, texte, partage: f.get("partage") === "on" })); toast("Commentaire ajouté"); re();
+  };
+  corps.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.part) { const x = com.find(k => k.id === b.dataset.part); await maj(sb.from("client_commentaires").update({ partage: !x.partage }).eq("id", x.id)); re(); }
+    if (b.dataset.sup) { if (!confirm("Supprimer ce commentaire ?")) return; await maj(sb.from("client_commentaires").delete().eq("id", b.dataset.sup)); re(); }
+    if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); compteurAVoir(); re(); }
+  };
+}
+async function dosPhotos(c, corps, re) {
+  const photos = await q(sb.from("client_photos").select("*").eq("client_id", c.id).is("supprime_le", null).order("prise_le", { ascending: false }));
+  const urls = await urlsSignees(photos.map(p => p.apercu));
+  corps.innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div class="deux"><label class="f">Catégorie<select id="pcat">${Object.entries(CATS).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+        <label class="f">Légende (facultatif)<input type="text" id="pleg" maxlength="500" placeholder="Ex. évier fendu sous le robinet"></label></div>
+      <label class="chk"><input type="checkbox" id="ppart" checked>Visible par les intervenantes qui ont ce client</label>
+      <div class="row"><button class="btn primary" id="pchoix">📷 Ajouter des photos</button>
+        <span class="muted small">Rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Photos) en quelques minutes. Le travail ou le dégât, jamais les personnes, papiers ou objets de valeur.</span></div>
+      <input type="file" id="pfic" accept="image/*" multiple hidden></div>
+    <div class="photos">${photos.map(p => `<figure class="photo" data-ph="${p.id}"><button class="vignette" data-ouvrir title="Ouvrir la photo complète"><img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || CATS[p.categorie])}" loading="lazy"></button>
+        <figcaption><b>${CATS[p.categorie] || "Photo"}</b>${p.legende ? " · " + esc(p.legende) : ""}<br>
+          <span class="muted small">${jour(p.prise_le)} ${hm(p.prise_le)} · ${p.auteur === moi.id ? "toi" : esc(nomInterv(p.auteur))}${p.drive_id ? " · ✓ dans le Drive" : " · rangement en cours"}${p.partage ? "" : " · masquée"}</span>
+          <span class="row" style="margin-top:4px;gap:2px">${p.vue_le ? "" : `<button class="btn" data-plu>Lu ✓</button>`}<button class="btn flat" data-ppart>${p.partage ? "Masquer" : "Montrer"} aux intervenantes</button><button class="btn flat stop" data-psup>Supprimer</button></span></figcaption></figure>`).join("")
+      || `<p class="muted">Aucune photo pour l'instant.</p>`}</div>`;
+  const champ = corps.querySelector("#pfic");
+  corps.querySelector("#pchoix").onclick = () => { champ.value = ""; champ.click(); };
+  champ.onchange = async () => {
+    const fichiers = [...champ.files]; if (!fichiers.length) return;
+    const d = { client_id: c.id, categorie: corps.querySelector("#pcat").value, legende: corps.querySelector("#pleg").value.trim() || null, partage: corps.querySelector("#ppart").checked };
+    try { for (let i = 0; i < fichiers.length; i++) { toast(`Envoi de la photo ${i + 1} sur ${fichiers.length}…`); await envoyerPhoto(fichiers[i], d); }
+      toast(fichiers.length > 1 ? fichiers.length + " photos ajoutées" : "Photo ajoutée"); }
+    catch (e) { souci(e); }
+    re();
+  };
+  corps.onclick = async e => {
+    const b = e.target.closest("button"), fig = b && b.closest("[data-ph]"); if (!fig) return;
+    const p = photos.find(x => x.id === fig.dataset.ph);
+    if (b.hasAttribute("data-ouvrir")) return p.drive_url ? window.open(p.drive_url, "_blank", "noopener") : ouvrirStockage(p.fichier || p.apercu);
+    if (b.hasAttribute("data-plu")) { await maj(sb.from("client_photos").update({ vue_le: new Date().toISOString() }).eq("id", p.id)); compteurAVoir(); re(); }
+    if (b.hasAttribute("data-ppart")) { await maj(sb.from("client_photos").update({ partage: !p.partage }).eq("id", p.id)); re(); }
+    if (b.hasAttribute("data-psup")) { if (!confirm("Supprimer cette photo ? Elle part aussi à la corbeille du Drive.")) return;
+      await maj(sb.from("client_photos").update({ supprime_le: new Date().toISOString() }).eq("id", p.id)); toast("Photo supprimée"); re(); }
+  };
+}
+/* Une photo → aperçu (640 px, gardé dans la base) + photo complète (1600 px, en transit vers le Drive d'OIKOS) */
+async function envoyerPhoto(f, d) {
+  let complet = f, apercu = f;
+  try { complet = await reduire(f, 1600, 0.82); apercu = await reduire(f, 640, 0.7); } catch (e) {}   // format illisible ici : envoyé tel quel
+  if (complet.size > 15 * 1024 * 1024) throw new Error("photo trop grosse (15 Mo au plus)");
+  const n = nomFichier(), ch = `${d.client_id}/photos/${n}.jpg`, ap = `${d.client_id}/apercus/${n}.jpg`;
+  for (const [chemin, blob] of [[ch, complet], [ap, apercu]]) {
+    const { error } = await sb.storage.from("dossiers").upload(chemin, blob, { contentType: blob.type || "image/jpeg" });
+    if (error) throw error;
+  }
+  const { error } = await sb.from("client_photos").insert({ ...d, apercu: ap, fichier: ch });
+  if (error) throw error;
+}
+async function dosJuridique(c, corps, re) {
+  const liste = await q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("date_evt", { ascending: false, nullsFirst: false }).order("cree_le", { ascending: false }));
+  const dans7 = ymd(plusJours(new Date(), 7));
+  corps.innerHTML = `<p class="muted small" style="margin-bottom:8px">🔒 Visible par toi seul, jamais par les intervenantes. Les pièces sont rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Juridique).</p>
+    <form id="fj" class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div class="deux"><label class="f">Type<select name="type">${Object.entries(TYPES_J).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+        <label class="f">Titre<input type="text" name="titre" required maxlength="200" placeholder="Ex. contrat signé, réclamation vitre cassée…"></label></div>
+      <div class="deux"><label class="f">Date (du fait, du courrier…)<input type="date" name="date_evt"></label>
+        <label class="f">Rappel le (facultatif : délai, fin de contrat…)<input type="date" name="echeance"></label></div>
+      <label class="f">Détail<textarea name="texte" maxlength="8000"></textarea></label>
+      <label class="f">Pièce jointe (PDF ou photo, facultatif)<input type="file" name="fichier" accept="application/pdf,image/*"></label>
+      <div><button class="btn primary" type="submit">Ajouter au dossier</button></div></form>
+    <section class="card" style="margin-top:12px">${liste.length ? liste.map(x => `<div class="ligne" data-j="${x.id}"><span style="min-width:0">
+        <span class="tag">${TYPES_J[x.type]}</span> <b>${esc(x.titre)}</b>${x.date_evt ? ` <span class="muted small">· ${new Date(x.date_evt + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}
+        ${x.echeance ? ` <span class="tag ${!x.traite && x.echeance <= dans7 ? "warn" : x.traite ? "off" : ""}">${x.traite ? "✓ traité" : "rappel le " + new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}
+        ${x.texte ? `<br><span style="white-space:pre-wrap">${esc(x.texte)}</span>` : ""}</span>
+      <span class="row" style="flex:none">${x.drive_url || x.fichier ? `<button class="btn" data-jvoir>📎 Pièce</button>` : ""}${x.echeance && !x.traite ? `<button class="btn go" data-jok>Traité ✓</button>` : ""}<button class="btn flat stop" data-jsup>Supprimer</button></span></div>`).join("")
+      : `<p class="muted">Rien dans le volet juridique.</p>`}</section>`;
+  corps.querySelector("#fj").onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(e.target), fic = f.get("fichier");
+    const d = { client_id: c.id, type: f.get("type"), titre: String(f.get("titre")).trim(), texte: String(f.get("texte")).trim() || null, date_evt: f.get("date_evt") || null, echeance: f.get("echeance") || null };
+    if (!d.titre) return toast("Le titre est obligatoire");
+    e.submitter.disabled = true;
+    try {
+      if (fic && fic.size) {
+        if (fic.size > 15 * 1024 * 1024) throw new Error("pièce trop grosse (15 Mo au plus)");
+        const ext = (fic.name.match(/\.(\w+)$/) || [, fic.type === "application/pdf" ? "pdf" : "jpg"])[1].toLowerCase();
+        d.fichier = `${c.id}/juridique/${nomFichier()}.${ext}`; d.nom_origine = fic.name;
+        const { error } = await sb.storage.from("dossiers").upload(d.fichier, fic, { contentType: fic.type || "application/octet-stream" });
+        if (error) throw error;
+      }
+      await maj(sb.from("client_juridique").insert(d)); toast("Ajouté au dossier juridique"); re();
+    } catch (err) { e.submitter.disabled = false; souci(err); }
+  };
+  corps.onclick = async e => {
+    const b = e.target.closest("button"), l = b && b.closest("[data-j]"); if (!l) return;
+    const x = liste.find(k => k.id === l.dataset.j);
+    if (b.hasAttribute("data-jvoir")) return x.drive_url ? window.open(x.drive_url, "_blank", "noopener") : ouvrirStockage(x.fichier);
+    if (b.hasAttribute("data-jok")) { await maj(sb.from("client_juridique").update({ traite: true }).eq("id", x.id)); compteurAVoir(); re(); }
+    if (b.hasAttribute("data-jsup")) { if (!confirm("Supprimer « " + x.titre + " » ? La pièce part aussi à la corbeille du Drive.")) return;
+      await maj(sb.from("client_juridique").update({ supprime_le: new Date().toISOString() }).eq("id", x.id)); re(); }
+  };
+}
+/* Formulaire de la fiche (nouveau client, ou onglet « Fiche » du dossier) */
+function formClient(c) {
   const ch = (k, t, type = "text") => `<label class="f">${t}<input type="${type}" name="${k}" value="${esc(c[k] || "")}"></label>`;
-  fenetre(`<h2 style="margin:0">${id ? esc(c.nom) : "Nouveau client"}</h2>
-    <form id="fc" style="display:flex;flex-direction:column;gap:10px">
+  return `<form id="fc" style="display:flex;flex-direction:column;gap:10px">
       <div class="deux">${ch("nom", "Nom")}${ch("telephone", "Téléphone", "tel")}</div>
       <div class="deux">${ch("email", "E-mail", "email")}${ch("adresse", "Adresse")}</div>
       <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
@@ -577,17 +763,18 @@ function ficheClient(id) {
       <label class="f">Accès (digicode, étage…) — vu par l'intervenante<textarea name="acces">${esc(c.acces || "")}</textarea></label>
       <label class="f">Clé — vu par l'intervenante<textarea name="cle">${esc(c.cle || "")}</textarea></label>
       <label class="f">Consignes — vu par l'intervenante<textarea name="consignes">${esc(c.consignes || "")}</textarea></label>
-      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    el.querySelector("#fc").onsubmit = async e => {
-      e.preventDefault(); const d = {};
-      for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
-      d.zone = d.zone ? Number(d.zone) : null;
-      if (!d.nom) return toast("Le nom est obligatoire");
-      if (id && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
-      await maj(id ? sb.from("clients").update(d).eq("id", id) : sb.from("clients").insert(d));
-      fermer(); toast("Enregistré"); afficher("clients");
-    };
-  });
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Fermer</button></div></form>`;
+}
+function brancherFormClient(el, c, apres) {
+  el.querySelector("#fc").onsubmit = async e => {
+    e.preventDefault(); const d = {};
+    for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
+    d.zone = d.zone ? Number(d.zone) : null;
+    if (!d.nom) return toast("Le nom est obligatoire");
+    if (c && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
+    await maj(c ? sb.from("clients").update(d).eq("id", c.id) : sb.from("clients").insert(d));
+    toast("Enregistré"); apres();
+  };
 }
 
 /* ===================== Papiers demandés (réglages) ===================== */
