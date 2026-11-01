@@ -411,7 +411,8 @@ async function accueil(o) {
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) accueil(b.dataset.onglet); };
   try {
     if (!(await chargerMoi())) return;
-    const c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes").order("nom");
+    let c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,temps_semaine_min,meteo").order("nom");
+    if (c.error && /temps_semaine_min|meteo/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes").order("nom");   // base pas encore à jour (SQL 14)
     if (c.error) throw c.error;
     clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
@@ -434,7 +435,8 @@ async function vueJour() {
       <div class="row" style="justify-content:space-between"><button class="lien client-nom" data-fiche="${x.client_id}">${esc(c.nom || "Client")} ›</button><span class="tag">${heure(x.debut)} – ${heure(x.fin)}</span></div>
       ${c.adresse ? `<a class="lien muted" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener">📍 ${esc(c.adresse)}</a>` : ""}
       <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : `<span></span>`}
-      <button class="btn" data-fiche="${x.client_id}"><span class="ic">👤</span>Fiche</button></div></div>`; };
+      <button class="btn" data-fiche="${x.client_id}"><span class="ic">👤</span>Fiche</button></div>
+      <button class="btn primary" data-route="${x.client_id}" data-min="${Math.round(minutesEntre(x.debut, x.fin))}"><span class="ic">📋</span>Feuille de route</button></div>`; };
   contenu(`<h1>Bonjour ${esc(moi.prenom || "")}</h1><p class="muted" style="margin-bottom:14px">${jourTxt(new Date())}</p>
     <button class="btn primary big" id="declarer" style="width:100%"><span class="ic">✍️</span>Déclarer mes heures</button>
     <div id="bloc-taches"></div>
@@ -448,7 +450,8 @@ async function vueJour() {
       <button class="btn" id="voir-agenda"><span class="ic">📅</span>Voir mon agenda</button></div>`);
   const c = document.getElementById("contenu");
   c.onclick = e => {
-    const f = e.target.closest("[data-fiche]"), d = e.target.closest("[data-decl]");
+    const f = e.target.closest("[data-fiche]"), d = e.target.closest("[data-decl]"), rt = e.target.closest("[data-route]");
+    if (rt) return feuilleRoute(rt.dataset.route, Number(rt.dataset.min) || 0);
     if (f) return ficheClient(f.dataset.fiche);
     if (d) {   // le passage prévu devient une ligne à vérifier dans Reporting
       const x = cr.data.find(k => k.id === d.dataset.decl);
@@ -690,6 +693,7 @@ function ficheClient(id) {
   feuille(`<h2 style="margin:0">${esc(c.nom)}</h2>
     ${c.adresse ? `<div class="grid2"><a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Google Maps</a>
       <a class="btn" href="${lienWaze(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🚗</span>Waze</a></div>` : ""}
+    <button class="btn primary" id="ouvrir-route"><span class="ic">📋</span>Feuille de route</button>
     ${tel ? `<div class="grid3"><a class="btn" href="${lienTel(tel)}"><span class="ic">📞</span>Appeler</a>
       <a class="btn" href="${lienSMS(tel, "")}"><span class="ic">💬</span>SMS</a>
       <a class="btn" href="${lienWhatsApp(tel)}" target="_blank" rel="noopener"><span class="ic">🟢</span>WhatsApp</a></div>` : ""}
@@ -708,11 +712,100 @@ function ficheClient(id) {
     ${blocNotes("Mes notes sur ce client", "Ce que OIKOS doit savoir sur ce client")}
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
     brancherNotes(el, id, null);
+    el.querySelector("#ouvrir-route").onclick = () => { fermer(); feuilleRoute(id, 0); };
     infosOikos(el.querySelector("#infos-oikos"), id);
     const zone = el.querySelector("#photos-client");
     photosClient(zone, id);
     el.querySelector("#ajout-photo").onclick = () => ajouterPhoto(id, () => photosClient(zone, id));
   });
+}
+
+/* ---------- Feuille de route : les tâches du client, classées par points ; elle coche ce qu'elle fait ---------- */
+/* Même calcul que dans le tableau de bord : plus une tâche dépasse sa fréquence sans être cochée, plus elle
+   monte ; « en partie » compte pour la moitié ; la météo inhabituelle en pousse ou en met en pause. */
+const METEO_PLUS = { canicule: ["arrosage"], secheresse: ["arrosage"], vent: ["ramassage", "nettoyage"], pluie: ["ramassage", "nettoyage"] };
+const METEO_PAUSE = { gel: ["taille", "plantation", "traitement"], canicule: ["plantation", "traitement", "taille"], pluie: ["traitement", "tonte"] };
+const CATS_ROUTE = { tonte: "Tonte", taille: "Taille", desherbage: "Désherbage", arrosage: "Arrosage", ramassage: "Ramassage", plantation: "Plantation", traitement: "Traitement", nettoyage: "Nettoyage", menage: "Ménage", autre: "Autre" };
+const FREQS = [["", "Une seule fois"], [7, "Chaque semaine"], [14, "Tous les 15 jours"], [30, "Chaque mois"], [90, "Chaque saison"], [365, "Une fois par an"]];
+function pointsTache(t, meteo, maintenant = Date.now()) {
+  if (!t.actif || t.termine) return { points: 0, etat: "fini" };
+  const mois = new Date(maintenant).getMonth() + 1;
+  if (t.mois && t.mois.length && !t.mois.includes(mois)) return { points: 0, etat: "hors saison" };
+  const types = ((meteo && meteo.alertes) || []).map(a => a.type);
+  if (types.some(k => (METEO_PAUSE[k] || []).includes(t.categorie))) return { points: 0, etat: "pause météo" };
+  const freq = t.frequence_jours || 14;   // ponctuelle : monte en deux semaines
+  let depuis = t.derniere_fois ? +new Date(t.derniere_fois) : +new Date(t.cree_le) - freq * 864e5;   // jamais faite : due tout de suite
+  if (t.derniere_partielle) depuis = Math.max(depuis, +new Date(t.derniere_partielle) - freq * 864e5 / 2);   // en partie : repart à mi-chemin
+  const retard = Math.max(0, (maintenant - depuis) / (freq * 864e5));
+  let points = Math.round(t.priorite * 10 * retard);
+  if (types.some(k => (METEO_PLUS[k] || []).includes(t.categorie))) points *= 2;
+  return { points, retard, etat: retard >= 1 ? "à faire" : retard >= 0.7 ? "bientôt" : "à jour" };
+}
+const dureeTxt = m => !m ? "" : m < 60 ? m + " min" : heuresTxt(m);
+async function feuilleRoute(clientId, minPassage) {
+  const c = clients.find(k => k.id === clientId) || {};
+  let fermer = null;
+  const afficher = async () => {
+    const j0 = debutJour().toISOString();
+    const [tr, cr] = await Promise.all([
+      sb.from("route_taches").select("*").eq("client_id", clientId).eq("actif", true).eq("termine", false),
+      sb.from("route_coches").select("*").eq("client_id", clientId).gte("fait_le", j0)]);
+    if (tr.error) { souci(tr.error); return ""; }
+    const coches = cr.data || [], budget = minPassage || c.temps_semaine_min || 0;
+    const liste = tr.data.map(t => ({ t, ...pointsTache(t, c.meteo), coche: coches.filter(k => k.tache_id === t.id).sort((a, b) => b.fait_le.localeCompare(a.fait_le))[0] }))
+      .sort((a, b) => b.points - a.points || b.t.priorite - a.t.priorite);
+    const actives = liste.filter(o => o.coche || o.etat === "à faire" || o.etat === "bientôt");
+    let cumul = 0;
+    actives.forEach(o => { o.auProgramme = !budget || cumul < budget; cumul += o.t.duree_min || 0; });
+    const reste = liste.filter(o => !actives.includes(o));
+    const ligne = o => `<div class="card" data-rt="${o.t.id}" style="gap:6px;${o.coche ? "opacity:.75" : ""}">
+        <div class="row" style="justify-content:space-between;flex-wrap:nowrap;align-items:flex-start"><span style="min-width:0"><b>${esc(o.t.titre)}</b>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</span>
+          <span class="tag ${o.etat === "à faire" ? "warn" : ""}" style="flex:none">${o.points} pts</span></div>
+        <span class="muted small">${CATS_ROUTE[o.t.categorie] || ""}${o.t.duree_min ? " · ≈ " + dureeTxt(o.t.duree_min) : ""}${o.t.source === "intervenante" ? " · ajoutée sur place" : ""}</span>
+        ${o.coche ? `<div class="row" style="justify-content:space-between"><span class="tag">${{ fait: "✓ Fait", partiel: "½ Fait en partie", pas_possible: "✕ Pas possible" }[o.coche.etat]} aujourd'hui</span>${o.coche.intervenante_id === moi.id ? `<button class="btn flat" data-annule="${o.coche.id}" style="min-height:36px">Annuler</button>` : ""}</div>`
+        : `<div class="grid3"><button class="btn go" data-c="fait"><span class="ic">✓</span>Fait</button><button class="btn" data-c="partiel"><span class="ic">½</span>En partie</button><button class="btn" data-c="pas_possible"><span class="ic">✕</span>Pas possible</button></div>`}</div>`;
+    const alertes = (c.meteo && c.meteo.alertes) || [];
+    return `<h2 style="margin:0">📋 ${esc(c.nom || "Client")}</h2>
+      <p class="muted small">Classées par priorité du moment. Les durées sont indicatives : fais au mieux, coche ce que tu as fait.</p>
+      ${alertes.length ? `<p class="tag warn" style="padding:8px 12px;border-radius:12px">${alertes.map(a => "⚠ " + esc(a.texte)).join("<br>")}</p>` : ""}
+      ${budget ? `<p><b>Temps prévu : ≈ ${heuresTxt(budget)}</b></p>` : ""}
+      ${actives.filter(o => o.auProgramme).length ? `<h2 style="margin:4px 0 0">Au programme</h2><div class="stack">${actives.filter(o => o.auProgramme).map(ligne).join("")}</div>` : `<p class="muted">Rien d'urgent : tout est à jour.</p>`}
+      ${actives.some(o => !o.auProgramme) ? `<h2 style="margin:4px 0 0">Si tu as le temps</h2><div class="stack">${actives.filter(o => !o.auProgramme).map(ligne).join("")}</div>` : ""}
+      ${reste.length ? `<details><summary class="muted small">${reste.length} autre(s) tâche(s) à jour, hors saison ou en pause</summary><div class="stack" style="margin-top:8px">${reste.map(o => `<div class="card"><b>${esc(o.t.titre)}</b><span class="muted small">${o.etat}</span></div>`).join("")}</div></details>` : ""}
+      <form class="stack card" id="frt"><b>➕ Ajouter une tâche</b>
+        <label class="f">Quoi ?<input name="titre" required maxlength="200" placeholder="Ex. tailler le laurier côté rue"></label>
+        <div class="grid2"><label class="f">Quand<select name="frequence_jours">${FREQS.map(([k, x]) => `<option value="${k}">${x}</option>`).join("")}</select></label>
+          <label class="f">Durée (min)<input name="duree_min" type="number" min="0" step="15" placeholder="30"></label></div>
+        <label class="f">Type<select name="categorie">${Object.entries(CATS_ROUTE).map(([k, x]) => `<option value="${k}" ${k === (c.activite === "Ménage" ? "menage" : "autre") ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+        <button class="btn" type="submit">Ajouter à la feuille de route</button></form>
+      <button class="btn flat" data-fermer>Fermer</button>`;
+  };
+  const brancher = el => {
+    el.onclick = async e => {
+      const a = e.target.closest("[data-annule]");
+      if (a) { const { error } = await sb.from("route_coches").delete().eq("id", a.dataset.annule); if (error) return souci(error); toast("Coche annulée"); return redessiner(el); }
+      const b = e.target.closest("[data-c]"); if (!b) return;
+      const carte = b.closest("[data-rt]"), etat = b.dataset.c;
+      if (etat !== "fait" && !carte.querySelector("[name=note]")) {   // une phrase pour expliquer, facultative
+        b.closest(".grid3").insertAdjacentHTML("afterend", `<label class="f">Un mot pour OIKOS (facultatif)<input name="note" maxlength="1000" placeholder="${etat === "partiel" ? "Ex. haie taillée côté rue seulement" : "Ex. pluie, accès fermé"}"></label>
+          <button class="btn primary" data-c="${etat}">Valider : ${etat === "partiel" ? "fait en partie" : "pas possible"}</button>`);
+        return;
+      }
+      const note = carte.querySelector("[name=note]"), { error } = await sb.from("route_coches").insert({ tache_id: carte.dataset.rt, client_id: clientId, etat, note: note && note.value.trim() || null });
+      if (error) return souci(error);
+      toast(etat === "fait" ? "✓ Coché" : "Noté"); redessiner(el);
+    };
+    el.querySelector("#frt").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target);
+      const { error } = await sb.from("route_taches").insert({ client_id: clientId, titre: String(f.get("titre")).trim(), categorie: f.get("categorie"),
+        frequence_jours: Number(f.get("frequence_jours")) || null, duree_min: Number(f.get("duree_min")) || null, priorite: 3 });
+      if (error) return souci(error);
+      toast("Tâche ajoutée"); redessiner(el);
+    };
+  };
+  const redessiner = async el => { const h = await afficher(); if (h) { el.innerHTML = h; brancher(el); } };
+  const html = await afficher(); if (!html) return;
+  fermer = feuille(html, el => brancher(el));
 }
 
 /* ---------- Dossier client : ce qu'OIKOS partage, et les photos ---------- */
