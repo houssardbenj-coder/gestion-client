@@ -129,8 +129,13 @@ function ecranConnexion(msg) {
   app.innerHTML = `<form class="connexion card" id="f"><div class="marque"><img src="../intervenante/icone-192.png" alt="">OIKOS Pilotage</div>
     <p class="muted">Réservé au gérant.</p>${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     <label class="f">E-mail<input type="email" id="e" autocomplete="username" required></label>
-    <label class="f">Mot de passe<input type="password" id="m" autocomplete="current-password" required></label>
+    <label class="f">Mot de passe<span class="row" style="flex-wrap:nowrap"><input type="password" id="m" autocomplete="current-password" required>
+      <button class="btn" type="button" id="voirMdp" aria-pressed="false">Voir</button></span></label>
     <button class="btn primary" type="submit">Entrer</button></form>`;
+  document.getElementById("voirMdp").onclick = () => {
+    const m = document.getElementById("m"), b = document.getElementById("voirMdp"), cache = m.type === "password";
+    m.type = cache ? "text" : "password"; b.textContent = cache ? "Cacher" : "Voir"; b.setAttribute("aria-pressed", cache); m.focus();
+  };
   document.getElementById("f").onsubmit = async ev => {
     ev.preventDefault();
     const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("e").value.trim().toLowerCase(), password: document.getElementById("m").value });
