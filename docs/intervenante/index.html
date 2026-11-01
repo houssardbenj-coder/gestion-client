@@ -96,6 +96,32 @@ a.lien.muted{color:var(--muted)}
 .ag-hour:first-child{border-top:0}
 .ag-hour span{position:absolute;left:8px;top:3px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .ag-hour::after{content:"";position:absolute;left:44px;right:0;top:50%;border-top:1px dashed var(--line)}
+/* choix rapide du jour et de l'heure : comme Pense intelligent */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;min-height:40px;padding:6px 12px;font-size:15px;font-weight:700;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pk{display:flex;flex-direction:column;gap:8px}
+.pk-tete{display:flex;gap:2px;align-items:center}
+.pk-tete .chips{flex:1;justify-content:center}
+.pk-tete .ag-nav{padding:2px 8px}
+.pk-autre{display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--sunk);border-radius:12px}
+.pk-autre .pk-tete b{flex:1;text-align:center;text-transform:capitalize}
+.pk-champ{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--surface);color:var(--ink);font-size:17px;width:100%}
+#pk-txt{border-style:dashed}
+.ag-d.passe{opacity:.5}
+.pk-grille{position:relative;background:var(--sunk);border-radius:12px;overflow:hidden;cursor:copy}
+.pk-h{position:absolute;left:0;right:0;border-top:1px solid var(--line);pointer-events:none}
+.pk-h:first-child{border-top:0}
+.pk-h span{position:absolute;left:8px;top:2px;font-size:12px;color:var(--muted)}
+.pk-h::after{content:"";position:absolute;left:44px;right:0;top:50%;border-top:1px dashed var(--line)}
+.pk-rdv,.pk-new{position:absolute;border-radius:6px;padding:1px 6px;font-size:13px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none}
+.pk-rdv{background:var(--accent-soft);border-left:3px solid var(--accent)}
+.pk-new{left:44px;right:4px;background:var(--accent);color:var(--accent-ink);border:2px solid var(--ink)}
+.pk-new.conflit{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.pk-maint{position:absolute;left:40px;right:0;height:2px;background:var(--stop);pointer-events:none}
+.pk-alerte{color:var(--warn);font-weight:700;font-size:15px}
+.cl-liste{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.cl-liste .btn{display:block;width:100%;min-height:48px;text-align:left;font-size:16px;font-weight:400}
 .ag-ev,.wk-ev{position:absolute;border:0;border-left:4px solid var(--accent);background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:3px 7px;text-align:left;display:flex;flex-direction:column;overflow:hidden;cursor:pointer}
 .ag-ev b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ag-ev span{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -973,22 +999,146 @@ function detailAgenda(ref, creneaux) {
     };
   });
 }
+/* Saisie rapide reprise de Pense intelligent : « mardi pro 14h30 », « demain 9h », « jeudi dans 2 semaines », « le 12/11 à 10h » */
+const DUREES = [1, 1.5, 2, 2.5, 3, 4];
+const aMinutes = (j, m) => { const d = new Date(j); d.setHours(0, m, 0, 0); return d; };
+const minutesDe = d => d.getHours() * 60 + d.getMinutes();
+const ymdTxt = d => versLocal(d).slice(0, 10);
+const hmCourt = d => d.getHours() + "h" + pad2(d.getMinutes());
+const jourCourt = d => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+const semainesDuMois = m => { const l = [], fin = new Date(m.getFullYear(), m.getMonth() + 1, 1); for (let d = debutSemaine(m); d < fin; d = ajouterJours(d, 7)) l.push(d); return l; };
+function lireQuand(txt) {
+  const s = sansAcc(txt).replace(/[’']/g, " "), auj = debutJour();
+  let j = null, mins = null;
+  const tm = s.match(/\b(\d{1,2})\s*(?:h|:)\s*(\d{2})?/) || (/\bmidi\b/.test(s) ? [0, "12", "0"] : null);
+  if (tm) { const h = Number(tm[1]), m = Number(tm[2] || 0); if (h < 24 && m < 60) mins = h * 60 + m; }
+  const dm = s.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (dm) { const a0 = auj.getFullYear(), a = dm[3] ? Number(dm[3].length === 2 ? "20" + dm[3] : dm[3]) : a0, d = new Date(a, Number(dm[2]) - 1, Number(dm[1]));
+    if (!dm[3] && d < auj) d.setFullYear(a0 + 1); if (!isNaN(d)) j = d; }
+  else if (/apres[- ]?demain/.test(s)) j = ajouterJours(auj, 2);
+  else if (/\bdemain\b/.test(s)) j = ajouterJours(auj, 1);
+  else if (/\baujourd|\bauj\b|\bce (matin|soir|midi)\b|\bcet apres/.test(s)) j = auj;
+  else { const w = s.match(/\b(lun|mar|mer|jeu|ven|sam|dim)[a-z]*\b/);
+    if (w) { const rang = { lun: 0, mar: 1, mer: 2, jeu: 3, ven: 4, sam: 5, dim: 6 }[w[1]], n = s.match(/dans\s+(\d)\s*sem/);
+      const sem = n ? Number(n[1]) : /\bpro(chain|chaine)?\b|\bsuivant/.test(s) ? 1 : 0;
+      j = ajouterJours(debutSemaine(auj), 7 * sem + rang); if (!sem && j < auj) j = ajouterJours(j, 7); }
+    else { const n = s.match(/dans\s+(\d+)\s*j/); if (n) j = ajouterJours(auj, Number(n[1])); } }
+  return { j, mins };
+}
 function ajouterPassage(pre = {}) {
-  const j = pre.jour || ajouterJours(debutJour(), 1);
+  let client = clients.length === 1 ? clients[0].id : "";
+  let vue = debutJour(pre.jour || ajouterJours(debutJour(), 1)), quand = null, incompris = false, tour = 0, moisAutre = null;
+  if (pre.h) { const [h, m] = pre.h.split(":").map(Number); quand = aMinutes(vue, h * 60 + m); }
+  const semaines = {};   // tes passages déjà prévus, par semaine (pour voir la journée et les chevauchements)
   feuille(`<h2 style="margin:0">Ajouter un passage</h2>
-    <form class="stack" id="fp">${choixClient(null)}
-      <div class="grid2"><label class="f">Jour<input name="jour" type="date" value="${versLocal(j).slice(0, 10)}" required></label>
-      <label class="f">Heure<input name="h" type="time" value="${pre.h || "09:00"}" required></label></div>
-      <label class="f">Durée<select name="duree">${[60, 90, 120, 150, 180, 210, 240, 300, 360, 420].map(m => `<option value="${m}" ${m === 120 ? "selected" : ""}>${heuresTxt(m)}</option>`).join("")}</select></label>
+    <form class="stack" id="fp">
+      <div><label class="f" for="cl-q">Client</label><div id="fp-client"></div></div>
+      <div class="stack" style="gap:6px"><label class="f" for="fp-duree">Durée (heures)</label><div class="chips" id="fp-durees"></div>
+        <input type="text" class="pk-champ" id="fp-duree" inputmode="decimal" autocomplete="off" value="2"></div>
+      <div class="pk"><div class="pk" id="pk-haut"></div>
+        <input type="text" class="pk-champ" id="pk-txt" autocomplete="off" enterkeyhint="done" placeholder="ou écris : mardi pro 14h30…" aria-label="Écrire le jour et l'heure">
+        <div class="pk" id="pk-bas"></div></div>
+      <div class="grid2"><label class="f">Jour précis<input type="date" id="pk-date"></label>
+        <label class="f">Heure précise<input type="time" id="pk-heure"></label></div>
       <div class="grid2"><label class="f">Répéter<select name="tous"><option value="0">Une seule fois</option><option value="7">Chaque semaine</option><option value="14">Toutes les 2 semaines</option></select></label>
       <label class="f">Pendant<select name="nb">${[4, 8, 12, 26].map(n => `<option value="${n}">${n} semaines</option>`).join("")}</select></label></div>
       <button class="btn primary big" type="submit">Ajouter</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
-    el.querySelector("#fp").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target), pas = Number(f.get("tous")), dur = Number(f.get("duree")) * 60000;
-      const d0 = new Date(f.get("jour") + "T" + f.get("h")), lignes = [];
+    const $ = s => el.querySelector(s), champDuree = $("#fp-duree");
+    const dureeH = () => parseFloat(champDuree.value.replace(",", "."));
+    const peindreDurees = () => { $("#fp-durees").innerHTML = DUREES.map(h => `<button type="button" class="chip" data-duree="${h}" aria-pressed="${dureeH() === h}">${String(h).replace(".", ",")} h</button>`).join(""); };
+    const clientsTrouves = t => clients.filter(c => sansAcc(c.nom + " " + (c.adresse || "")).includes(sansAcc(t).trim())).slice(0, 8);
+    const peindreResultats = () => { const l = clientsTrouves($("#cl-q").value);
+      $("#cl-res").innerHTML = l.map(c => `<button type="button" class="btn" data-client="${c.id}"><b>${esc(c.nom)}</b>${c.adresse ? `<br><span class="muted small">${esc(c.adresse)}</span>` : ""}</button>`).join("") || `<span class="muted small">Aucun client trouvé.</span>`; };
+    const peindreClient = () => {
+      $("#fp-client").innerHTML = client ? `<div class="row"><b class="client-nom">${esc(nomClient(client))}</b>${clients.length > 1 ? `<button type="button" class="btn flat" data-changer>Changer</button>` : ""}</div>`
+        : `<input type="text" class="pk-champ" id="cl-q" autocomplete="off" placeholder="Tape un nom ou une adresse…"><div class="cl-liste" id="cl-res"></div>`;
+      if (!client) peindreResultats();
+    };
+    async function peindre() {
+      const t = ++tour, lun = debutSemaine(vue), cle = ymdTxt(lun);
+      if (!(cle in semaines)) {
+        const { data, error } = await sb.from("creneaux").select("*").eq("intervenante_id", moi.id).eq("annule", false).gte("debut", lun.toISOString()).lt("debut", ajouterJours(lun, 7).toISOString()).order("debut");
+        if (error) souci(error);
+        semaines[cle] = error ? null : data;
+      }
+      if (t !== tour || !el.isConnected) return;
+      const passages = semaines[cle] || [], auj = ymdTxt(new Date()), ecart = Math.round((lun - debutSemaine(new Date())) / (7 * 864e5));
+      const duJour = j => passages.filter(c => ymdTxt(c.debut) === ymdTxt(j));
+      $("#pk-haut").innerHTML = `<div class="pk-tete"><button type="button" class="ag-nav" data-pknav="-7" aria-label="Semaine précédente">‹</button>
+          <div class="chips">${[[0, "Cette sem."], [1, "Sem. pro"], [2, "Dans 2 sem."]].map(([n, l]) => `<button type="button" class="chip" data-pksem="${n}" aria-pressed="${ecart === n}">${l}</button>`).join("")}
+            <button type="button" class="chip" data-pkautre aria-expanded="${!!moisAutre}" aria-pressed="${ecart < 0 || ecart > 2}">📅 ${ecart < 0 || ecart > 2 ? "Sem. du " + esc(jourCourt(lun)) : "Autre semaine"}</button></div>
+          <button type="button" class="ag-nav" data-pknav="7" aria-label="Semaine suivante">›</button></div>
+        ${moisAutre ? `<div class="pk-autre"><div class="pk-tete"><button type="button" class="ag-nav" data-pkmois="-1" aria-label="Mois précédent">‹</button><b>${esc(moisAutre.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }))}</b><button type="button" class="ag-nav" data-pkmois="1" aria-label="Mois suivant">›</button></div>
+          <div class="chips">${semainesDuMois(moisAutre).map(l => `<button type="button" class="chip" data-pksemaine="${ymdTxt(l)}" aria-pressed="${ymdTxt(l) === cle}">${esc(jourCourt(l))} – ${esc(jourCourt(ajouterJours(l, 6)))}</button>`).join("")}</div></div>` : ""}
+        <div class="ag-week">${[0, 1, 2, 3, 4, 5, 6].map(i => { const j = ajouterJours(lun, i), n = duJour(j).length, y = ymdTxt(j);
+          return `<button type="button" class="ag-d${y === ymdTxt(vue) ? " sel" : ""}${y === auj ? " today" : ""}${y < auj && y !== ymdTxt(vue) ? " passe" : ""}" data-pkjour="${y}" aria-pressed="${y === ymdTxt(vue)}"><span>${j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span><b>${j.getDate()}</b><i>${"•".repeat(Math.min(n, 3))}</i></button>`; }).join("")}</div>
+        <div class="chips">${[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(h => `<button type="button" class="chip" data-pkh="${h}" aria-pressed="${!!quand && quand.getHours() === h}">${h}h</button>`).join("")}</div>
+        ${quand ? `<div class="chips">${[0, 15, 30, 45].map(m => `<button type="button" class="chip" data-pkm="${m}" aria-pressed="${quand.getMinutes() === m}">${quand.getHours()}h${pad2(m)}</button>`).join("")}</div>` : ""}`;
+      const PX = 40, min = (dureeH() > 0 ? dureeH() : 1) * 60, fin = quand ? new Date(quand.getTime() + min * 6e4) : null;
+      const items = duJour(vue).map(c => ({ debut: new Date(c.debut), fin: new Date(c.fin), nom: nomClient(c.client_id) }));
+      let h0 = 8, h1 = 20;
+      items.concat(quand ? [{ debut: quand, fin }] : []).forEach(i => { h0 = Math.min(h0, i.debut.getHours()); h1 = Math.max(h1, ymdTxt(i.fin) === ymdTxt(i.debut) ? Math.ceil(minutesDe(i.fin) / 60) : 24); });
+      const y = d => (minutesDe(d) / 60 - h0) * PX, conflits = quand ? items.filter(i => i.debut < fin && i.fin > quand) : [];
+      let voies = [], groupe = [], finGroupe = 0; const clore = () => { groupe.forEach(i => i.nb = Math.max(1, voies.length)); voies = []; groupe = []; };
+      items.forEach(i => { if (i.debut >= finGroupe) clore(); let k = voies.findIndex(f => f <= i.debut); if (k < 0) { k = voies.length; voies.push(0); } voies[k] = i.fin; i.voie = k; groupe.push(i); if (i.fin > finGroupe) finGroupe = i.fin; }); clore();
+      let g = `<div class="pk-grille" id="pk-grille" data-h0="${h0}" data-px="${PX}" style="height:${(h1 - h0) * PX}px">`;
+      for (let h = h0; h < h1; h++) g += `<div class="pk-h" style="top:${(h - h0) * PX}px;height:${PX}px"><span>${h}h</span></div>`;
+      items.forEach(i => { g += `<div class="pk-rdv" style="top:${y(i.debut)}px;height:${Math.max(18, (i.fin - i.debut) / 36e5 * PX - 2)}px;left:calc(44px + (100% - 48px) * ${i.voie} / ${i.nb});width:calc((100% - 48px) / ${i.nb} - 3px)">${hmCourt(i.debut)} ${esc(i.nom)}</div>`; });
+      if (quand) g += `<div class="pk-new${conflits.length ? " conflit" : ""}" style="top:${y(quand)}px;height:${Math.max(18, min / 60 * PX - 2)}px">${conflits.length ? "⚠️" : "✓"} ${hmCourt(quand)} · ce passage</div>`;
+      if (ymdTxt(vue) === auj) { const n = new Date(); if (y(n) >= 0 && y(n) <= (h1 - h0) * PX) g += `<div class="pk-maint" style="top:${y(n)}px"></div>`; }
+      $("#pk-bas").innerHTML = (incompris ? `<div class="pk-alerte">Pas compris : essaie « mardi pro 14h » ou « 12/11 10h30 ».</div>` : "") + g + "</div>"
+        + (semaines[cle] === null ? `<div class="pk-alerte">Tes autres passages n'ont pas pu être chargés : vérifie ta journée avant d'ajouter.</div>` : "")
+        + (quand ? `<div>Créneau choisi : <b>${esc(jourTxt(quand))}, ${hmCourt(quand)}–${hmCourt(fin)}</b></div>
+            ${conflits.length ? `<div class="pk-alerte">⚠️ Chevauche ${conflits.length > 1 ? conflits.length + " passages" : "« " + esc(conflits[0].nom) + " »"}.</div>` : ""}
+            <div class="chips">${[[-1, "−1 jour"], [1, "+1 jour"], [7, "+1 semaine"]].map(([n, l]) => `<button type="button" class="chip" data-pkdecale="${n}">${l}</button>`).join("")}</div>`
+          : `<div class="muted small">Touche une heure ou un créneau libre.</div>`);
+      $("#pk-date").value = ymdTxt(vue); $("#pk-heure").value = quand ? pad2(quand.getHours()) + ":" + pad2(quand.getMinutes()) : "";
+    }
+    const choisir = d => { quand = d; vue = debutJour(d); incompris = false; peindre(); };
+    const allerAuJour = j => { if (quand) choisir(aMinutes(j, minutesDe(quand))); else { vue = debutJour(j); peindre(); } };
+    const rangJour = () => Math.round((vue - debutSemaine(vue)) / 864e5);
+    el.addEventListener("click", e => {
+      const b = s => e.target.closest(s); let t;
+      if ((t = b("[data-duree]"))) { champDuree.value = t.dataset.duree.replace(".", ","); peindreDurees(); peindre(); }
+      else if ((t = b("[data-client]"))) { client = t.dataset.client; peindreClient(); }
+      else if (b("[data-changer]")) { client = ""; peindreClient(); $("#cl-q").focus(); }
+      else if ((t = b("[data-pknav]"))) allerAuJour(ajouterJours(vue, Number(t.dataset.pknav)));
+      else if ((t = b("[data-pksem]"))) { moisAutre = null; allerAuJour(ajouterJours(debutSemaine(new Date()), 7 * Number(t.dataset.pksem) + rangJour())); }
+      else if (b("[data-pkautre]")) { moisAutre = moisAutre ? null : new Date(vue.getFullYear(), vue.getMonth(), 1); peindre(); }
+      else if ((t = b("[data-pkmois]"))) { moisAutre = new Date(moisAutre.getFullYear(), moisAutre.getMonth() + Number(t.dataset.pkmois), 1); peindre(); }
+      else if ((t = b("[data-pksemaine]"))) { const r = rangJour(); moisAutre = null; allerAuJour(ajouterJours(new Date(t.dataset.pksemaine + "T12:00"), r)); }
+      else if ((t = b("[data-pkjour]"))) allerAuJour(new Date(t.dataset.pkjour + "T12:00"));
+      else if ((t = b("[data-pkh]"))) choisir(aMinutes(vue, Number(t.dataset.pkh) * 60 + (quand ? quand.getMinutes() : 0)));
+      else if ((t = b("[data-pkm]"))) choisir(aMinutes(vue, quand.getHours() * 60 + Number(t.dataset.pkm)));
+      else if ((t = b("[data-pkdecale]"))) choisir(aMinutes(ajouterJours(quand, Number(t.dataset.pkdecale)), minutesDe(quand)));
+      else if ((t = b("#pk-grille"))) { const r = t.getBoundingClientRect(); choisir(aMinutes(vue, Number(t.dataset.h0) * 60 + Math.floor((e.clientY - r.top) / Number(t.dataset.px) * 2) * 30)); }
+    });
+    el.addEventListener("input", e => {
+      if (e.target.id === "cl-q") peindreResultats();
+      else if (e.target.id === "fp-duree") { peindreDurees(); peindre(); }
+      else if (e.target.id === "pk-txt") { const v = e.target.value, r = lireQuand(v);
+        if (r.j === null && r.mins === null) { incompris = v.trim().length > 3; peindre(); }
+        else choisir(aMinutes(r.j || vue, r.mins !== null ? r.mins : (quand ? minutesDe(quand) : 540))); }
+    });
+    el.addEventListener("change", e => {
+      if (e.target.id === "pk-date" && e.target.value) allerAuJour(new Date(e.target.value + "T12:00"));
+      else if (e.target.id === "pk-heure" && e.target.value) { const [h, m] = e.target.value.split(":").map(Number); choisir(aMinutes(vue, h * 60 + m)); }
+    });
+    el.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      if (e.target.id === "pk-txt") { e.preventDefault(); e.target.blur(); }
+      else if (e.target.id === "cl-q") { e.preventDefault(); const l = clientsTrouves(e.target.value); if (l.length) { client = l[0].id; peindreClient(); } }
+    });
+    peindreClient(); peindreDurees(); peindre();
+    $("#fp").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), pas = Number(f.get("tous")), h = dureeH();
+      if (!client) return toast("Choisis le client");
+      if (!(h > 0)) return toast("Indique la durée en heures, ex. 2 ou 2,5");
+      if (!quand) return toast("Choisis le jour et l'heure");
+      const dur = h * 36e5, d0 = quand, lignes = [];
       for (let k = 0; pas ? k * pas < Number(f.get("nb")) * 7 : k < 1; k++) {
         const debut = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + k * pas, d0.getHours(), d0.getMinutes());
-        lignes.push({ intervenante_id: moi.id, client_id: f.get("client"), debut: debut.toISOString(), fin: new Date(debut.getTime() + dur).toISOString() });
+        lignes.push({ intervenante_id: moi.id, client_id: client, debut: debut.toISOString(), fin: new Date(debut.getTime() + dur).toISOString() });
       }
       e.submitter.disabled = true;
       const { error } = await sb.from("creneaux").insert(lignes);
