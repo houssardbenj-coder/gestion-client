@@ -688,12 +688,24 @@ async function dosPhotos(c, corps, re) {
   corps.onclick = async e => {
     const b = e.target.closest("button"), fig = b && b.closest("[data-ph]"); if (!fig) return;
     const p = photos.find(x => x.id === fig.dataset.ph);
-    if (b.hasAttribute("data-ouvrir")) return p.drive_url ? window.open(p.drive_url, "_blank", "noopener") : ouvrirStockage(p.fichier || p.apercu);
+    if (b.hasAttribute("data-ouvrir")) return voirPhoto(p, urls[p.apercu]);
     if (b.hasAttribute("data-plu")) { await maj(sb.from("client_photos").update({ vue_le: new Date().toISOString() }).eq("id", p.id)); compteurAVoir(); re(); }
     if (b.hasAttribute("data-ppart")) { await maj(sb.from("client_photos").update({ partage: !p.partage }).eq("id", p.id)); re(); }
     if (b.hasAttribute("data-psup")) { if (!confirm("Supprimer cette photo ? Elle part aussi à la corbeille du Drive.")) return;
       await maj(sb.from("client_photos").update({ supprime_le: new Date().toISOString() }).eq("id", p.id)); toast("Photo supprimée"); re(); }
   };
+}
+/* La photo en grand dans le tableau de bord (l'aperçu, toujours dans la base) + lien vers l'original,
+   relu à chaque clic car le pont range la photo dans le Drive quelques minutes après l'envoi */
+async function voirPhoto(p, url) {
+  const { data } = await sb.from("client_photos").select("drive_url,fichier").eq("id", p.id).maybeSingle();
+  const q2 = data || p;
+  let original = q2.drive_url || "";
+  if (!original && q2.fichier) { const s = await sb.storage.from("dossiers").createSignedUrl(q2.fichier, 600); if (!s.error) original = s.data.signedUrl; }
+  fenetre(`<div class="row" style="justify-content:space-between"><h2 style="margin:0">${CATS[p.categorie] || "Photo"}${p.legende ? " · " + esc(p.legende) : ""}</h2><button class="btn flat" data-fermer>Fermer ✕</button></div>
+    ${url ? `<img src="${esc(url)}" alt="${esc(p.legende || CATS[p.categorie] || "Photo")}" style="width:100%;border-radius:12px">` : `<p class="muted">Aperçu indisponible.</p>`}
+    <div class="row" style="justify-content:space-between"><span class="muted small">${jour(p.prise_le)} ${hm(p.prise_le)} · ${p.auteur === moi.id ? "toi" : esc(nomInterv(p.auteur))}</span>
+      ${original ? `<a class="btn" href="${esc(original)}" target="_blank" rel="noopener">${q2.drive_url ? "📁 Ouvrir l'original dans le Drive" : "Ouvrir l'original"}</a>` : ""}</div>`);
 }
 /* Une photo → aperçu (640 px, gardé dans la base) + photo complète (1600 px, en transit vers le Drive d'OIKOS) */
 async function envoyerPhoto(f, d) {
@@ -745,7 +757,11 @@ async function dosJuridique(c, corps, re) {
   corps.onclick = async e => {
     const b = e.target.closest("button"), l = b && b.closest("[data-j]"); if (!l) return;
     const x = liste.find(k => k.id === l.dataset.j);
-    if (b.hasAttribute("data-jvoir")) return x.drive_url ? window.open(x.drive_url, "_blank", "noopener") : ouvrirStockage(x.fichier);
+    if (b.hasAttribute("data-jvoir")) {   // relu : le pont a pu ranger la pièce dans le Drive depuis l'ouverture
+      const { data: y } = await sb.from("client_juridique").select("drive_url,fichier").eq("id", x.id).maybeSingle();
+      const j = y || x;
+      return j.drive_url ? window.open(j.drive_url, "_blank", "noopener") : j.fichier ? ouvrirStockage(j.fichier) : toast("Pièce introuvable : recharge le dossier");
+    }
     if (b.hasAttribute("data-jok")) { await maj(sb.from("client_juridique").update({ traite: true }).eq("id", x.id)); compteurAVoir(); re(); }
     if (b.hasAttribute("data-jsup")) { if (!confirm("Supprimer « " + x.titre + " » ? La pièce part aussi à la corbeille du Drive.")) return;
       await maj(sb.from("client_juridique").update({ supprime_le: new Date().toISOString() }).eq("id", x.id)); re(); }
