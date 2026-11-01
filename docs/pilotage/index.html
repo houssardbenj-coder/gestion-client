@@ -76,6 +76,35 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .vignette{display:block;width:100%;border:0;padding:0;cursor:zoom-in;background:var(--sunk)}
 .vignette img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
 .photo figcaption{padding:8px 10px;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:700;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pk{display:flex;flex-direction:column;gap:8px;color:var(--ink)}
+.pk-tete{display:flex;gap:6px;align-items:center}
+.pk-tete .chips{flex:1;justify-content:center}
+.pk-jours{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.pk-j{display:flex;flex-direction:column;align-items:center;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:5px 0;cursor:pointer}
+.pk-j span{font-size:11px;text-transform:uppercase;color:var(--muted)}
+.pk-j b{font-size:16px}
+.pk-j i{font-style:normal;font-size:11px;line-height:1;height:11px;color:var(--accent)}
+.pk-j.auj b{color:var(--accent)}
+.pk-j.passe{opacity:.5}
+.pk-j.sel{background:var(--accent);border-color:var(--accent);opacity:1}
+.pk-j.sel span,.pk-j.sel b,.pk-j.sel i{color:var(--accent-ink)}
+.pk-grille{position:relative;background:var(--sunk);border-radius:10px;overflow:hidden;cursor:copy}
+.pk-h{position:absolute;left:0;right:0;border-top:1px solid var(--line);pointer-events:none}
+.pk-h:first-child{border-top:0}
+.pk-h span{position:absolute;left:8px;top:2px;font-size:11px;color:var(--muted)}
+.pk-h::after{content:"";position:absolute;left:44px;right:0;top:50%;border-top:1px dashed var(--line)}
+.pk-rdv,.pk-new{position:absolute;border-radius:6px;padding:1px 6px;font-size:12px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none}
+.pk-rdv{background:var(--accent-soft);border-left:3px solid var(--accent)}
+.pk-new{left:44px;right:4px;background:var(--accent);color:var(--accent-ink);border:2px solid var(--ink)}
+.pk-new.conflit{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.pk-maint{position:absolute;left:40px;right:0;height:2px;background:var(--stop);pointer-events:none}
+.pk-alerte{color:var(--warn);font-weight:700;font-size:13px}
+#pk-txt{border-style:dashed}
+.cl-liste{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.cl-liste .btn{text-align:left;font-weight:400;display:block;width:100%}
 </style>
 </head>
 <body>
@@ -306,27 +335,137 @@ async function vuePlanning() {
     if (a) { const [id, j] = a.dataset.ajout.split("|"); return fichePassagePrevu(null, id, j); }
   };
 }
+/* Saisie rapide reprise de Pense intelligent : « mardi pro 14h30 », « demain 9h », « jeudi dans 2 semaines », « le 12/11 à 10h » */
+const DUREES = [1, 1.5, 2, 2.5, 3, 4];
+const aMinutes = (j, m) => { const d = new Date(j); d.setHours(0, m, 0, 0); return d; };
+const minutesDe = d => d.getHours() * 60 + d.getMinutes();
+function lireQuand(txt) {
+  const s = String(txt).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’']/g, " "), auj = plusJours(new Date(), 0);
+  let j = null, mins = null;
+  const tm = s.match(/\b(\d{1,2})\s*(?:h|:)\s*(\d{2})?/) || (/\bmidi\b/.test(s) ? [0, "12", "0"] : null);
+  if (tm) { const h = Number(tm[1]), m = Number(tm[2] || 0); if (h < 24 && m < 60) mins = h * 60 + m; }
+  const dm = s.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (dm) { const a0 = auj.getFullYear(), a = dm[3] ? Number(dm[3].length === 2 ? "20" + dm[3] : dm[3]) : a0, d = new Date(a, Number(dm[2]) - 1, Number(dm[1]));
+    if (!dm[3] && d < auj) d.setFullYear(a0 + 1); if (!isNaN(d)) j = d; }
+  else if (/apres[- ]?demain/.test(s)) j = plusJours(auj, 2);
+  else if (/\bdemain\b/.test(s)) j = plusJours(auj, 1);
+  else if (/\baujourd|\bauj\b|\bce (matin|soir|midi)\b|\bcet apres/.test(s)) j = auj;
+  else { const w = s.match(/\b(lun|mar|mer|jeu|ven|sam|dim)[a-z]*\b/);
+    if (w) { const rang = { lun: 0, mar: 1, mer: 2, jeu: 3, ven: 4, sam: 5, dim: 6 }[w[1]], n = s.match(/dans\s+(\d)\s*sem/);
+      const sem = n ? Number(n[1]) : /\bpro(chain|chaine)?\b|\bsuivant/.test(s) ? 1 : 0;
+      j = plusJours(lundi(auj), 7 * sem + rang); if (!sem && j < auj) j = plusJours(j, 7); }
+    else { const n = s.match(/dans\s+(\d+)\s*j/); if (n) j = plusJours(auj, Number(n[1])); } }
+  return { j, mins };
+}
 /* Ajouter, déplacer ou annuler un passage prévu (le gérant fait le planning des salariées, et peut corriger celui des sous-traitantes) */
 async function fichePassagePrevu(x, interv, jourTxt) {
   const id = x ? x.intervenante_id : interv;
   const attrib = await q(sb.from("attributions").select("client_id,fin").eq("intervenante_id", id));
   const aujourd = ymd(new Date()), siens = cacheClients.filter(c => attrib.some(a => a.client_id === c.id && (!a.fin || a.fin >= aujourd)));
-  const d = x ? new Date(x.debut) : null, dur = x ? (new Date(x.fin) - new Date(x.debut)) / 6e4 : 120;
+  const choix = siens.length ? siens : cacheClients, dur = x ? (new Date(x.fin) - new Date(x.debut)) / 6e4 : 120;
+  let client = x ? x.client_id : (choix.length === 1 ? choix[0].id : "");
+  let quand = x ? new Date(x.debut) : null, vue = plusJours(quand || new Date(jourTxt + "T12:00"), 0), incompris = false, tour = 0;
+  const semaines = {};   // ses passages déjà prévus, par semaine (pour voir la journée et les chevauchements)
   fenetre(`<h2 style="margin:0">${x ? "Passage prévu" : "Ajouter un passage"} · ${esc(nomInterv(id))}</h2>
-    <form id="fp" style="display:flex;flex-direction:column;gap:10px">
-      <label class="f">Client<select name="client" required>${(siens.length ? siens : cacheClients).map(c => `<option value="${c.id}" ${x && x.client_id === c.id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>
+    <form id="fp" style="display:flex;flex-direction:column;gap:12px">
+      <div class="f"><label class="f" for="cl-q">Client</label><div id="fp-client"></div></div>
       ${!siens.length ? `<p class="muted small">Aucun client ne lui est confié : confie-le d'abord dans sa fiche, sinon elle ne le verra pas.</p>` : ""}
-      <div class="deux"><label class="f">Jour<input type="date" name="jour" value="${x ? ymd(d) : jourTxt}" required></label>
-        <label class="f">Heure<input type="time" name="h" value="${x ? pad2(d.getHours()) + ":" + pad2(d.getMinutes()) : "09:00"}" required></label></div>
-      <label class="f">Durée (heures)<input type="text" name="duree" inputmode="decimal" value="${String(dur / 60).replace(".", ",")}"></label>
+      <div class="f"><label class="f" for="fp-duree">Durée (heures)</label><div class="row"><div class="chips" id="fp-durees"></div>
+        <input type="text" id="fp-duree" inputmode="decimal" autocomplete="off" style="width:80px" value="${String(dur / 60).replace(".", ",")}"></div></div>
+      <div class="pk"><div class="pk" id="pk-haut"></div>
+        <input type="text" id="pk-txt" autocomplete="off" enterkeyhint="done" placeholder="ou écris : mardi pro 14h30, demain 9h…" aria-label="Écrire le jour et l'heure">
+        <div class="pk" id="pk-bas"></div></div>
+      <div class="deux"><label class="f">Jour précis<input type="date" id="pk-date"></label>
+        <label class="f">Heure précise<input type="time" id="pk-heure"></label></div>
       <div class="row"><button class="btn primary" type="submit">Enregistrer</button>${x ? `<button class="btn stop" type="button" id="annule">Annuler ce passage</button>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div></form>`, (el, fermer) => {
-    el.querySelector("#fp").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target), h = parseFloat(String(f.get("duree")).replace(",", "."));
+    const $ = s => el.querySelector(s), champDuree = $("#fp-duree");
+    const dureeH = () => parseFloat(champDuree.value.replace(",", "."));
+    const peindreDurees = () => { $("#fp-durees").innerHTML = DUREES.map(h => `<button type="button" class="chip" data-duree="${h}" aria-pressed="${dureeH() === h}">${String(h).replace(".", ",")} h</button>`).join(""); };
+    const clientsTrouves = t => choix.filter(c => norm(c.nom + " " + (c.adresse || "")).includes(norm(t))).slice(0, 8);
+    const peindreResultats = () => { const t = $("#cl-q").value, l = clientsTrouves(t);
+      $("#cl-res").innerHTML = l.map(c => `<button type="button" class="btn" data-client="${c.id}"><b>${esc(c.nom)}</b>${c.adresse ? `<br><span class="muted small">${esc(c.adresse)}</span>` : ""}</button>`).join("") || `<span class="muted small">Aucun client trouvé.</span>`; };
+    const peindreClient = () => {
+      $("#fp-client").innerHTML = client ? `<div class="row"><b>${esc(nomClient(client))}</b><button type="button" class="btn flat" data-changer>Changer</button></div>`
+        : `<input type="text" id="cl-q" autocomplete="off" placeholder="Tape un nom ou une adresse…"><div class="cl-liste" id="cl-res"></div>`;
+      if (!client) peindreResultats();
+    };
+    async function peindre() {
+      const t = ++tour, lun = lundi(vue), cle = ymd(lun);
+      if (!(cle in semaines)) {
+        try { semaines[cle] = (await q(sb.from("creneaux").select("*").eq("intervenante_id", id).eq("annule", false).gte("debut", lun.toISOString()).lt("debut", plusJours(lun, 7).toISOString()).order("debut"))).filter(c => !x || c.id !== x.id); }
+        catch (e) { souci(e); semaines[cle] = null; }
+      }
+      if (t !== tour || !el.isConnected) return;
+      const passages = semaines[cle] || [], auj = ymd(new Date()), ecart = Math.round((lun - lundi(new Date())) / (7 * 864e5));
+      const duJour = j => passages.filter(c => ymd(new Date(c.debut)) === ymd(j));
+      $("#pk-haut").innerHTML = `<div class="pk-tete"><button type="button" class="btn" data-pknav="-7" aria-label="Semaine précédente">‹</button>
+          <div class="chips">${[[0, "Cette sem."], [1, "Sem. pro"], [2, "Dans 2 sem."]].map(([n, l]) => `<button type="button" class="chip" data-pksem="${n}" aria-pressed="${ecart === n}">${l}</button>`).join("")}</div>
+          <button type="button" class="btn" data-pknav="7" aria-label="Semaine suivante">›</button></div>
+        <div class="pk-jours">${[0, 1, 2, 3, 4, 5, 6].map(i => { const j = plusJours(lun, i), n = duJour(j).length, y = ymd(j);
+          return `<button type="button" class="pk-j${y === ymd(vue) ? " sel" : ""}${y === auj ? " auj" : ""}${y < auj ? " passe" : ""}" data-pkjour="${y}" aria-pressed="${y === ymd(vue)}"><span>${j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span><b>${j.getDate()}</b><i>${"•".repeat(Math.min(n, 3))}</i></button>`; }).join("")}</div>
+        <div class="chips">${[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(h => `<button type="button" class="chip" data-pkh="${h}" aria-pressed="${!!quand && quand.getHours() === h}">${h}h</button>`).join("")}</div>
+        ${quand ? `<div class="chips">${[0, 15, 30, 45].map(m => `<button type="button" class="chip" data-pkm="${m}" aria-pressed="${quand.getMinutes() === m}">${quand.getHours()}h${pad2(m)}</button>`).join("")}</div>` : ""}`;
+      const PX = 40, min = (dureeH() > 0 ? dureeH() : 1) * 60, fin = quand ? new Date(quand.getTime() + min * 6e4) : null;
+      const items = duJour(vue).map(c => ({ debut: new Date(c.debut), fin: new Date(c.fin), nom: nomClient(c.client_id) }));
+      let h0 = 8, h1 = 20;
+      items.concat(quand ? [{ debut: quand, fin }] : []).forEach(i => { h0 = Math.min(h0, i.debut.getHours()); h1 = Math.max(h1, ymd(i.fin) === ymd(i.debut) ? Math.ceil(minutesDe(i.fin) / 60) : 24); });
+      const y = d => (minutesDe(d) / 60 - h0) * PX, conflits = quand ? items.filter(i => i.debut < fin && i.fin > quand) : [];
+      let voies = [], groupe = [], finGroupe = 0; const clore = () => { groupe.forEach(i => i.nb = Math.max(1, voies.length)); voies = []; groupe = []; };
+      items.forEach(i => { if (i.debut >= finGroupe) clore(); let k = voies.findIndex(f => f <= i.debut); if (k < 0) { k = voies.length; voies.push(0); } voies[k] = i.fin; i.voie = k; groupe.push(i); if (i.fin > finGroupe) finGroupe = i.fin; }); clore();
+      let g = `<div class="pk-grille" id="pk-grille" data-h0="${h0}" data-px="${PX}" style="height:${(h1 - h0) * PX}px">`;
+      for (let h = h0; h < h1; h++) g += `<div class="pk-h" style="top:${(h - h0) * PX}px;height:${PX}px"><span>${h}h</span></div>`;
+      items.forEach(i => { g += `<div class="pk-rdv" style="top:${y(i.debut)}px;height:${Math.max(18, (i.fin - i.debut) / 36e5 * PX - 2)}px;left:calc(44px + (100% - 48px) * ${i.voie} / ${i.nb});width:calc((100% - 48px) / ${i.nb} - 3px)">${hm(i.debut)} ${esc(i.nom)}</div>`; });
+      if (quand) g += `<div class="pk-new${conflits.length ? " conflit" : ""}" style="top:${y(quand)}px;height:${Math.max(18, min / 60 * PX - 2)}px">${conflits.length ? "⚠️" : "✓"} ${hm(quand)} · ce passage</div>`;
+      if (ymd(vue) === auj) { const n = new Date(); if (y(n) >= 0 && y(n) <= (h1 - h0) * PX) g += `<div class="pk-maint" style="top:${y(n)}px"></div>`; }
+      $("#pk-bas").innerHTML = (incompris ? `<div class="pk-alerte">Pas compris : essaie « mardi pro 14h » ou « 12/11 10h30 ».</div>` : "") + g + "</div>"
+        + (semaines[cle] === null ? `<div class="pk-alerte">Ses autres passages n'ont pas pu être chargés : vérifie la journée avant d'enregistrer.</div>` : "")
+        + (quand ? `<div>Créneau choisi : <b>${esc(quand.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${hm(quand)}–${hm(fin)}</b></div>
+            ${conflits.length ? `<div class="pk-alerte">⚠️ Chevauche ${conflits.length > 1 ? conflits.length + " passages" : "« " + esc(conflits[0].nom) + " »"}.</div>` : ""}
+            <div class="chips">${[[-1, "−1 jour"], [1, "+1 jour"], [7, "+1 semaine"]].map(([n, l]) => `<button type="button" class="chip" data-pkdecale="${n}">${l}</button>`).join("")}</div>`
+          : `<div class="muted small">Touche une heure ou un créneau libre.</div>`);
+      $("#pk-date").value = ymd(vue); $("#pk-heure").value = quand ? pad2(quand.getHours()) + ":" + pad2(quand.getMinutes()) : "";
+    }
+    const choisir = d => { quand = d; vue = plusJours(d, 0); incompris = false; peindre(); };
+    const allerAuJour = j => { if (quand) choisir(aMinutes(j, minutesDe(quand))); else { vue = plusJours(j, 0); peindre(); } };
+    el.addEventListener("click", e => {
+      const b = s => e.target.closest(s); let t;
+      if ((t = b("[data-duree]"))) { champDuree.value = t.dataset.duree.replace(".", ","); peindreDurees(); peindre(); }
+      else if ((t = b("[data-client]"))) { client = t.dataset.client; peindreClient(); }
+      else if (b("[data-changer]")) { client = ""; peindreClient(); $("#cl-q").focus(); }
+      else if ((t = b("[data-pknav]"))) allerAuJour(plusJours(vue, Number(t.dataset.pknav)));
+      else if ((t = b("[data-pksem]"))) allerAuJour(plusJours(lundi(new Date()), 7 * Number(t.dataset.pksem) + Math.round((plusJours(vue, 0) - lundi(vue)) / 864e5)));
+      else if ((t = b("[data-pkjour]"))) allerAuJour(new Date(t.dataset.pkjour + "T12:00"));
+      else if ((t = b("[data-pkh]"))) choisir(aMinutes(vue, Number(t.dataset.pkh) * 60 + (quand ? quand.getMinutes() : 0)));
+      else if ((t = b("[data-pkm]"))) choisir(aMinutes(vue, quand.getHours() * 60 + Number(t.dataset.pkm)));
+      else if ((t = b("[data-pkdecale]"))) choisir(aMinutes(plusJours(quand, Number(t.dataset.pkdecale)), minutesDe(quand)));
+      else if ((t = b("#pk-grille"))) { const r = t.getBoundingClientRect(); choisir(aMinutes(vue, Number(t.dataset.h0) * 60 + Math.floor((e.clientY - r.top) / Number(t.dataset.px) * 2) * 30)); }
+    });
+    el.addEventListener("input", e => {
+      if (e.target.id === "cl-q") peindreResultats();
+      else if (e.target.id === "fp-duree") { peindreDurees(); peindre(); }
+      else if (e.target.id === "pk-txt") { const v = e.target.value, r = lireQuand(v);
+        if (r.j === null && r.mins === null) { incompris = v.trim().length > 3; peindre(); }
+        else choisir(aMinutes(r.j || vue, r.mins !== null ? r.mins : (quand ? minutesDe(quand) : 540))); }
+    });
+    el.addEventListener("change", e => {
+      if (e.target.id === "pk-date" && e.target.value) allerAuJour(new Date(e.target.value + "T12:00"));
+      else if (e.target.id === "pk-heure" && e.target.value) { const [h, m] = e.target.value.split(":").map(Number); choisir(aMinutes(vue, h * 60 + m)); }
+    });
+    el.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      if (e.target.id === "pk-txt") { e.preventDefault(); e.target.blur(); }
+      else if (e.target.id === "cl-q") { e.preventDefault(); const l = clientsTrouves(e.target.value); if (l.length) { client = l[0].id; peindreClient(); } }
+    });
+    peindreClient(); peindreDurees(); peindre();
+    $("#fp").onsubmit = async e => {
+      e.preventDefault(); const h = dureeH();
+      if (!client) return toast("Choisis le client");
       if (!(h > 0)) return toast("Indique la durée en heures, ex. 2 ou 2,5");
-      const debut = new Date(f.get("jour") + "T" + f.get("h")), fin = new Date(debut.getTime() + h * 36e5);
-      const d2 = { client_id: f.get("client"), debut: debut.toISOString(), fin: fin.toISOString() };
+      if (!quand) return toast("Choisis le jour et l'heure");
+      const fin = new Date(quand.getTime() + h * 36e5);
+      const d2 = { client_id: client, debut: quand.toISOString(), fin: fin.toISOString() };
       await maj(x ? sb.from("creneaux").update(d2).eq("id", x.id) : sb.from("creneaux").insert({ ...d2, intervenante_id: id }));
-      fermer(); toast("Planning enregistré"); afficher("planning");
+      plSemaine = lundi(quand); fermer(); toast("Planning enregistré"); afficher("planning");
     };
     if (x) el.querySelector("#annule").onclick = async () => { await maj(sb.from("creneaux").update({ annule: true }).eq("id", x.id)); fermer(); toast("Passage annulé"); afficher("planning"); };
   });
