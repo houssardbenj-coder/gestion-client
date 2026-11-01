@@ -134,7 +134,7 @@ function ecranConnexion(msg) {
 }
 
 /* ===================== Cadre et onglets ===================== */
-const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["intervenantes", "Intervenantes"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["taches", "À faire"], ["intervenantes", "Intervenantes"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
 async function afficher(o) {
   if (o) onglet = o;
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque"><img src="../intervenante/icone-192.png" alt="">OIKOS Pilotage</div>
@@ -144,17 +144,18 @@ async function afficher(o) {
   app.querySelector("nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) afficher(b.dataset.o); };
   document.getElementById("sortir").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, planning: vuePlanning, intervenantes: vueIntervenantes, clients: vueClients, papiers: vuePapiers })[onglet](); }
+  try { await ({ avoir: vueAVoir, planning: vuePlanning, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, papiers: vuePapiers })[onglet](); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
 async function compteurAVoir() {
   try {
-    const [n, d, c] = await Promise.all([
+    const [n, d, c, ta] = await Promise.all([
       sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
       sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu"),
-      sb.from("clients_import").select("id", { count: "exact", head: true }).in("etat", ["nouveau", "different", "a_verifier"])]);
-    const t = (n.count || 0) + (d.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
+      sb.from("clients_import").select("id", { count: "exact", head: true }).in("etat", ["nouveau", "different", "a_verifier"]),
+      sb.from("taches").select("id", { count: "exact", head: true }).is("vue_le", null)]);
+    const t = (n.count || 0) + (d.count || 0) + (ta.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
     if (e) e.innerHTML = t ? `<span class="bulle">${t}</span>` : "";
     if (ec) ec.innerHTML = c.count ? `<span class="bulle">${c.count}</span>` : "";
   } catch (e) {}
@@ -174,11 +175,12 @@ async function vueAVoir() {
   const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
   const il7 = new Date(Date.now() - 7 * 864e5).toISOString(), maintenant = new Date().toISOString();
   const tampon = await q(sb.from("clients_import").select("id", { count: "exact" }).in("etat", ["nouveau", "different", "a_verifier"]));
-  const [notes, docs, pts, prevus] = await Promise.all([
+  const [notes, docs, pts, prevus, taches] = await Promise.all([
     q(sb.from("notes_terrain").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("documents").select("*").eq("etat", "recu").order("cree_le")),
     q(sb.from("pointages").select("*").gte("arrivee", depuis).order("arrivee", { ascending: false })),
-    q(sb.from("creneaux").select("*").eq("annule", false).gte("debut", il7).lt("fin", maintenant).order("debut"))]);
+    q(sb.from("creneaux").select("*").eq("annule", false).gte("debut", il7).lt("fin", maintenant).order("debut")),
+    q(sb.from("taches").select("*").is("vue_le", null).order("cree_le", { ascending: false }))]);
   const douteux = pts.filter(p => p.corrige_par_intervenante || [p.gps_arrivee, p.gps_depart].some(g => g && g.etat !== "ok"));
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const nonDeclares = prevus.filter(x => !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut)));
@@ -193,6 +195,11 @@ async function vueAVoir() {
         ${docs.length ? docs.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
           <span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
     </div>
+    ${taches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenantes <span class="tag">${taches.length}</span></h2>
+        <button class="btn" data-tlu="tout">Tout marquer lu ✓</button></div>
+      ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté à sa liste" : "a remis à faire"} : ${esc(t.texte)}
+          ${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
+        <button class="btn" data-tlu="${t.id}">Lu ✓</button></div>`).join("")}</section>` : ""}
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Prévus mais pas encore déclarés (7 derniers jours)</h2>
       ${nonDeclares.length ? nonDeclares.map(x => `<div class="ligne"><span><b>${esc(nomInterv(x.intervenante_id))}</b> chez ${esc(nomClient(x.client_id))}</span><span class="muted">${jour(x.debut)} ${hm(x.debut)}–${hm(x.fin)}</span></div>`).join("") : `<p class="muted">Tout ce qui était prévu a été déclaré.</p>`}</section>
     ${douteux.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Anciens pointages GPS à vérifier</h2>
@@ -201,6 +208,8 @@ async function vueAVoir() {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.o) return afficher(b.dataset.o);
     if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); afficher(); }
+    if (b.dataset.tlu) { const r = sb.from("taches").update({ vue_le: new Date().toISOString() });
+      await maj(b.dataset.tlu === "tout" ? r.in("id", taches.map(t => t.id)) : r.eq("id", b.dataset.tlu)); afficher(); }
     if (b.dataset.voir) voirFichier(b.dataset.voir);
     if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); afficher(); }
     if (b.dataset.ko) refuserDoc(b.dataset.ko, () => afficher());
@@ -291,6 +300,77 @@ async function fichePassagePrevu(x, interv, jourTxt) {
       fermer(); toast("Planning enregistré"); afficher("planning");
     };
     if (x) el.querySelector("#annule").onclick = async () => { await maj(sb.from("creneaux").update({ annule: true }).eq("id", x.id)); fermer(); toast("Passage annulé"); afficher("planning"); };
+  });
+}
+
+/* ===================== À faire : la liste partagée avec chaque intervenante ===================== */
+/* Ce que le gérant ajoute arrive dans son appli ; ce qu'elle ajoute ou coche revient ici (et dans À voir). */
+let taQui = "", taFaites = false;
+async function vueTaches() {
+  await chargerBase();
+  const gens = cacheProfils.filter(p => p.role === "intervenante" && p.actif);
+  const depuis = new Date(Date.now() - 30 * 864e5).toISOString(), auj = ymd(new Date());
+  let r = sb.from("taches").select("*").order("echeance", { nullsFirst: false }).order("cree_le");
+  r = taFaites ? r.or("fait_le.is.null,fait_le.gte." + depuis) : r.is("fait_le", null);
+  if (taQui) r = r.eq("intervenante_id", taQui);
+  const taches = await q(r);
+  const parQui = (taQui ? gens.filter(p => p.id === taQui) : gens).map(p => [p, taches.filter(t => t.intervenante_id === p.id)])
+    .concat([[{ id: "", prenom: "Anciennes intervenantes" }, taches.filter(t => !gens.some(p => p.id === t.intervenante_id))]]).filter(([p, l]) => l.length || p.id);
+  const ligne = t => `<div class="ligne" data-t="${t.id}"><span class="row" style="flex-wrap:nowrap;align-items:flex-start;min-width:0">
+      <input type="checkbox" data-coche ${t.fait_le ? "checked" : ""} title="Fait" style="width:20px;height:20px;flex:none;margin-top:2px">
+      <span style="min-width:0"><span style="${t.fait_le ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(t.texte)}</span><br>
+        <span class="row" style="gap:4px">${t.cree_par === t.intervenante_id ? `<span class="tag warn">ajoutée par elle</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}
+        ${t.echeance && !t.fait_le ? `<span class="tag ${t.echeance < auj ? "warn" : ""}">${t.echeance < auj ? "en retard · " : "avant le "}${jour(t.echeance + "T12:00")}</span>` : ""}
+        ${t.fait_le ? `<span class="muted small">fait le ${jour(t.fait_le)}${t.fait_par && t.fait_par !== t.intervenante_id ? " (par toi)" : ""}</span>` : ""}</span></span></span>
+    <span class="row" style="flex:none"><button class="btn flat" data-modif>Modifier</button><button class="btn flat stop" data-suppr>Supprimer</button></span></div>`;
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>À faire</h1>
+      <span class="row"><select id="qui" style="max-width:220px"><option value="">Toutes les intervenantes</option>${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select>
+      <label class="chk small"><input type="checkbox" id="faites" ${taFaites ? "checked" : ""}>Voir aussi ce qui est fait (30 jours)</label></span></div>
+    <p class="muted small" style="margin:6px 0 12px">Une liste par intervenante, partagée avec son appli : elle voit ce que tu lui demandes et le coche ; tu vois ce qu'elle note elle-même et ce qu'elle a fait.</p>
+    <form class="card" id="fa" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0">Ajouter une tâche</h2>
+      <label class="f">Quoi ?<input type="text" name="texte" required maxlength="500" placeholder="Ex. envoyer ton attestation de vigilance, récupérer la clé chez Mme Bibas…"></label>
+      <div class="deux"><label class="f">Pour<select name="qui" required>${gens.length > 1 ? `<option value="tous">Toutes les intervenantes</option>` : ""}${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label>
+        <label class="f">Avant le (facultatif)<input type="date" name="echeance"></label></div>
+      <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label>
+      <div><button class="btn primary" type="submit" ${gens.length ? "" : "disabled"}>Ajouter</button></div></form>
+    ${parQui.map(([p, l]) => `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">${esc(nomPers(p))} <span class="tag">${l.filter(t => !t.fait_le).length} à faire</span></h2>
+      ${l.length ? l.map(ligne).join("") : `<p class="muted small">Rien à faire.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucune intervenante active.</p>`}`);
+  el.querySelector("#qui").onchange = e => { taQui = e.target.value; afficher("taches"); };
+  el.querySelector("#faites").onchange = e => { taFaites = e.target.checked; afficher("taches"); };
+  el.querySelector("#fa").onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(e.target), texte = String(f.get("texte")).trim();
+    if (!texte) return toast("Écris ce qu'il y a à faire");
+    const pour = f.get("qui") === "tous" ? gens.map(p => p.id) : [f.get("qui")];
+    await maj(sb.from("taches").insert(pour.map(id => ({ intervenante_id: id, texte, client_id: f.get("client_id") || null, echeance: f.get("echeance") || null }))));
+    toast(pour.length > 1 ? "Ajouté pour " + pour.length + " intervenantes" : "Ajouté : elle le voit dans son appli"); afficher("taches");
+  };
+  el.addEventListener("change", async e => {
+    if (!e.target.matches("[data-coche]")) return;
+    const id = e.target.closest("[data-t]").dataset.t;
+    await maj(sb.from("taches").update({ fait_le: e.target.checked ? new Date().toISOString() : null }).eq("id", id));
+    toast(e.target.checked ? "Fait ✓" : "Remis à faire"); afficher("taches");
+  });
+  el.addEventListener("click", async e => {
+    const b = e.target.closest("button"), l = b && b.closest("[data-t]"); if (!l) return;
+    const t = taches.find(x => x.id === l.dataset.t);
+    if (b.hasAttribute("data-suppr")) { if (!confirm("Supprimer « " + t.texte + " » ? Elle disparaît aussi de son appli.")) return;
+      await maj(sb.from("taches").delete().eq("id", t.id)); toast("Supprimé"); return afficher("taches"); }
+    if (b.hasAttribute("data-modif")) modifierTache(t);
+  });
+}
+function modifierTache(t) {
+  fenetre(`<h2 style="margin:0">Modifier · ${esc(nomInterv(t.intervenante_id))}</h2>
+    <form id="fm" style="display:flex;flex-direction:column;gap:10px">
+      <label class="f">Quoi ?<textarea name="texte" required maxlength="500">${esc(t.texte)}</textarea></label>
+      <div class="deux"><label class="f">Avant le (facultatif)<input type="date" name="echeance" value="${t.echeance || ""}"></label>
+        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}" ${c.id === t.client_id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label></div>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fm").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), texte = String(f.get("texte")).trim();
+      if (!texte) return toast("Le texte est obligatoire");
+      await maj(sb.from("taches").update({ texte, echeance: f.get("echeance") || null, client_id: f.get("client_id") || null }).eq("id", t.id));
+      fermer(); toast("Enregistré"); afficher("taches");
+    };
   });
 }
 
