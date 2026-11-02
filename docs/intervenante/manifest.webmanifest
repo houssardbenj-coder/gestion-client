@@ -1,7 +1,7 @@
 {
-  "name": "OIKOS Intervenante",
+  "name": "OIKOS Intervenant",
   "short_name": "OIKOS",
-  "description": "Application des intervenantes OIKOS SUD SERVICES",
+  "description": "Application des intervenants OIKOS SUD SERVICES",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

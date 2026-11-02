@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#7A8568">
 <meta name="robots" content="noindex,nofollow">
-<title>OIKOS Intervenante</title>
+<title>OIKOS Intervenant</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icone-192.png">
 <link rel="apple-touch-icon" href="icone-192.png">
@@ -294,12 +294,12 @@ async function chargerMoi() {
 
 /* ===================== Écrans d'accès ===================== */
 function page(html, solo) { app.innerHTML = `<main class="page${solo ? " solo" : ""}">${html}</main>`; window.scrollTo(0, 0); }
-const LOGO = `<div class="marque-acc"><img class="tuile" src="logo-oikos.png" alt=""><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace intervenante</div></div>`;
+const LOGO = `<div class="marque-acc"><img class="tuile" src="logo-oikos.png" alt=""><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace intervenant</div></div>`;
 
 function ecranCode(message) {
   page(`${LOGO}
     <h1>Code d'accès OIKOS</h1>
-    <p class="muted">Cette application est réservée aux intervenantes d'OIKOS. Entre ton e-mail et le code d'accès donné par OIKOS (ou ton mot de passe si tu l'as déjà choisi).</p>
+    <p class="muted">Cette application est réservée aux intervenants d'OIKOS. Entre ton e-mail et le code d'accès donné par OIKOS (ou ton mot de passe si tu l'as déjà choisi).</p>
     ${message ? `<p class="tag warn" style="padding:8px 12px;border-radius:12px">${esc(message)}</p>` : ""}
     <form class="stack" id="f">
       <label class="f">Ton e-mail<input id="email" type="email" autocomplete="username" required inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
@@ -461,7 +461,7 @@ const choixClient = (sel, nom = "client") => `<label class="f">Client<select nam
 const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["agenda", "📅", "Agenda"], ["clients", "👥", "Clients"], ["mois", "📊", "Reporting"], ["moi", "👤", "Moi"]];
 async function accueil(o) {
   if (o) onglet = o;
-  app.innerHTML = `<header class="entete"><img class="tuile" src="logo-oikos.png" alt=""><div><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace intervenante</div></div></header>
+  app.innerHTML = `<header class="entete"><img class="tuile" src="logo-oikos.png" alt=""><div><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace intervenant</div></div></header>
     <main class="page" id="contenu"><p class="muted">Chargement…</p></main>
     <nav class="nav" aria-label="Onglets"><div>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ic}</span>${t}</button>`).join("")}</div></nav>`;
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) accueil(b.dataset.onglet); };
