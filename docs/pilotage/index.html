@@ -1290,12 +1290,17 @@ async function dosAnalyses(c, corps, re) {
   const liste = await q(sb.from("client_analyses").select("*").eq("client_id", c.id).order("fait_le", { ascending: false }));
   const ouverte = liste.find(a => a.etat !== "abandonnee");
   const tab = v => (Array.isArray(v) ? v : []).filter(Boolean);
-  corps.innerHTML = liste.map(a => { const r = a.rapport || {}, modif = a.etat === "brouillon"; return `<details class="card" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
+  corps.innerHTML = liste.map(a => { const r = a.rapport || {}, attente = ["a_envoyer", "en_cours"].includes(a.mail_etat), modif = a.etat === "brouillon" && !attente; return `<details class="card" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
       <summary class="row" style="cursor:pointer;justify-content:space-between"><b>${a.type === "menage" ? "🧽 Ménage" : "🌿 Jardin"} · ${jourAn(a.fait_le)}</b><span class="row">${tagAnalyse(a)}${lienDocAnalyse(a)}</span></summary>
       <div class="row" style="margin-top:10px">
-        ${modif ? `<button class="btn primary" data-etat="proposee">📨 Marquer comme proposée au client</button>` : ""}
+        ${modif ? `<button class="btn primary" data-mail>📧 Envoyer au client par mail</button><button class="btn" data-etat="proposee">Déjà remis autrement</button>` : ""}
+        ${a.mail_etat === "a_envoyer" ? `<span class="tag warn">Mail validé pour ${esc(a.mail_a)} : il part dans les 5 minutes</span><button class="btn" data-mail-annule>Annuler l'envoi</button>` : ""}
+        ${a.mail_etat === "en_cours" ? `<span class="tag warn">Envoi du mail en cours à ${esc(a.mail_a)}</span>` : ""}
+        ${a.mail_etat === "erreur" && modif ? `<span class="err small">Mail non envoyé : ${esc(a.mail_erreur || "erreur")}</span>` : ""}
+        ${a.mail_etat === "envoye" && a.mail_envoye_le && a.etat !== "brouillon" ? `<span class="muted small">Mail envoyé le ${jourAn(a.mail_envoye_le)} à ${esc(a.mail_a)}</span>` : ""}
         ${a.etat === "proposee" ? `<button class="btn primary" data-accepter>✓ Le client accepte : créer sa routine</button><button class="btn" data-etat="brouillon">Revenir au brouillon pour modifier</button>` : ""}
         ${modif || a.etat === "proposee" ? `<button class="btn flat stop" data-etat="abandonnee">Abandonner</button>` : ""}
+
         ${a.etat === "abandonnee" ? `<button class="btn" data-etat="brouillon">Reprendre</button>` : ""}
         ${a.etat === "acceptee" && a.accepte_le ? `<span class="muted small">Acceptée le ${jourAn(a.accepte_le)} : la routine se règle dans l'onglet Feuille de route.</span>` : ""}
         ${a.etat === "proposee" && a.propose_le ? `<span class="muted small">Proposée le ${jourAn(a.propose_le)}</span>` : ""}</div>
@@ -1324,9 +1329,11 @@ async function dosAnalyses(c, corps, re) {
     if (b.dataset.etat) {
       if (b.dataset.etat === "abandonnee" && !confirm("Abandonner cette analyse ? Elle reste gardée dans le dossier et peut être reprise.")) return;
       const maintenant = new Date().toISOString();
-      await maj(sb.from("client_analyses").update({ etat: b.dataset.etat, ...(b.dataset.etat === "proposee" ? { propose_le: maintenant } : {}), ...(b.dataset.etat === "brouillon" && !a.doc_url ? { doc_a_refaire: true } : {}) }).eq("id", a.id));
+      await maj(sb.from("client_analyses").update({ etat: b.dataset.etat, ...(b.dataset.etat === "proposee" ? { propose_le: maintenant } : {}), ...(b.dataset.etat === "brouillon" ? { mail_etat: null, mail_erreur: null, ...(!a.doc_url ? { doc_a_refaire: true } : {}) } : {}) }).eq("id", a.id));
       toast("Analyse : " + ETATS_ANALYSE[b.dataset.etat][0].toLowerCase()); return re();
     }
+    if (b.hasAttribute("data-mail")) return envoyerAnalyseMail(c, a, re);
+    if (b.hasAttribute("data-mail-annule")) { await maj(sb.from("client_analyses").update({ mail_etat: null }).eq("id", a.id).eq("mail_etat", "a_envoyer")); toast("Envoi annulé, sauf si le mail venait de partir"); return re(); }
     if (b.hasAttribute("data-accepter")) return accepterAnalyse(c, a, re);
     if (b.hasAttribute("data-garder-texte")) { r.texte_devis = bloc.querySelector("[data-texte]").value.trim(); await garder(a); toast("Texte enregistré : le document client se refait dans les 5 minutes"); return re(); }
     if (b.hasAttribute("data-tajout")) return modifierTacheAnalyse(a, null, garder, re);
@@ -1334,6 +1341,25 @@ async function dosAnalyses(c, corps, re) {
     if (b.dataset.tret !== undefined) { const t = tab(r.taches)[+b.dataset.tret]; if (!t || !confirm("Retirer « " + t.titre + " » de cette proposition ?")) return;
       r.taches = tab(r.taches).filter((x, i) => i !== +b.dataset.tret); await garder(a); toast("Tâche retirée"); re(); }
   };
+}
+/* Aperçu du mail au client : rien ne part sans ce clic ; le Pont photos OIKOS l'envoie avec le PDF depuis la boîte OIKOS */
+function envoyerAnalyseMail(c, a, re) {
+  const message = a.mail_message || `Bonjour,\n\nVous trouverez en pièce jointe la feuille de route que nous vous proposons pour ${a.type === "menage" ? "votre logement" : "votre jardin"}.\n\nDites-nous simplement, en répondant à ce mail, si elle vous convient ou si vous souhaitez y changer quelque chose.\n\nCordialement,\nOIKOS Sud Services`;
+  fenetre(`<h2 style="margin:0">Envoyer au client par mail · ${esc(c.nom)}</h2>
+    <form id="fmail" style="display:flex;flex-direction:column;gap:10px">
+      <label class="f">Adresse du client<input type="email" name="mail_a" required maxlength="254" value="${esc(a.mail_a || c.email || "")}"></label>
+      ${c.email ? "" : `<p class="muted small">Ce client n'a pas d'e-mail dans sa fiche : celui-ci y sera enregistré.</p>`}
+      <label class="f">Objet<input type="text" name="mail_objet" required maxlength="200" value="${esc(a.mail_objet || "Votre feuille de route OIKOS")}"></label>
+      <label class="f">Message<textarea name="mail_message" required maxlength="6000" style="min-height:190px">${esc(message)}</textarea></label>
+      <p class="muted small">📎 Pièce jointe : le document client (PDF)${a.doc_a_refaire ? ", en préparation : le mail attendra qu'il soit prêt" : ""}. Le mail part de la boîte OIKOS dans les 5 minutes.</p>
+      <div class="row"><button class="btn primary" type="submit">📧 Envoyer ce mail</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fmail").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), adresse = String(f.get("mail_a")).trim().toLowerCase();
+      await maj(sb.from("client_analyses").update({ mail_a: adresse, mail_objet: String(f.get("mail_objet")).trim(), mail_message: String(f.get("mail_message")).trim(), mail_etat: "a_envoyer", mail_erreur: null }).eq("id", a.id));
+      if (!c.email) { await maj(sb.from("clients").update({ email: adresse }).eq("id", c.id)); c.email = adresse; }
+      fermer(); toast("Mail validé : il part dans les 5 minutes"); re();
+    };
+  });
 }
 /* La tâche d'une proposition (pas encore dans la feuille de route) : mêmes champs, les mois sont gardés tels quels */
 function modifierTacheAnalyse(a, i, garder, re) {
