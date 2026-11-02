@@ -107,6 +107,29 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 #pk-txt{border-style:dashed}
 .cl-liste{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .cl-liste .btn{text-align:left;font-weight:400;display:block;width:100%}
+.tk-grp>summary::-webkit-details-marker{display:none}
+.tk-grp>summary span{background:var(--bg);border-radius:999px;padding:0 8px;font-size:12px}
+.tk-grp>summary::after{content:"▾";margin-left:auto;transition:transform .2s}
+.tk-grp:not([open])>summary::after{transform:rotate(-90deg)}
+.tk-late>summary{color:var(--warn)}
+.doc-nom{flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;cursor:pointer;font-weight:700;overflow-wrap:anywhere}
+.doc-nom span{font-weight:400}
+.docs{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.tkc{padding:0;overflow:hidden}
+.tk-grp{border-top:1px solid var(--line)}
+.tk-grp>summary{cursor:pointer;padding:9px 16px;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);list-style:none;display:flex;gap:8px;align-items:center}
+ul.tasks{list-style:none;margin:0;padding:0}
+ul.tasks li{display:flex;align-items:center;gap:12px;padding:9px 16px;border-top:1px solid var(--line)}
+ul.tasks li input[type=checkbox]{width:20px;height:20px;flex:none;accent-color:var(--go)}
+.tk-open{flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;cursor:pointer}
+.tk-open:hover .txt{color:var(--accent)}
+li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
+.t-note{font-size:13px;color:var(--muted)}
+.due{flex:none;font-weight:700;font-size:12px;color:var(--muted);background:var(--bg);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.due.late{color:#fff;background:var(--stop)}
+.doc{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--bg);border-radius:10px;padding:6px 10px}
+.depot{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;border:2px dashed var(--line);border-radius:12px;padding:12px}
+.depot.survol{border-color:var(--accent);background:var(--accent-soft)}
 </style>
 </head>
 <body>
@@ -136,11 +159,11 @@ const chiffres = s => String(s || "").replace(/\D/g, "").slice(-9);
 const nomPers = p => ((p.prenom || "") + " " + (p.nom || "")).trim() || p.email || "?";
 const STATUTS = { "sous-traitant": "Sous-traitante", salarie: "Salariée" };
 async function q(promesse) { const { data, error } = await promesse; if (error) throw error; return data; }
-function fenetre(html, brancher) {
+function fenetre(html, brancher, quandFerme) {
   const v = document.createElement("div"); v.className = "voile";
   v.innerHTML = `<div class="fenetre" role="dialog" aria-modal="true">${html}</div>`;
   document.body.appendChild(v);
-  const fermer = () => v.remove();
+  const fermer = () => { v.remove(); if (quandFerme) quandFerme(); };
   v.addEventListener("click", e => { if (e.target === v || e.target.closest("[data-fermer]")) fermer(); });
   if (brancher) brancher(v.querySelector(".fenetre"), fermer);
   return fermer;
@@ -192,14 +215,15 @@ async function afficher(o) {
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
 async function compteurAVoir() {
   try {
-    const [n, d, c, ta, ph, ju] = await Promise.all([
+    const [n, d, c, ta, ph, ju, td] = await Promise.all([
       sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
       sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu"),
       sb.from("clients_import").select("id", { count: "exact", head: true }).in("etat", ["nouveau", "different", "a_verifier"]),
       sb.from("taches").select("id", { count: "exact", head: true }).is("vue_le", null),
       sb.from("client_photos").select("id", { count: "exact", head: true }).is("vue_le", null).is("supprime_le", null),
-      sb.from("client_juridique").select("id", { count: "exact", head: true }).eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7)))]);
-    const t = (n.count || 0) + (d.count || 0) + (ta.count || 0) + (ph.count || 0) + (ju.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
+      sb.from("client_juridique").select("id", { count: "exact", head: true }).eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7))),
+      sb.from("tache_documents").select("id", { count: "exact", head: true }).is("vue_le", null)]);
+    const t = (n.count || 0) + (d.count || 0) + (ta.count || 0) + (ph.count || 0) + (ju.count || 0) + (td.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
     if (e) e.innerHTML = t ? `<span class="bulle">${t}</span>` : "";
     if (ec) ec.innerHTML = c.count ? `<span class="bulle">${c.count}</span>` : "";
   } catch (e) {}
@@ -219,14 +243,16 @@ async function vueAVoir() {
   const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
   const il7 = new Date(Date.now() - 7 * 864e5).toISOString(), maintenant = new Date().toISOString();
   const tampon = await q(sb.from("clients_import").select("id", { count: "exact" }).in("etat", ["nouveau", "different", "a_verifier"]));
-  const [notes, docs, pts, prevus, taches, photos, echeances] = await Promise.all([
+  const [notes, docs, pts, prevus, taches, photos, echeances, docsTaches] = await Promise.all([
     q(sb.from("notes_terrain").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("documents").select("*").eq("etat", "recu").order("cree_le")),
     q(sb.from("pointages").select("*").gte("arrivee", depuis).order("arrivee", { ascending: false })),
     q(sb.from("creneaux").select("*").eq("annule", false).gte("debut", il7).lt("fin", maintenant).order("debut")),
     q(sb.from("taches").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("client_photos").select("*").is("vue_le", null).is("supprime_le", null).order("prise_le", { ascending: false })),
-    q(sb.from("client_juridique").select("*").eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7))).order("echeance"))]);
+    q(sb.from("client_juridique").select("*").eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7))).order("echeance")),
+    q(sb.from("tache_documents").select("*").is("vue_le", null).order("cree_le", { ascending: false }))]);
+  const tachesDesDocs = docsTaches.length ? await q(sb.from("taches").select("*").in("id", [...new Set(docsTaches.map(d => d.tache_id))])) : [];
   const apercusAVoir = await urlsSignees(photos.slice(0, 12).map(p => p.apercu));
   const douteux = pts.filter(p => p.corrige_par_intervenante || [p.gps_arrivee, p.gps_depart].some(g => g && g.etat !== "ok"));
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
@@ -244,9 +270,13 @@ async function vueAVoir() {
     </div>
     ${taches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenantes <span class="tag">${taches.length}</span></h2>
         <button class="btn" data-tlu="tout">Tout marquer lu ✓</button></div>
-      ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté à sa liste" : "a remis à faire"} : ${esc(t.texte)}
+      ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté ou modifié dans sa liste" : "a commenté ou remis à faire"} : ${esc(t.texte)}${t.commentaire ? `<br><span class="muted small">💬 ${esc(t.commentaire)}</span>` : ""}
           ${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
-        <button class="btn" data-tlu="${t.id}">Lu ✓</button></div>`).join("")}</section>` : ""}
+        <span class="row" style="flex:none"><button class="btn" data-touvre="${t.id}">Ouvrir</button><button class="btn" data-tlu="${t.id}">Lu ✓</button></span></div>`).join("")}</section>` : ""}
+    ${docsTaches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📁 Nouveaux documents dans les dossiers <span class="tag">${docsTaches.length}</span></h2>
+        <button class="btn" data-dlu="tout">Tout marquer vu ✓</button></div>
+      ${docsTaches.map(d => { const t = tachesDesDocs.find(x => x.id === d.tache_id) || {}; return `<div class="ligne"><span><b>${esc(nomInterv(d.ajoute_par))}</b> a ajouté ${esc(d.nom)}<br><span class="muted small">Dossier « ${esc(t.dossier_nom || t.texte || "?")} » · ${jour(d.cree_le)} ${hm(d.cree_le)}</span></span>
+        <span class="row" style="flex:none"><button class="btn" data-dvoir="${esc(d.chemin)}">Voir</button><button class="btn" data-douvre="${d.tache_id}">Ouvrir le dossier</button><button class="btn" data-dlu="${d.id}">Vu ✓</button></span></div>`; }).join("")}</section>` : ""}
     ${echeances.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">⚖️ Rappels juridiques (7 prochains jours ou en retard) <span class="tag warn">${echeances.length}</span></h2>
       ${echeances.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b> · ${esc(TYPES_J[x.type])} : ${esc(x.titre)}<br><span class="muted small">rappel le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span></span>
         <span class="row"><button class="btn" data-dossier="${x.client_id}|juridique">Ouvrir le dossier</button><button class="btn go" data-jtraite="${x.id}">Traité ✓</button></span></div>`).join("")}</section>` : ""}
@@ -270,6 +300,11 @@ async function vueAVoir() {
       await maj(b.dataset.phlu === "tout" ? r.in("id", photos.map(p => p.id)) : r.eq("id", b.dataset.phlu)); afficher(); }
     if (b.dataset.tlu) { const r = sb.from("taches").update({ vue_le: new Date().toISOString() });
       await maj(b.dataset.tlu === "tout" ? r.in("id", taches.map(t => t.id)) : r.eq("id", b.dataset.tlu)); afficher(); }
+    if (b.dataset.touvre) return ficheTache(taches.find(t => t.id === b.dataset.touvre), () => afficher());
+    if (b.dataset.dvoir) return ouvrirDocTache(b.dataset.dvoir);
+    if (b.dataset.douvre) return ficheTache(tachesDesDocs.find(t => t.id === b.dataset.douvre), () => afficher());
+    if (b.dataset.dlu) { const r = sb.from("tache_documents").update({ vue_le: new Date().toISOString() });
+      await maj(b.dataset.dlu === "tout" ? r.in("id", docsTaches.map(d => d.id)) : r.eq("id", b.dataset.dlu)); afficher(); }
     if (b.dataset.voir) voirFichier(b.dataset.voir);
     if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); afficher(); }
     if (b.dataset.ko) refuserDoc(b.dataset.ko, () => afficher());
@@ -481,72 +516,215 @@ async function fichePassagePrevu(x, interv, jourTxt) {
 }
 
 /* ===================== À faire : la liste partagée avec chaque intervenante ===================== */
-/* Ce que le gérant ajoute arrive dans son appli ; ce qu'elle ajoute ou coche revient ici (et dans À voir). */
-let taQui = "", taFaites = false;
+/* Ce que le gérant ajoute arrive dans son appli ; ce qu'elle ajoute ou coche revient ici (et dans À voir).
+   Présentation de Pense intelligent : « Pour quand ? » en boutons, sections par échéance, ce qui est fait part seul dans l'archive. */
+const TA_GROUPES = { late: "En retard", today: "Aujourd'hui", week: "Cette semaine", next: "Semaine pro", later: "Plus tard", none: "Pas pressé", done: "Fait aujourd'hui" };
+const TA_MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const taAuj = () => ymd(new Date());
+const taDemain = () => ymd(plusJours(new Date(), 1));
+const taDimanche = (sem = 0) => { const d = new Date(); return ymd(plusJours(d, (7 - d.getDay()) % 7 + 7 * sem)); };
+const taGroupe = t => { const a = taAuj(); return t.fait_le ? "done" : !t.echeance ? "none" : t.echeance < a ? "late" : t.echeance === a ? "today" : t.echeance <= taDimanche() ? "week" : t.echeance <= taDimanche(1) ? "next" : "later"; };
+const taQuandDe = e => !e ? "none" : e === taAuj() ? "today" : e === taDemain() ? "tomorrow" : e === taDimanche() ? "week" : e === taDimanche(1) ? "next" : "pick";
+const taEcheanceDe = (w, date) => w === "pick" ? (date || null) : ({ today: taAuj(), tomorrow: taDemain(), week: taDimanche(), next: taDimanche(1), none: null })[w];
+function taBadge(t) {
+  if (!t.echeance || t.fait_le) return "";
+  const a = taAuj();
+  if (t.echeance < a) return `<span class="due late">en retard · ${Math.round((new Date(a + "T12:00") - new Date(t.echeance + "T12:00")) / 864e5)} j</span>`;
+  if (t.echeance === a) return "";
+  if (t.echeance === taDemain()) return `<span class="due">demain</span>`;
+  const d = new Date(t.echeance + "T12:00");
+  return `<span class="due">${t.echeance <= taDimanche() ? d.toLocaleDateString("fr-FR", { weekday: "short" }) : d.getDate() + " " + TA_MOIS[d.getMonth()]}</span>`;
+}
+const taChips = (w, date) => `<div class="chips" data-quand>${[["today", "Aujourd'hui"], ["tomorrow", "Demain"], ["week", "Cette semaine"], ["next", "Semaine pro"], ["pick", "📅 Date…"], ["none", "Pas pressé"]].map(([k, l]) => `<button type="button" class="chip" data-w="${k}" aria-pressed="${k === w}">${l}</button>`).join("")}</div>
+  <input type="date" data-quand-date value="${esc(date || "")}" ${w === "pick" ? "" : "hidden"} style="max-width:200px">`;
+function taBrancherChips(zone, surChange) {
+  const dt = zone.querySelector("[data-quand-date]");
+  const lu = () => ({ w: zone.querySelector('[data-w][aria-pressed="true"]').dataset.w, date: dt.value });
+  zone.querySelector("[data-quand]").onclick = e => {
+    const b = e.target.closest("[data-w]"); if (!b) return;
+    zone.querySelectorAll("[data-w]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    dt.hidden = b.dataset.w !== "pick";
+    if (!dt.hidden && !dt.value) { try { dt.showPicker(); } catch (_) { dt.focus(); } }
+    if (surChange) surChange(lu());
+  };
+  dt.onchange = () => { if (surChange) surChange(lu()); };
+  return lu;
+}
+const taComptes = docs => docs.reduce((o, d) => (o[d.tache_id] = (o[d.tache_id] || 0) + 1, o), {});
+const taLigne = (t, nb) => `<li class="${t.fait_le ? "is-done" : ""}" data-t="${t.id}">
+    <input type="checkbox" data-coche ${t.fait_le ? "checked" : ""} title="Fait" aria-label="Fait">
+    <button class="tk-open" data-ouvre><span class="txt">${esc(t.texte)}</span>
+      ${t.commentaire ? `<span class="t-note">💬 ${esc(t.commentaire)}</span>` : ""}
+      <span class="row" style="gap:4px;margin-top:2px">${t.dossier_nom ? `<span class="tag">📁 ${esc(t.dossier_nom)}${nb ? " · " + nb : ""}</span>` : ""}${t.cree_par === t.intervenante_id ? `<span class="tag warn">ajoutée par elle</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}</span></button>
+    ${taBadge(t)}</li>`;
+let taQui = "", taQuand = "today", taDate = "", taOuverts = new Set(["late", "today", "week", "next", "later", "none", "done"]);
 async function vueTaches() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante" && p.actif);
-  const depuis = new Date(Date.now() - 30 * 864e5).toISOString(), auj = ymd(new Date());
-  let r = sb.from("taches").select("*").order("echeance", { nullsFirst: false }).order("cree_le");
-  r = taFaites ? r.or("fait_le.is.null,fait_le.gte." + depuis) : r.is("fait_le", null);
+  let r = sb.from("taches").select("*").or("fait_le.is.null,fait_le.gte." + plusJours(new Date(), 0).toISOString()).order("echeance", { nullsFirst: false }).order("cree_le");
   if (taQui) r = r.eq("intervenante_id", taQui);
-  const taches = await q(r);
+  const [taches, docs] = await Promise.all([q(r), q(sb.from("tache_documents").select("tache_id"))]);
+  const nb = taComptes(docs);
   const parQui = (taQui ? gens.filter(p => p.id === taQui) : gens).map(p => [p, taches.filter(t => t.intervenante_id === p.id)])
     .concat([[{ id: "", prenom: "Anciennes intervenantes" }, taches.filter(t => !gens.some(p => p.id === t.intervenante_id))]]).filter(([p, l]) => l.length || p.id);
-  const ligne = t => `<div class="ligne" data-t="${t.id}"><span class="row" style="flex-wrap:nowrap;align-items:flex-start;min-width:0">
-      <input type="checkbox" data-coche ${t.fait_le ? "checked" : ""} title="Fait" style="width:20px;height:20px;flex:none;margin-top:2px">
-      <span style="min-width:0"><span style="${t.fait_le ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(t.texte)}</span><br>
-        <span class="row" style="gap:4px">${t.cree_par === t.intervenante_id ? `<span class="tag warn">ajoutée par elle</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}
-        ${t.echeance && !t.fait_le ? `<span class="tag ${t.echeance < auj ? "warn" : ""}">${t.echeance < auj ? "en retard · " : "avant le "}${jour(t.echeance + "T12:00")}</span>` : ""}
-        ${t.fait_le ? `<span class="muted small">fait le ${jour(t.fait_le)}${t.fait_par && t.fait_par !== t.intervenante_id ? " (par toi)" : ""}</span>` : ""}</span></span></span>
-    <span class="row" style="flex:none"><button class="btn flat" data-modif>Modifier</button><button class="btn flat stop" data-suppr>Supprimer</button></span></div>`;
+  const groupes = l => Object.keys(TA_GROUPES).map(g => [g, l.filter(t => taGroupe(t) === g)]).filter(([, x]) => x.length).map(([g, x]) =>
+    `<details class="tk-grp tk-${g}" data-grp="${g}" ${taOuverts.has(g) ? "open" : ""}><summary>${TA_GROUPES[g]} <span>${x.length}</span></summary><ul class="tasks">${x.map(t => taLigne(t, nb[t.id])).join("")}</ul></details>`).join("");
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>À faire</h1>
       <span class="row"><select id="qui" style="max-width:220px"><option value="">Toutes les intervenantes</option>${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select>
-      <label class="chk small"><input type="checkbox" id="faites" ${taFaites ? "checked" : ""}>Voir aussi ce qui est fait (30 jours)</label></span></div>
-    <p class="muted small" style="margin:6px 0 12px">Une liste par intervenante, partagée avec son appli : elle voit ce que tu lui demandes et le coche ; tu vois ce qu'elle note elle-même et ce qu'elle a fait.</p>
-    <form class="card" id="fa" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0">Ajouter une tâche</h2>
-      <label class="f">Quoi ?<input type="text" name="texte" required maxlength="500" placeholder="Ex. envoyer ton attestation de vigilance, récupérer la clé chez Mme Bibas…"></label>
+      <button class="btn" id="archive">📚 Archive des tâches</button></span></div>
+    <form class="card" id="fa" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+      <div class="row" style="flex-wrap:nowrap"><input type="text" name="texte" required maxlength="500" placeholder="Nouvelle tâche…" autocomplete="off">
+        <button class="btn primary" type="submit" ${gens.length ? "" : "disabled"}>Ajouter</button></div>
+      <div class="row"><span class="muted small">Pour quand ?</span>${taChips(taQuand, taDate)}</div>
       <div class="deux"><label class="f">Pour<select name="qui" required>${gens.length > 1 ? `<option value="tous">Toutes les intervenantes</option>` : ""}${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label>
-        <label class="f">Avant le (facultatif)<input type="date" name="echeance"></label></div>
-      <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label>
-      <div><button class="btn primary" type="submit" ${gens.length ? "" : "disabled"}>Ajouter</button></div></form>
-    ${parQui.map(([p, l]) => `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">${esc(nomPers(p))} <span class="tag">${l.filter(t => !t.fait_le).length} à faire</span></h2>
-      ${l.length ? l.map(ligne).join("") : `<p class="muted small">Rien à faire.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucune intervenante active.</p>`}`);
+        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label></div>
+      <div><button class="btn" type="submit" data-avec-dossier ${gens.length ? "" : "disabled"}>📁 Ajouter et créer un dossier</button></div></form>
+    ${parQui.map(([p, l]) => `<section class="card tkc" style="margin-top:12px"><h2 style="margin:0;padding:14px 16px 8px">${esc(nomPers(p))} <span class="tag">${l.filter(t => !t.fait_le).length} à faire</span></h2>
+      ${groupes(l) || `<p class="muted small" style="padding:0 16px 14px">Aucune tâche en cours.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucune intervenante active.</p>`}`);
+  const form = el.querySelector("#fa");
+  const lu = taBrancherChips(form, x => { taQuand = x.w; taDate = x.date; });
   el.querySelector("#qui").onchange = e => { taQui = e.target.value; afficher("taches"); };
-  el.querySelector("#faites").onchange = e => { taFaites = e.target.checked; afficher("taches"); };
-  el.querySelector("#fa").onsubmit = async e => {
-    e.preventDefault(); const f = new FormData(e.target), texte = String(f.get("texte")).trim();
+  el.querySelector("#archive").onclick = () => archiveTaches();
+  form.onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(form), texte = String(f.get("texte")).trim(), avec = e.submitter && e.submitter.hasAttribute("data-avec-dossier");
     if (!texte) return toast("Écris ce qu'il y a à faire");
+    const { w, date } = lu();
+    if (w === "pick" && !date) return toast("Choisis la date");
     const pour = f.get("qui") === "tous" ? gens.map(p => p.id) : [f.get("qui")];
-    await maj(sb.from("taches").insert(pour.map(id => ({ intervenante_id: id, texte, client_id: f.get("client_id") || null, echeance: f.get("echeance") || null }))));
-    toast(pour.length > 1 ? "Ajouté pour " + pour.length + " intervenantes" : "Ajouté : elle le voit dans son appli"); afficher("taches");
+    const crees = await q(sb.from("taches").insert(pour.map(id => ({ intervenante_id: id, texte, client_id: f.get("client_id") || null, echeance: taEcheanceDe(w, date), dossier_nom: avec ? texte.slice(0, 200) : null }))).select());
+    toast(pour.length > 1 ? "Ajouté pour " + pour.length + " intervenantes" : "Ajouté : elle le voit dans son appli");
+    await afficher("taches");
+    if (avec && crees.length === 1) ficheTache(crees[0]);
   };
+  el.addEventListener("toggle", e => { const d = e.target; if (d.matches && d.matches("details.tk-grp")) { if (d.open) taOuverts.add(d.dataset.grp); else taOuverts.delete(d.dataset.grp); } }, true);
   el.addEventListener("change", async e => {
     if (!e.target.matches("[data-coche]")) return;
-    const id = e.target.closest("[data-t]").dataset.t;
-    await maj(sb.from("taches").update({ fait_le: e.target.checked ? new Date().toISOString() : null }).eq("id", id));
-    toast(e.target.checked ? "Fait ✓" : "Remis à faire"); afficher("taches");
+    await maj(sb.from("taches").update({ fait_le: e.target.checked ? new Date().toISOString() : null }).eq("id", e.target.closest("[data-t]").dataset.t));
+    toast(e.target.checked ? "Fait ✓ Demain, elle passe dans l'archive" : "Remis à faire"); afficher("taches");
   });
-  el.addEventListener("click", async e => {
-    const b = e.target.closest("button"), l = b && b.closest("[data-t]"); if (!l) return;
-    const t = taches.find(x => x.id === l.dataset.t);
-    if (b.hasAttribute("data-suppr")) { if (!confirm("Supprimer « " + t.texte + " » ? Elle disparaît aussi de son appli.")) return;
-      await maj(sb.from("taches").delete().eq("id", t.id)); toast("Supprimé"); return afficher("taches"); }
-    if (b.hasAttribute("data-modif")) modifierTache(t);
+  el.addEventListener("click", e => {
+    const b = e.target.closest("[data-ouvre]"); if (!b) return;
+    ficheTache(taches.find(x => x.id === b.closest("[data-t]").dataset.t));
   });
 }
-function modifierTache(t) {
-  fenetre(`<h2 style="margin:0">Modifier · ${esc(nomInterv(t.intervenante_id))}</h2>
-    <form id="fm" style="display:flex;flex-direction:column;gap:10px">
-      <label class="f">Quoi ?<textarea name="texte" required maxlength="500">${esc(t.texte)}</textarea></label>
-      <div class="deux"><label class="f">Avant le (facultatif)<input type="date" name="echeance" value="${t.echeance || ""}"></label>
-        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}" ${c.id === t.client_id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label></div>
-      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    el.querySelector("#fm").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target), texte = String(f.get("texte")).trim();
+/* Fiche d'une tâche : à gauche ce qu'il y a à faire, à droite son dossier de documents */
+function ficheTache(t, apres = () => afficher("taches")) {
+  fenetre(`<div class="row" style="justify-content:space-between"><h2 style="margin:0">Tâche · ${esc(nomInterv(t.intervenante_id))}</h2><button class="btn flat" data-fermer>Fermer ✕</button></div>
+    <div class="deux"><form class="card" id="ft" style="display:flex;flex-direction:column;gap:10px">
+        <label class="f">Quoi ?<textarea name="texte" required maxlength="500">${esc(t.texte)}</textarea></label>
+        <div class="f" style="display:flex;flex-direction:column;gap:6px"><span class="muted small">Pour quand ?</span>${taChips(taQuandDe(t.echeance), t.echeance)}</div>
+        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}" ${c.id === t.client_id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>
+        <label class="f">Commentaire<textarea name="commentaire" maxlength="2000" placeholder="Ce qui a été fait, ce qu'il reste, un numéro…">${esc(t.commentaire || "")}</textarea></label>
+        <label class="chk"><input type="checkbox" name="fait" ${t.fait_le ? "checked" : ""} style="width:20px;height:20px">Fait</label>
+        <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat stop" type="button" id="suppr">Supprimer</button></div></form>
+      <section class="card" id="dossier"></section></div>`, (el, fermer) => {
+    const form = el.querySelector("#ft"), lu = taBrancherChips(form);
+    dessinerDossier(el.querySelector("#dossier"), t);
+    form.onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(form), texte = String(f.get("texte")).trim(), { w, date } = lu();
       if (!texte) return toast("Le texte est obligatoire");
-      await maj(sb.from("taches").update({ texte, echeance: f.get("echeance") || null, client_id: f.get("client_id") || null }).eq("id", t.id));
-      fermer(); toast("Enregistré"); afficher("taches");
+      if (w === "pick" && !date) return toast("Choisis la date");
+      await maj(sb.from("taches").update({ texte, echeance: taEcheanceDe(w, date), client_id: f.get("client_id") || null, commentaire: String(f.get("commentaire")).trim() || null,
+        fait_le: f.get("fait") ? (t.fait_le || new Date().toISOString()) : null }).eq("id", t.id));
+      toast("Enregistré"); fermer();
+    };
+    el.querySelector("#suppr").onclick = async () => {
+      if (!confirm("Supprimer « " + t.texte + " » et son dossier ? Elle disparaît aussi de son appli.")) return;
+      const docs = await q(sb.from("tache_documents").select("chemin").eq("tache_id", t.id));
+      if (docs.length) await sb.storage.from("taches").remove(docs.map(d => d.chemin));
+      await maj(sb.from("taches").delete().eq("id", t.id));
+      toast("Supprimé"); fermer();
+    };
+  }, apres);
+}
+/* Le dossier d'une tâche : l'espace de travail où sont rangés ses documents */
+const taPoids = o => !o ? "" : o >= 1048576 ? (o / 1048576).toFixed(1).replace(".", ",") + " Mo" : Math.ceil(o / 1024) + " Ko";
+async function dessinerDossier(zone, t) {
+  if (!t.dossier_nom) {
+    zone.innerHTML = `<h3 style="margin:0 0 6px">Dossier</h3><p class="muted small" style="margin-bottom:10px">Un espace pour ranger les papiers de cette tâche. Elle les retrouve dans son appli et peut en ajouter.</p>
+      <button class="btn primary" id="creer">📁 Créer un dossier</button>`;
+    zone.querySelector("#creer").onclick = async () => {
+      const nom = t.texte.slice(0, 200);
+      await maj(sb.from("taches").update({ dossier_nom: nom }).eq("id", t.id));
+      t.dossier_nom = nom; toast("Dossier créé : ajoute tes documents"); dessinerDossier(zone, t);
+    };
+    return;
+  }
+  const docs = await q(sb.from("tache_documents").select("*").eq("tache_id", t.id).order("cree_le"));
+  zone.innerHTML = `<div class="row" style="justify-content:space-between;flex-wrap:nowrap"><h3 style="margin:0;min-width:0;overflow-wrap:anywhere">📁 ${esc(t.dossier_nom)}</h3><button class="btn flat" id="renommer" style="flex:none">Renommer</button></div>
+    <div class="docs">${docs.map(d => `<div class="doc"><button class="doc-nom" data-voir="${esc(d.chemin)}">📄 ${esc(d.nom)}<span class="muted small">${taPoids(d.taille)}${d.taille ? " · " : ""}${d.ajoute_par === t.intervenante_id ? esc(nomInterv(d.ajoute_par)) + " · " : ""}${jour(d.cree_le)}</span></button><button class="btn flat stop" data-retire="${d.id}" title="Retirer ce document">Retirer</button></div>`).join("") || `<p class="muted small">Dossier vide.</p>`}</div>
+    <div class="depot" id="depot"><p class="muted small">Glisse tes fichiers ici, ou</p><button class="btn primary" id="ajout">➕ Ajouter des documents</button><p class="muted small">Photo, PDF, Word, Excel, texte · 15 Mo maximum par fichier</p></div>
+    <input type="file" id="fichiers" multiple hidden>
+    ${docs.length ? "" : `<button class="btn flat stop" id="enlever" style="margin-top:6px">Retirer ce dossier</button>`}`;
+  const champ = zone.querySelector("#fichiers"), depot = zone.querySelector("#depot");
+  const envoyer = async fichiers => {
+    let ok = 0;
+    for (const f of fichiers) {
+      if (f.size > 15728640) { toast("« " + f.name + " » dépasse 15 Mo"); continue; }
+      toast("Envoi de " + f.name + "…");
+      const ext = (f.name.split(".").pop() || "fichier").replace(/[^a-z0-9]/gi, "").toLowerCase(), chemin = `${t.id}/${nomFichier()}.${ext}`;
+      const { error } = await sb.storage.from("taches").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
+      if (error) { toast(/mime|type/i.test(error.message || "") ? "« " + f.name + " » : ce type de fichier n'est pas accepté" : "Ça n'a pas marché : " + error.message); continue; }
+      const i = await sb.from("tache_documents").insert({ tache_id: t.id, nom: f.name.slice(0, 255), chemin, type: f.type || null, taille: f.size });
+      if (i.error) { await sb.storage.from("taches").remove([chemin]); souci(i.error); continue; }
+      ok++;
+    }
+    if (ok) toast(ok > 1 ? ok + " documents ajoutés" : "Document ajouté");
+    dessinerDossier(zone, t);
+  };
+  zone.querySelector("#ajout").onclick = () => { champ.value = ""; champ.click(); };
+  champ.onchange = () => envoyer([...champ.files]);
+  depot.ondragover = e => { e.preventDefault(); depot.classList.add("survol"); };
+  depot.ondragleave = () => depot.classList.remove("survol");
+  depot.ondrop = e => { e.preventDefault(); depot.classList.remove("survol"); envoyer([...e.dataTransfer.files]); };
+  zone.querySelector("#renommer").onclick = async () => {
+    const nom = (prompt("Nom du dossier", t.dossier_nom) || "").trim().slice(0, 200); if (!nom) return;
+    await maj(sb.from("taches").update({ dossier_nom: nom }).eq("id", t.id)); t.dossier_nom = nom; dessinerDossier(zone, t);
+  };
+  if (zone.querySelector("#enlever")) zone.querySelector("#enlever").onclick = async () => {
+    await maj(sb.from("taches").update({ dossier_nom: null }).eq("id", t.id)); t.dossier_nom = null; dessinerDossier(zone, t);
+  };
+  zone.querySelector(".docs").onclick = async e => {
+    const v = e.target.closest("[data-voir]"), r = e.target.closest("[data-retire]");
+    if (v) return ouvrirDocTache(v.dataset.voir);
+    if (r) { const d = docs.find(x => x.id === r.dataset.retire); if (!confirm("Retirer « " + d.nom + " » du dossier ?")) return;
+      const s = await sb.storage.from("taches").remove([d.chemin]); if (s.error) return souci(s.error);
+      await maj(sb.from("tache_documents").delete().eq("id", d.id)); toast("Document retiré"); dessinerDossier(zone, t); }
+  };
+}
+async function ouvrirDocTache(chemin) {
+  const { data, error } = await sb.storage.from("taches").createSignedUrl(chemin, 300);
+  if (error) return souci(error);
+  window.open(data.signedUrl, "_blank", "noopener");
+}
+/* Archive : ce qui a été fait avant aujourd'hui, par jour, avec recherche ; on peut remettre à faire ou rouvrir le dossier */
+async function archiveTaches() {
+  const [faites, docs] = await Promise.all([
+    q(sb.from("taches").select("*").not("fait_le", "is", null).lt("fait_le", plusJours(new Date(), 0).toISOString()).order("fait_le", { ascending: false }).limit(1000)),
+    q(sb.from("tache_documents").select("tache_id"))]);
+  const nb = taComptes(docs); let recherche = "", jours = 30;
+  fenetre(`<div class="row" style="justify-content:space-between"><h2 style="margin:0">📚 Archive des tâches</h2><button class="btn flat" data-fermer>Fermer ✕</button></div>
+    <input type="text" id="ta-q" placeholder="Rechercher une tâche, un commentaire, un dossier, un client…"><div id="ta-liste" style="display:flex;flex-direction:column;gap:10px"></div>`, (el, fermer) => {
+    const liste = el.querySelector("#ta-liste");
+    const dessiner = () => {
+      const c = norm(recherche), l = faites.filter(t => !c || norm([t.texte, t.commentaire, t.dossier_nom, t.client_id && nomClient(t.client_id), nomInterv(t.intervenante_id)].join(" ")).includes(c));
+      const parJour = {}; l.forEach(t => (parJour[ymd(new Date(t.fait_le))] = parJour[ymd(new Date(t.fait_le))] || []).push(t));
+      const cles = Object.keys(parJour).sort().reverse();
+      liste.innerHTML = cles.slice(0, jours).map(k => `<section class="card"><h3 style="margin:0 0 4px">${new Date(k + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h3>
+        ${parJour[k].map(t => `<div class="ligne" data-t="${t.id}"><button class="tk-open" data-ouvre><span>✓ <b>${esc(t.texte)}</b></span>${t.commentaire ? `<span class="t-note">💬 ${esc(t.commentaire)}</span>` : ""}
+          <span class="row" style="gap:4px;margin-top:2px"><span class="tag off">${esc(nomInterv(t.intervenante_id))}</span>${t.dossier_nom ? `<span class="tag">📁 ${esc(t.dossier_nom)}${nb[t.id] ? " · " + nb[t.id] : ""}</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}</span></button>
+          <button class="btn flat" data-remet style="flex:none">Remettre à faire</button></div>`).join("")}</section>`).join("")
+        || `<p class="muted">${faites.length ? "Rien ne correspond." : "Aucune tâche archivée pour l'instant. Une tâche cochée arrive ici dès le lendemain."}</p>`;
+      if (cles.length > jours) liste.insertAdjacentHTML("beforeend", `<button class="btn" id="ta-plus">Voir plus</button>`);
+    };
+    dessiner();
+    el.querySelector("#ta-q").oninput = e => { recherche = e.target.value; dessiner(); };
+    liste.onclick = async e => {
+      if (e.target.id === "ta-plus") { jours += 30; return dessiner(); }
+      const ln = e.target.closest("[data-t]"); if (!ln) return;
+      const t = faites.find(x => x.id === ln.dataset.t);
+      if (e.target.closest("[data-remet]")) { await maj(sb.from("taches").update({ fait_le: null }).eq("id", t.id)); toast("Remis à faire"); fermer(); return afficher("taches"); }
+      if (e.target.closest("[data-ouvre]")) { fermer(); ficheTache(t); }
     };
   });
 }

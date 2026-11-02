@@ -164,6 +164,20 @@ a.lien.muted{color:var(--muted)}
 .voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .feuille{background:var(--bg);width:100%;max-width:560px;max-height:92dvh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 20px);display:flex;flex-direction:column;gap:12px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 88px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:700;max-width:min(92vw,520px);z-index:30;text-align:center}
+.tk-grp>summary::-webkit-details-marker{display:none}
+.tk-grp>summary span{background:var(--bg);border-radius:999px;padding:0 8px;font-size:12px}
+.tk-grp>summary::after{content:"▾";margin-left:auto;transition:transform .2s}
+.tk-grp:not([open])>summary::after{transform:rotate(-90deg)}
+.tk-late>summary{color:var(--warn)}
+.doc-nom{flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;cursor:pointer;font-weight:700;overflow-wrap:anywhere}
+.doc-nom span{font-weight:400}
+.docs{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.tkc{padding:0;overflow:hidden}
+.tk-grp{border-top:1px solid var(--line)}
+.tk-grp:first-child{border-top:0}
+.tk-grp>summary{cursor:pointer;padding:12px 16px;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);list-style:none;display:flex;gap:8px;align-items:center}
+.tk-lignes{padding:0 16px 4px}
+.doc{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--bg);border-radius:10px;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -494,7 +508,7 @@ async function vueJour() {
         <button class="btn flat" id="ajout-tache" style="min-height:36px">➕ Ajouter</button></div>
       <div class="card">${montrees.length ? montrees.map(ligneTache).join("") : `<p class="muted">Rien à faire pour l'instant.</p>`}
         <button class="btn flat" id="toutes-taches" style="min-height:36px">${afaire.length > montrees.length ? "Voir les " + afaire.length + " tâches" : "Toute ma liste"} ›</button></div>`;
-    b.querySelector("#ajout-tache").onclick = () => ficheTache(null, () => accueil("jour"));
+    b.querySelector("#ajout-tache").onclick = () => nouvelleTache(() => accueil("jour"));
     b.querySelector("#toutes-taches").onclick = () => accueil("taches");
     brancherTaches(b, taches, () => accueil("jour"));
   }).catch(() => {});
@@ -630,22 +644,50 @@ function brancherNotes(el, clientId, pointageId) {
   el.querySelector("#fnote").onsubmit = async e => { e.preventDefault(); if (await ajouterNote(clientId, pointageId, new FormData(e.target).get("t"))) { e.target.reset(); listeNotes(liste, clientId, pointageId); } };
 }
 
-/* ---------- À faire : liste partagée avec OIKOS (OIKOS en ajoute, elle aussi ; chacun voit les coches de l'autre) ---------- */
-async function chargerTaches() {
-  const depuis = ajouterJours(debutJour(), -30).toISOString();
-  const { data, error } = await sb.from("taches").select("*").eq("intervenante_id", moi.id)
-    .or("fait_le.is.null,fait_le.gte." + depuis).order("fait_le", { ascending: false, nullsFirst: true }).order("echeance", { nullsFirst: false }).order("cree_le");
-  if (error) throw error;
-  return data;
-}
+/* ---------- À faire : liste partagée avec OIKOS (OIKOS en ajoute, elle aussi ; chacun voit les coches de l'autre).
+   Présentation de Pense intelligent : « Pour quand ? » en boutons, sections par échéance, archive à part, un dossier de documents par tâche ---------- */
+const TA_GROUPES = { late: "En retard", today: "Aujourd'hui", week: "Cette semaine", next: "Semaine pro", later: "Plus tard", none: "Pas pressé", done: "Fait aujourd'hui" };
+let nbDocs = {}, taQuand = "today", taDate = "", taOuverts = new Set(["late", "today", "week", "next", "later", "none", "done"]);
 const auj10 = () => versLocal(new Date()).slice(0, 10);
+const jour10 = n => versLocal(ajouterJours(debutJour(), n)).slice(0, 10);
+const taDimanche = (sem = 0) => jour10((7 - new Date().getDay()) % 7 + 7 * sem);
+const taGroupe = t => { const a = auj10(); return t.fait_le ? "done" : !t.echeance ? "none" : t.echeance < a ? "late" : t.echeance === a ? "today" : t.echeance <= taDimanche() ? "week" : t.echeance <= taDimanche(1) ? "next" : "later"; };
+const taQuandDe = e => !e ? "none" : e === auj10() ? "today" : e === jour10(1) ? "tomorrow" : e === taDimanche() ? "week" : e === taDimanche(1) ? "next" : "pick";
+const taEcheanceDe = (w, date) => w === "pick" ? (date || null) : ({ today: auj10(), tomorrow: jour10(1), week: taDimanche(), next: taDimanche(1), none: null })[w];
 const echeanceTxt = t => !t.echeance ? "" : new Date(t.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+function taBadge(t) {
+  if (!t.echeance || t.fait_le || t.echeance === auj10()) return "";
+  if (t.echeance < auj10()) return `<span class="tag warn">en retard · ${Math.round((new Date(auj10() + "T12:00") - new Date(t.echeance + "T12:00")) / 864e5)} j</span>`;
+  return `<span class="tag">${t.echeance === jour10(1) ? "demain" : echeanceTxt(t)}</span>`;
+}
+const taChips = (w, date) => `<div class="chips" data-quand>${[["today", "Aujourd'hui"], ["tomorrow", "Demain"], ["week", "Cette semaine"], ["next", "Semaine pro"], ["pick", "📅 Date…"], ["none", "Pas pressé"]].map(([k, l]) => `<button type="button" class="chip" data-w="${k}" aria-pressed="${k === w}">${l}</button>`).join("")}</div>
+  <input type="date" data-quand-date value="${esc(date || "")}" ${w === "pick" ? "" : "hidden"}>`;
+function taBrancherChips(zone, surChange) {
+  const dt = zone.querySelector("[data-quand-date]");
+  const lu = () => ({ w: zone.querySelector('[data-w][aria-pressed="true"]').dataset.w, date: dt.value });
+  zone.querySelector("[data-quand]").onclick = e => {
+    const b = e.target.closest("[data-w]"); if (!b) return;
+    zone.querySelectorAll("[data-w]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    dt.hidden = b.dataset.w !== "pick";
+    if (!dt.hidden && !dt.value) { try { dt.showPicker(); } catch (_) { dt.focus(); } }
+    if (surChange) surChange(lu());
+  };
+  dt.onchange = () => { if (surChange) surChange(lu()); };
+  return lu;
+}
+async function chargerTaches() {
+  const [t, d] = await Promise.all([
+    sb.from("taches").select("*").eq("intervenante_id", moi.id).or("fait_le.is.null,fait_le.gte." + debutJour().toISOString()).order("echeance", { nullsFirst: false }).order("cree_le"),
+    sb.from("tache_documents").select("tache_id")]);
+  if (t.error) throw t.error; if (d.error) throw d.error;
+  nbDocs = d.data.reduce((o, x) => (o[x.tache_id] = (o[x.tache_id] || 0) + 1, o), {});
+  return t.data;
+}
 const ligneTache = t => `<div class="ligne" data-tache="${t.id}">
     <button class="coche" data-coche aria-pressed="${!!t.fait_le}" aria-label="${t.fait_le ? "Remettre à faire" : "Marquer comme fait"}">${t.fait_le ? "✓" : ""}</button>
     <button data-ouvre style="min-width:0"><span style="${t.fait_le ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(t.texte)}</span>
-      <span class="row" style="gap:4px;margin-top:3px">${t.cree_par !== moi.id ? `<span class="tag">de OIKOS</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}
-      ${t.echeance && !t.fait_le ? `<span class="tag ${t.echeance < auj10() ? "warn" : ""}">${t.echeance < auj10() ? "en retard · " : "avant le "}${echeanceTxt(t)}</span>` : ""}
-      ${t.fait_le ? `<span class="muted small">fait le ${jourTxt(t.fait_le)}</span>` : ""}</span></button></div>`;
+      ${t.commentaire ? `<span class="muted small" style="display:block">💬 ${esc(t.commentaire)}</span>` : ""}
+      <span class="row" style="gap:4px;margin-top:3px">${t.dossier_nom ? `<span class="tag">📁 ${esc(t.dossier_nom)}${nbDocs[t.id] ? " · " + nbDocs[t.id] : ""}</span>` : ""}${t.cree_par !== moi.id ? `<span class="tag">de OIKOS</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}${taBadge(t)}</span></button></div>`;
 /* Coche, détail, modification : branché sur la zone qui contient les lignes */
 function brancherTaches(zone, taches, apres) {
   zone.addEventListener("click", async e => {
@@ -659,49 +701,163 @@ function brancherTaches(zone, taches, apres) {
     if (e.target.closest("[data-ouvre]")) ficheTache(t, apres);
   });
 }
+/* Fiche d'une tâche : la sienne se modifie entièrement ; celle d'OIKOS, seulement le commentaire. Le dossier est en dessous. */
 function ficheTache(t, apres) {
-  const mienne = !t || t.cree_par === moi.id;
-  if (!mienne) return feuille(`<h2 style="margin:0">À faire</h2><div class="card"><p style="white-space:pre-wrap">${esc(t.texte)}</p>
-      ${t.client_id ? `<p class="muted small">Client : ${esc(nomClient(t.client_id))}</p>` : ""}${t.echeance ? `<p class="muted small">Avant le ${echeanceTxt(t)}</p>` : ""}
-      <p class="muted small">Demandé par OIKOS le ${jourTxt(t.cree_le)}</p></div>
-    ${t.client_id && clients.some(c => c.id === t.client_id) ? `<button class="btn" id="fiche"><span class="ic">👤</span>Fiche client</button>` : ""}
-    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => { if (el.querySelector("#fiche")) el.querySelector("#fiche").onclick = () => { fermer(); ficheClient(t.client_id); }; });
-  feuille(`<h2 style="margin:0">${t ? "Ma tâche" : "Ajouter à ma liste"}</h2>
-    <form class="stack" id="ft"><label class="f">Quoi ?<textarea name="texte" required maxlength="500" placeholder="Ex. racheter des sacs aspirateur, rappeler Mme Bibas…">${esc(t ? t.texte : "")}</textarea></label>
-      <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${clients.map(c => `<option value="${c.id}" ${t && t.client_id === c.id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>
-      <label class="f">À faire avant le (facultatif)<input name="echeance" type="date" value="${t && t.echeance ? t.echeance : ""}"></label>
-      <p class="muted small">OIKOS voit ta liste.</p>
-      <button class="btn primary big" type="submit">${t ? "Enregistrer" : "Ajouter"}</button>
-      ${t ? `<button class="btn" type="button" id="suppr" style="color:var(--stop)">Supprimer</button>` : ""}
-      <button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+  const mienne = t.cree_par === moi.id;
+  feuille(`<h2 style="margin:0">${mienne ? "Ma tâche" : "À faire"}</h2>
+    <form class="stack" id="ft">
+      ${mienne ? `<label class="f">Quoi ?<textarea name="texte" required maxlength="500">${esc(t.texte)}</textarea></label>
+        <div class="f"><span>Pour quand ?</span>${taChips(taQuandDe(t.echeance), t.echeance)}</div>
+        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${clients.map(c => `<option value="${c.id}" ${t.client_id === c.id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>`
+      : `<div class="card"><p style="white-space:pre-wrap">${esc(t.texte)}</p>
+          ${t.client_id ? `<p class="muted small">Client : ${esc(nomClient(t.client_id))}</p>` : ""}${t.echeance ? `<p class="muted small">Pour le ${echeanceTxt(t)}</p>` : ""}
+          <p class="muted small">Demandé par OIKOS le ${jourTxt(t.cree_le)}</p></div>`}
+      <label class="f">Commentaire<textarea name="commentaire" maxlength="2000" placeholder="Ce qui a été fait, ce qu'il reste, un numéro…">${esc(t.commentaire || "")}</textarea></label>
+      <button class="btn primary big" type="submit">Enregistrer</button></form>
+    <div class="card" id="dossier"></div>
+    ${!mienne && t.client_id && clients.some(c => c.id === t.client_id) ? `<button class="btn" id="fiche"><span class="ic">👤</span>Fiche client</button>` : ""}
+    ${mienne ? `<button class="btn" type="button" id="suppr" style="color:var(--stop)">Supprimer</button>` : ""}
+    <button class="btn flat" type="button" data-fermer>Fermer</button>`, (el, fermer) => {
+    const lu = mienne ? taBrancherChips(el.querySelector("#ft")) : null;
+    dessinerDossier(el.querySelector("#dossier"), t);
     el.querySelector("#ft").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target);
-      const d = { texte: String(f.get("texte")).trim(), client_id: f.get("client_id") || null, echeance: f.get("echeance") || null };
-      if (!d.texte) return toast("Écris ce qu'il y a à faire.");
+      e.preventDefault(); const f = new FormData(e.target), d = { commentaire: String(f.get("commentaire")).trim() || null };
+      if (mienne) {
+        const q = lu(); if (q.w === "pick" && !q.date) return toast("Choisis la date.");
+        d.texte = String(f.get("texte")).trim(); d.client_id = f.get("client_id") || null; d.echeance = taEcheanceDe(q.w, q.date);
+        if (!d.texte) return toast("Écris ce qu'il y a à faire.");
+      }
       e.submitter.disabled = true;
-      const { error } = await (t ? sb.from("taches").update(d).eq("id", t.id) : sb.from("taches").insert(d));
+      const { error } = await sb.from("taches").update(d).eq("id", t.id);
       e.submitter.disabled = false;
       if (error) return souci(error);
-      fermer(); toast(t ? "Enregistré" : "Ajouté à ta liste"); apres();
+      toast("Enregistré"); fermer();
     };
-    if (t) el.querySelector("#suppr").onclick = async () => {
+    if (el.querySelector("#fiche")) el.querySelector("#fiche").onclick = () => { fermer(); ficheClient(t.client_id); };
+    if (mienne) el.querySelector("#suppr").onclick = async () => {
+      if (!confirm("Supprimer cette tâche et son dossier ?")) return;
+      const docs = await sb.from("tache_documents").select("chemin").eq("tache_id", t.id);
+      if (docs.error) return souci(docs.error);
+      if (docs.data.length) await sb.storage.from("taches").remove(docs.data.map(x => x.chemin));
       const { error } = await sb.from("taches").delete().eq("id", t.id);
       if (error) return souci(error);
-      fermer(); toast("Supprimé"); apres();
+      toast("Supprimé"); fermer();
+    };
+  }, apres);
+}
+/* Ajout d'une tâche : le texte, « Pour quand ? » et, si besoin, un dossier tout de suite */
+function nouvelleTache(apres) {
+  feuille(`<h2 style="margin:0">Ajouter à ma liste</h2>
+    <form class="stack" id="fn"><label class="f">Quoi ?<textarea name="texte" required maxlength="500" placeholder="Ex. racheter des sacs aspirateur, rappeler Mme Bibas…"></textarea></label>
+      <div class="f"><span>Pour quand ?</span>${taChips(taQuand, taDate)}</div>
+      <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${clients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label>
+      <p class="muted small">OIKOS voit ta liste.</p>
+      <button class="btn primary big" type="submit">Ajouter</button>
+      <button class="btn" type="submit" data-avec-dossier><span class="ic">📁</span>Ajouter et créer un dossier</button>
+      <button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    const lu = taBrancherChips(el.querySelector("#fn"), x => { taQuand = x.w; taDate = x.date; });
+    el.querySelector("#fn").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), texte = String(f.get("texte")).trim(), avec = e.submitter.hasAttribute("data-avec-dossier"), q = lu();
+      if (!texte) return toast("Écris ce qu'il y a à faire.");
+      if (q.w === "pick" && !q.date) return toast("Choisis la date.");
+      e.submitter.disabled = true;
+      const { data, error } = await sb.from("taches").insert({ texte, client_id: f.get("client_id") || null, echeance: taEcheanceDe(q.w, q.date), dossier_nom: avec ? texte.slice(0, 200) : null }).select().single();
+      e.submitter.disabled = false;
+      if (error) return souci(error);
+      toast("Ajouté à ta liste"); fermer();
+      if (avec) ficheTache(data, apres); else apres();
     };
   });
 }
+/* Le dossier d'une tâche : l'espace de travail où sont rangés ses documents */
+const taPoids = o => !o ? "" : o >= 1048576 ? (o / 1048576).toFixed(1).replace(".", ",") + " Mo" : Math.ceil(o / 1024) + " Ko";
+async function dessinerDossier(zone, t) {
+  if (!t.dossier_nom) {
+    zone.innerHTML = `<h3 style="margin:0 0 6px">Dossier</h3><p class="muted small" style="margin-bottom:10px">Un espace pour ranger les papiers de cette tâche. OIKOS les voit aussi.</p>
+      <button class="btn" id="creer" type="button"><span class="ic">📁</span>Créer un dossier</button>`;
+    zone.querySelector("#creer").onclick = async () => {
+      const nom = t.texte.slice(0, 200), { error } = await sb.from("taches").update({ dossier_nom: nom }).eq("id", t.id);
+      if (error) return souci(error);
+      t.dossier_nom = nom; toast("Dossier créé : ajoute tes documents"); dessinerDossier(zone, t);
+    };
+    return;
+  }
+  const { data: docs, error } = await sb.from("tache_documents").select("*").eq("tache_id", t.id).order("cree_le");
+  if (error) { zone.innerHTML = `<p class="muted">Dossier indisponible pour le moment.</p>`; return; }
+  zone.innerHTML = `<h3 style="margin:0;overflow-wrap:anywhere">📁 ${esc(t.dossier_nom)}</h3>
+    <div class="docs">${docs.map(d => `<div class="doc"><button type="button" class="doc-nom" data-voir="${d.id}">📄 ${esc(d.nom)}<span class="muted small">${taPoids(d.taille)}${d.taille ? " · " : ""}${d.ajoute_par === moi.id ? "toi" : "OIKOS"} · ${jourTxt(d.cree_le)}</span></button>${d.ajoute_par === moi.id ? `<button type="button" class="btn flat" data-retire="${d.id}" style="color:var(--stop);flex:none">Retirer</button>` : ""}</div>`).join("") || `<p class="muted small">Dossier vide.</p>`}</div>
+    <button class="btn" id="ajout" type="button" style="width:100%"><span class="ic">➕</span>Ajouter des documents</button>
+    <p class="muted small" style="margin-top:6px">Photo, PDF, Word, Excel, texte · 15 Mo maximum par fichier</p>
+    <input type="file" id="fichiers" multiple hidden>`;
+  const champ = zone.querySelector("#fichiers");
+  zone.querySelector("#ajout").onclick = () => { champ.value = ""; champ.click(); };
+  champ.onchange = async () => {
+    let ok = 0;
+    for (const f of [...champ.files]) {
+      if (f.size > 15728640) { toast("« " + f.name + " » dépasse 15 Mo"); continue; }
+      toast("Envoi de " + f.name + "…");
+      const ext = (f.name.split(".").pop() || "fichier").replace(/[^a-z0-9]/gi, "").toLowerCase(), chemin = `${t.id}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const u = await sb.storage.from("taches").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
+      if (u.error) { /mime|type/i.test(u.error.message || "") ? toast("« " + f.name + " » : ce type de fichier n'est pas accepté") : souci(u.error); continue; }
+      const i = await sb.from("tache_documents").insert({ tache_id: t.id, nom: f.name.slice(0, 255), chemin, type: f.type || null, taille: f.size });
+      if (i.error) { await sb.storage.from("taches").remove([chemin]); souci(i.error); continue; }
+      ok++;
+    }
+    if (ok) toast(ok > 1 ? ok + " documents ajoutés : OIKOS les voit" : "Document ajouté : OIKOS le voit");
+    dessinerDossier(zone, t);
+  };
+  zone.querySelector(".docs").onclick = async e => {
+    const v = e.target.closest("[data-voir]"), r = e.target.closest("[data-retire]");
+    if (v) {   // lien de téléchargement valable 5 minutes : le fichier arrive dans Téléchargements, l'appli reste ouverte
+      const d = docs.find(x => x.id === v.dataset.voir), s = await sb.storage.from("taches").createSignedUrl(d.chemin, 300, { download: d.nom });
+      if (s.error) return souci(s.error);
+      toast("Téléchargement…"); return location.assign(s.data.signedUrl);
+    }
+    if (r) {
+      const d = docs.find(x => x.id === r.dataset.retire); if (!confirm("Retirer « " + d.nom + " » du dossier ?")) return;
+      const s = await sb.storage.from("taches").remove([d.chemin]); if (s.error) return souci(s.error);
+      const x = await sb.from("tache_documents").delete().eq("id", d.id); if (x.error) return souci(x.error);
+      toast("Document retiré"); dessinerDossier(zone, t);
+    }
+  };
+}
+/* Archive : ce qui a été fait avant aujourd'hui, par jour, avec recherche */
+async function archiveTaches(apres) {
+  const { data: faites, error } = await sb.from("taches").select("*").eq("intervenante_id", moi.id).not("fait_le", "is", null).lt("fait_le", debutJour().toISOString()).order("fait_le", { ascending: false }).limit(500);
+  if (error) return souci(error);
+  let recherche = "", jours = 30;
+  feuille(`<h2 style="margin:0">📚 Archive des tâches</h2>
+    <input type="text" id="ta-q" placeholder="Rechercher une tâche, un commentaire…"><div id="ta-liste" class="stack"></div>
+    <button class="btn flat" type="button" data-fermer>Fermer</button>`, (el, fermer) => {
+    const liste = el.querySelector("#ta-liste");
+    const dessiner = () => {
+      const c = recherche.toLowerCase(), l = faites.filter(t => !c || [t.texte, t.commentaire, t.dossier_nom].join(" ").toLowerCase().includes(c));
+      const parJour = {}; l.forEach(t => { const k = versLocal(t.fait_le).slice(0, 10); (parJour[k] = parJour[k] || []).push(t); });
+      const cles = Object.keys(parJour).sort().reverse();
+      liste.innerHTML = cles.slice(0, jours).map(k => `<div class="card"><h3 style="margin:0 0 4px">${jourTxt(k + "T12:00")}</h3>${parJour[k].map(ligneTache).join("")}</div>`).join("")
+        || `<p class="muted">${faites.length ? "Rien ne correspond." : "Aucune tâche archivée pour l'instant. Une tâche cochée arrive ici dès le lendemain."}</p>`;
+      if (cles.length > jours) liste.insertAdjacentHTML("beforeend", `<button class="btn" id="ta-plus" type="button">Voir plus</button>`);
+    };
+    dessiner();
+    el.querySelector("#ta-q").oninput = e => { recherche = e.target.value; dessiner(); };
+    liste.addEventListener("click", e => { if (e.target.id === "ta-plus") { jours += 30; dessiner(); } });
+    brancherTaches(liste, faites, () => { fermer(); apres(); });
+  });
+}
 async function vueTaches() {
-  const taches = await chargerTaches(), afaire = taches.filter(t => !t.fait_le), faites = taches.filter(t => t.fait_le);
+  const taches = await chargerTaches(), ouvertes = taches.filter(t => !t.fait_le).length;
+  const groupes = Object.keys(TA_GROUPES).map(g => [g, taches.filter(t => taGroupe(t) === g)]).filter(([, x]) => x.length).map(([g, x]) =>
+    `<details class="tk-grp tk-${g}" data-grp="${g}" ${taOuverts.has(g) ? "open" : ""}><summary>${TA_GROUPES[g]} <span>${x.length}</span></summary><div class="tk-lignes">${x.map(ligneTache).join("")}</div></details>`).join("");
   contenu(`<button class="btn flat" id="retour" style="padding-left:0">‹ Aujourd'hui</button>
-    <h1>À faire</h1><p class="muted" style="margin:6px 0 14px">Ta liste, partagée avec OIKOS : ce qu'OIKOS te demande et ce que tu notes toi-même. Coche quand c'est fait.</p>
+    <h1>À faire${ouvertes ? " (" + ouvertes + ")" : ""}</h1><p class="muted" style="margin:6px 0 14px">Ta liste, partagée avec OIKOS. Coche quand c'est fait : le lendemain, la tâche passe dans l'archive.</p>
     <button class="btn primary" id="ajout-tache" style="width:100%"><span class="ic">➕</span>Ajouter à ma liste</button>
-    <h2>À faire (${afaire.length})</h2>
-    <div class="card" id="liste-taches">${afaire.length ? afaire.map(ligneTache).join("") : `<p class="muted">Rien à faire, bravo !</p>`}</div>
-    ${faites.length ? `<h2>Fait (30 derniers jours)</h2><div class="card">${faites.map(ligneTache).join("")}</div>` : ""}`);
+    <div class="card tkc" style="margin-top:14px">${groupes || `<p class="muted" style="padding:14px 16px">Rien à faire, bravo !</p>`}</div>
+    <button class="btn" id="archive" style="width:100%;margin-top:14px"><span class="ic">📚</span>Archive des tâches</button>`);
   const el = document.getElementById("contenu");
   document.getElementById("retour").onclick = () => accueil("jour");
-  document.getElementById("ajout-tache").onclick = () => ficheTache(null, () => accueil("taches"));
+  document.getElementById("ajout-tache").onclick = () => nouvelleTache(() => accueil("taches"));
+  document.getElementById("archive").onclick = () => archiveTaches(() => accueil("taches"));
+  el.querySelectorAll("details.tk-grp").forEach(d => d.ontoggle = () => { if (d.open) taOuverts.add(d.dataset.grp); else taOuverts.delete(d.dataset.grp); });
   brancherTaches(el, taches, () => accueil("taches"));
 }
 
