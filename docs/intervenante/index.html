@@ -169,29 +169,29 @@ a.lien.muted{color:var(--muted)}
 .nav button .ic{font-size:24px;line-height:1.1}
 .nav button[aria-current="page"]{color:var(--accent)}
 /* clavier du code */
-/* Écran du code : fond olive profond, triangles du logo, chiffres fins. Toujours sombre, quel que soit le thème. */
-.verrou{position:fixed;inset:0;z-index:15;overflow:auto;isolation:isolate;color:#F3F1E7;background:radial-gradient(120% 80% at 50% 16%,#4B5139 0%,#2C3024 50%,#1A1C15 100%);display:flex;flex-direction:column;align-items:center;gap:clamp(6px,1.5dvh,16px);padding:calc(env(safe-area-inset-top,0px) + 16px) 20px calc(env(safe-area-inset-bottom,0px) + 14px)}
+/* Écran du code : fond olive, triangles du logo, chiffres fins. Toujours sombre, quel que soit le thème. */
+.verrou{position:fixed;inset:0;z-index:15;overflow:auto;isolation:isolate;color:#F3F1E7;background:radial-gradient(120% 80% at 50% 16%,#6C7458 0%,#515741 52%,#383C2E 100%);display:flex;flex-direction:column;align-items:center;gap:clamp(6px,1.5dvh,16px);padding:calc(env(safe-area-inset-top,0px) + 16px) 20px calc(env(safe-area-inset-bottom,0px) + 14px)}
 .verrou>:first-of-type{margin-top:auto}
 .verrou>:last-child{margin-bottom:auto}
 .v-fond{position:fixed;inset:-25%;width:150%;height:150%;z-index:-1;pointer-events:none}
-.v-fond path{fill:none;stroke:#F3F1E7;stroke-opacity:.07;stroke-width:.14;transform-origin:50% 50%;transform-box:view-box}
+.v-fond path{fill:none;stroke:#F3F1E7;stroke-opacity:.13;stroke-width:.14;transform-origin:50% 50%;transform-box:view-box}
 .v-fond .t1{animation:v-tourne 90s linear infinite}
-.v-fond .t2{animation:v-tourne 130s linear infinite reverse;stroke-opacity:.11}
+.v-fond .t2{animation:v-tourne 130s linear infinite reverse;stroke-opacity:.17}
 .v-logo{position:relative;width:clamp(72px,13dvh,112px);aspect-ratio:1;flex:none}
 .v-logo img{width:100%;height:100%;display:block}
 .v-logo i{position:absolute;inset:0;-webkit-mask:url(logo-clair.png) center/contain no-repeat;mask:url(logo-clair.png) center/contain no-repeat;background:linear-gradient(105deg,transparent 42%,rgb(255 255 255 / .85) 50%,transparent 58%) 130% 0/300% 100% no-repeat;animation:v-reflet 9s 1s ease-in-out infinite}
-.v-marque{font-size:10.5px;font-weight:500;letter-spacing:.32em;text-transform:uppercase;color:rgb(243 241 231 / .62);padding-left:.32em}
+.v-marque{font-size:10.5px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:rgb(243 241 231 / .95);padding-left:.32em}
 .verrou h1{font-weight:300;font-size:clamp(28px,4.6dvh,40px);letter-spacing:-.015em;text-align:center;margin-top:clamp(4px,1.6dvh,18px)}
-.v-texte{font-size:15px;color:rgb(243 241 231 / .72);text-align:center;max-width:300px;font-weight:400}
+.v-texte{font-size:15px;color:rgb(243 241 231 / .92);text-align:center;max-width:300px;font-weight:400}
 .v-slots{display:flex;gap:18px;margin-top:clamp(6px,1.6dvh,16px);position:relative}
 .v-slots svg{width:16px;height:14.4px;overflow:visible;transition:transform .34s cubic-bezier(.3,1.7,.5,1)}
-.v-slots path{fill:transparent;stroke:rgb(243 241 231 / .6);stroke-width:1.3;stroke-linejoin:round;transition:fill .18s,stroke .18s}
+.v-slots path{fill:transparent;stroke:rgb(243 241 231 / .85);stroke-width:1.3;stroke-linejoin:round;transition:fill .18s,stroke .18s}
 .v-slots svg.on{transform:translateY(-2px) scale(1.2)}
 .v-slots svg.on path{fill:#F3F1E7;stroke:#F3F1E7}
-.v-err{min-height:1.4em;font-size:14px;color:#F2B09C;text-align:center}
+.v-err{min-height:1.4em;font-size:14px;font-weight:500;color:#FFD6CA;text-align:center}
 .v-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(0px,.8dvh,8px) 8px;width:min(300px,84vw)}
 .v-pad button{position:relative;overflow:hidden;justify-self:center;width:clamp(58px,10.4dvh,80px);height:clamp(58px,10.4dvh,80px);border:0;border-radius:50%;background:none;color:inherit;font:300 clamp(28px,4.4dvh,36px)/1 var(--titre);font-variant-numeric:lining-nums;cursor:pointer;touch-action:manipulation;transition:transform .16s,background-color .3s;-webkit-tap-highlight-color:transparent}
-.v-pad button::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid rgb(243 241 231 / .16);transition:border-color .25s}
+.v-pad button::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid rgb(243 241 231 / .3);transition:border-color .25s}
 .v-pad button:active{transform:scale(.93);background:rgb(243 241 231 / .07)}
 .v-pad button:active::after{border-color:rgb(243 241 231 / .5)}
 .v-pad .vide{visibility:hidden}
@@ -200,13 +200,13 @@ a.lien.muted{color:var(--muted)}
 .v-pad .v-eff.vis{opacity:1}
 .v-pad .v-eff svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
 .v-onde{position:absolute;width:170px;height:170px;margin:-85px 0 0 -85px;border-radius:50%;background:radial-gradient(circle,rgb(243 241 231 / .28),transparent 68%);pointer-events:none;animation:v-onde .55s ease-out forwards}
-.v-lien{border:0;background:none;color:rgb(243 241 231 / .72);font-size:14px;padding:10px;cursor:pointer;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+.v-lien{border:0;background:none;color:rgb(243 241 231 / .92);font-size:14px;padding:10px;cursor:pointer;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
 .v-in{animation:v-monte .8s calc(var(--i)*70ms) cubic-bezier(.2,.7,.2,1) both}
 .v-logo.v-in{animation-name:v-apparait;animation-duration:1.1s}
 .v-pad button{animation:v-monte .6s calc(300ms + var(--i)*28ms) cubic-bezier(.2,.7,.2,1) both}
 .verrou.rapide .v-in,.verrou.rapide .v-pad button{animation-duration:.35s;animation-delay:0s}
 .verrou.faux .v-slots{animation:v-non .46s cubic-bezier(.36,.07,.19,.97)}
-.verrou.faux .v-slots path{stroke:#F2B09C;fill:#F2B09C}
+.verrou.faux .v-slots path{stroke:#FFD6CA;fill:#FFD6CA}
 .verrou.ouvert>:not(.v-fond,.v-slots){opacity:0;transition:opacity .28s}
 .verrou.ouvert .v-slots svg{transition:transform .34s cubic-bezier(.6,0,.3,1)}
 .verrou.ouvert .v-slots svg:nth-child(1){transform:translateX(51px)}
@@ -221,6 +221,43 @@ a.lien.muted{color:var(--muted)}
 @keyframes v-onde{from{transform:scale(.25);opacity:1}to{transform:scale(1);opacity:0}}
 @keyframes v-non{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(5px)}30%,50%,70%{transform:translateX(-9px)}40%,60%{transform:translateX(9px)}}
 @media (prefers-reduced-motion: reduce){.verrou *{animation:none!important;transition:none!important}}
+/* Effets dans l'appli : jamais à chaque rafraîchissement, seulement quand on change d'écran */
+.nav div{position:relative}
+.nav button{position:relative;overflow:hidden}
+.nav-ind{position:absolute;top:6px;left:0;width:20%;height:32px;display:flex;justify-content:center;pointer-events:none;transform:translateX(calc(var(--p)*100%));transition:transform .4s cubic-bezier(.3,1.35,.5,1),opacity .2s}
+.nav-ind::before{content:"";width:56px;border-radius:999px;background:var(--accent-soft)}
+.nav-ind.cache{opacity:0}
+.nav.change button[aria-current="page"] .ic{animation:n-pop .5s cubic-bezier(.3,1.6,.5,1)}
+#contenu{overflow-x:clip}
+#contenu.entree>*{animation:n-entre .46s cubic-bezier(.2,.7,.2,1) backwards}
+#contenu.entree>:nth-child(2){animation-delay:50ms}
+#contenu.entree>:nth-child(3){animation-delay:100ms}
+#contenu.entree>:nth-child(4){animation-delay:150ms}
+#contenu.entree>:nth-child(5){animation-delay:200ms}
+#contenu.entree>:nth-child(6){animation-delay:240ms}
+#contenu.entree>:nth-child(n+7){animation-delay:280ms}
+.btn,.chip,.coche,.ag-d,.seg button{position:relative;overflow:hidden;transition:transform .14s,background-color .2s,border-color .2s,box-shadow .2s,opacity .2s}
+.btn:active:not(:disabled),.chip:active,.coche:active,.ag-d:active,.seg button:active,.nav button:active .ic{transform:scale(.96)}
+.nav button .ic{transition:transform .14s}
+.n-onde{position:absolute;border-radius:50%;background:radial-gradient(circle,currentColor,transparent 70%);pointer-events:none;opacity:.24;animation:n-onde .55s ease-out forwards}
+.entete{transition:box-shadow .25s}
+.entete.ombre{box-shadow:0 6px 18px rgb(35 36 31 / .1)}
+.charge{display:flex;justify-content:center;padding:44px 0;animation:n-fondu .3s .25s backwards}
+.charge svg{width:38px;height:34px;overflow:visible}
+.charge path{fill:none;stroke:var(--accent);stroke-width:1.2;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:32 68;animation:n-trace 1.3s linear infinite}
+.voile{animation:n-fondu .22s backwards}
+.feuille{animation:n-feuille .36s cubic-bezier(.2,.8,.2,1) backwards}
+.voile.sort{animation:n-fondu .2s reverse forwards;pointer-events:none}
+.voile.sort .feuille{animation:n-feuille .2s ease-in reverse forwards}
+.toast:not([hidden]){animation:n-toast .36s cubic-bezier(.3,1.35,.5,1) backwards}
+@keyframes n-entre{from{opacity:0;transform:translate(calc(var(--sens,0)*18px),calc((1 - var(--sens,0)*var(--sens,0))*12px))}}
+@keyframes n-pop{0%{transform:scale(.8)}55%{transform:scale(1.18) translateY(-1px)}}
+@keyframes n-onde{from{transform:scale(.2)}to{transform:scale(1);opacity:0}}
+@keyframes n-fondu{from{opacity:0}}
+@keyframes n-feuille{from{transform:translateY(100%)}}
+@keyframes n-toast{from{opacity:0;transform:translate(-50%,14px) scale(.96)}}
+@keyframes n-trace{to{stroke-dashoffset:-100}}
+@media (prefers-reduced-motion: reduce){#contenu.entree>*,.voile,.feuille,.toast,.charge,.charge path,.nav-ind,.nav.change .ic{animation:none!important;transition:none!important}}
 /* fenêtre du bas */
 .voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .feuille{background:var(--bg);width:100%;max-width:560px;max-height:92dvh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 20px);display:flex;flex-direction:column;gap:12px}
@@ -400,9 +437,37 @@ function ecranNouveauMdp(obligatoire) {
 const TRIANGLE = `<svg viewBox="0 0 20 18" aria-hidden="true"><path d="M10 1.6 18.6 16.6H1.4Z"/></svg>`;
 const vibre = m => { try { if (navigator.vibrate) navigator.vibrate(m); } catch (_) {} };
 const couleurBarre = c => document.querySelector('meta[name="theme-color"]').content = c;
+/* Effets : l'onde part du doigt sur les boutons, et l'en-tête prend une ombre dès qu'on fait défiler */
+const moinsDeMouvement = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+document.addEventListener("pointerdown", e => {
+  const b = e.target.closest(".btn,.chip,.coche,.ag-d,.seg button,.nav button");
+  if (!b || b.disabled || moinsDeMouvement()) return;
+  const r = b.getBoundingClientRect(), t = Math.max(r.width, r.height) * 2, o = document.createElement("span");
+  o.className = "n-onde"; o.style.cssText = `width:${t}px;height:${t}px;left:${e.clientX - r.left - t / 2}px;top:${e.clientY - r.top - t / 2}px`;
+  b.append(o); o.addEventListener("animationend", () => o.remove());
+});
+window.addEventListener("scroll", () => { const h = document.querySelector(".entete"); if (h) h.classList.toggle("ombre", scrollY > 4); }, { passive: true });
+/* Les chiffres en grand montent jusqu'à leur valeur à l'arrivée sur l'écran */
+function compter(el) {
+  const m = /^(\d+)(?:,(\d+))?(.*)$/s.exec(el.textContent.trim()); if (!m) return;
+  const fin = Number(m[1] + "." + (m[2] || 0)), dec = (m[2] || "").length, t0 = performance.now(), juste = el.textContent;
+  setTimeout(() => { el.textContent = juste; }, 700);   // la vraie valeur, même si le navigateur suspend l'animation
+  (function pas(t) {
+    const p = Math.min(1, (t - t0) / 650), v = fin * (1 - Math.pow(1 - p, 3));
+    if (!el.isConnected) return;
+    el.textContent = v.toFixed(dec).replace(".", ",") + m[3];
+    if (p < 1) requestAnimationFrame(pas);
+  })(t0);
+}
+function entree(sens) {
+  const c = document.getElementById("contenu"); if (!c) return;
+  c.style.setProperty("--sens", sens); c.classList.remove("entree"); void c.offsetWidth; c.classList.add("entree");
+  if (!moinsDeMouvement()) c.querySelectorAll(".compteur").forEach(compter);
+}
 function clavier(titre, texte, quandFini, extra = "", rapide = false) {
   let saisi = "", occupe = false;
-  couleurBarre("#3A3F2E");
+  ongletAffiche = null;
+  couleurBarre("#656C52");
   const touches = [1,2,3,4,5,6,7,8,9].map((n, i) => `<button type="button" data-n="${n}" style="--i:${i}">${n}</button>`).join("");
   app.innerHTML = `<main class="verrou${rapide ? " rapide" : ""}">
     <svg class="v-fond" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg>
@@ -448,9 +513,10 @@ async function ouverture(apres) {
   const s = v.querySelector(".v-slots").getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2, R = 2.4 * Math.max(innerWidth, innerHeight);
   const tri = r => `polygon(${x}px ${y - r}px, ${x + r * .95}px ${y + r * .6}px, ${x - r * .95}px ${y + r * .6}px)`;
   const i = document.createElement("div"); i.className = "iris"; document.body.append(i);
-  await i.animate([{ clipPath: tri(9) }, { clipPath: tri(9), offset: .3 }, { clipPath: tri(R) }], { duration: 820, easing: "cubic-bezier(.7,0,.2,1)", fill: "forwards" }).finished;
+  /* Le délai de secours évite de rester bloqué si le navigateur suspend l'animation */
+  await Promise.race([i.animate([{ clipPath: tri(9) }, { clipPath: tri(9), offset: .3 }, { clipPath: tri(R) }], { duration: 820, easing: "cubic-bezier(.7,0,.2,1)", fill: "forwards" }).finished, new Promise(r => setTimeout(r, 1000))]);
   try { await apres(); }
-  finally { i.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" }).finished.then(() => i.remove()); }
+  finally { i.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" }); setTimeout(() => i.remove(), 320); }
 }
 function ecranChoisirPin(depuisMoi) {
   clavier("Choisis ton code", "4 chiffres, à taper à chaque ouverture.", v1 =>
@@ -536,7 +602,12 @@ function feuille(html, brancher, quandFerme) {
   const v = document.createElement("div"); v.className = "voile";
   v.innerHTML = `<div class="feuille" role="dialog" aria-modal="true">${html}</div>`;
   document.body.appendChild(v);
-  const fermer = () => { v.remove(); if (quandFerme) quandFerme(); };
+  const fermer = () => {
+    /* La fenêtre part vers le bas : c'est une copie sans identifiants, la vraie est déjà retirée */
+    const copie = v.cloneNode(true); copie.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
+    v.remove(); if (!moinsDeMouvement()) { copie.classList.add("sort"); document.body.append(copie); setTimeout(() => copie.remove(), 210); }
+    if (quandFerme) quandFerme();
+  };
   v.addEventListener("click", e => { if (e.target === v || e.target.closest("[data-fermer]")) fermer(); });
   if (brancher) brancher(v.querySelector(".feuille"), fermer);
   return fermer;
@@ -545,13 +616,19 @@ const choixClient = (sel, nom = "client") => `<label class="f">Client<select nam
 
 /* ===================== Accueil et onglets ===================== */
 const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["agenda", "📅", "Agenda"], ["clients", "👥", "Clients"], ["mois", "📊", "Reporting"], ["moi", "👤", "Moi"]];
+let ongletAffiche = null, sensSuivant = null;
+const rangOnglet = k => ONGLETS.findIndex(x => x[0] === k);
 async function accueil(o) {
   if (o) onglet = o;
   couleurBarre("#7A8568");
+  const avant = rangOnglet(ongletAffiche), apres = rangOnglet(onglet), change = onglet !== ongletAffiche;
+  const sens = sensSuivant !== null ? sensSuivant : change && avant >= 0 && apres >= 0 ? Math.sign(apres - avant) : 0, animer = change || sensSuivant !== null;
+  sensSuivant = null; ongletAffiche = onglet;
   app.innerHTML = `<header class="entete"><img class="tuile" src="logo-oikos.png" alt=""><div><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace intervenant</div></div></header>
-    <main class="page" id="contenu"><p class="muted">Chargement…</p></main>
-    <nav class="nav" aria-label="Onglets"><div>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ic}</span>${t}</button>`).join("")}</div></nav>`;
-  app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) accueil(b.dataset.onglet); };
+    <main class="page" id="contenu"><div class="charge" role="status" aria-label="Chargement"><svg viewBox="0 0 20 18" aria-hidden="true"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></main>
+    <nav class="nav${change ? " change" : ""}" aria-label="Onglets"><div><span class="nav-ind${apres < 0 ? " cache" : ""}" style="--p:${avant >= 0 ? avant : Math.max(apres, 0)}"></span>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ic}</span>${t}</button>`).join("")}</div></nav>`;
+  app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) { vibre(5); accueil(b.dataset.onglet); } };
+  const ind = app.querySelector(".nav-ind"); void ind.offsetWidth; if (apres >= 0) ind.style.setProperty("--p", apres);
   try {
     if (!(await chargerMoi())) return;
     let c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,temps_semaine_min,meteo").order("nom");
@@ -559,6 +636,7 @@ async function accueil(o) {
     if (c.error) throw c.error;
     clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
+    if (animer) entree(sens);
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
@@ -1177,7 +1255,7 @@ async function vueAgenda() {
   const el = document.getElementById("contenu");
   el.onclick = e => {
     const nav = e.target.closest("[data-agnav]"), j = e.target.closest("[data-agjour]"), v = e.target.closest("[data-agvue]"), ev = e.target.closest("[data-agref]");
-    if (nav) { agJour = ajouterJours(agJour, Number(nav.dataset.agnav)); return accueil("agenda"); }
+    if (nav) { agJour = ajouterJours(agJour, Number(nav.dataset.agnav)); sensSuivant = Math.sign(Number(nav.dataset.agnav)); return accueil("agenda"); }
     if (e.target.closest("[data-agauj]")) { agJour = debutJour(); return accueil("agenda"); }
     if (j) { agJour = new Date(Number(j.dataset.agjour)); agVue = "jour"; LS.set("agvue", agVue); return accueil("agenda"); }
     if (v) { agVue = v.dataset.agvue; LS.set("agvue", agVue); return accueil("agenda"); }
