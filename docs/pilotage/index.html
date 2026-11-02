@@ -1317,7 +1317,7 @@ async function dosPhotos(c, corps, re) {
         <label class="f">Légende (facultatif)<input type="text" id="pleg" maxlength="500" placeholder="Ex. évier fendu sous le robinet"></label></div>
       <label class="chk"><input type="checkbox" id="ppart" checked>Visible par les intervenantes qui ont ce client</label>
       <div class="row"><button class="btn primary" id="pchoix">📷 Ajouter des photos</button>
-        <span class="muted small">Rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Photos) en quelques minutes. Le travail ou le dégât, jamais les personnes, papiers ou objets de valeur.</span></div>
+        <span class="muted small">Rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Photos) en quelques minutes. Tu peux aussi les glisser directement dans ce dossier. Le travail ou le dégât, jamais les personnes, papiers ou objets de valeur.</span></div>
       <input type="file" id="pfic" accept="image/*" multiple hidden></div>
     <div class="photos">${photos.map(p => `<figure class="photo" data-ph="${p.id}"><button class="vignette" data-ouvrir title="Ouvrir la photo complète"><img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || CATS[p.categorie])}" loading="lazy"></button>
         <figcaption><b>${CATS[p.categorie] || "Photo"}</b>${p.legende ? " · " + esc(p.legende) : ""}<br>
