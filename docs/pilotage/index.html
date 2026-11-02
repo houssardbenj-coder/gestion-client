@@ -130,6 +130,10 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 .doc{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--bg);border-radius:10px;padding:6px 10px}
 .depot{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;border:2px dashed var(--line);border-radius:12px;padding:12px}
 .depot.survol{border-color:var(--accent);background:var(--accent-soft)}
+.rp-ligne{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.rp-ligne.incomplete{border-color:var(--warn)}
+.rp-champs{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.rp-ligne input{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);width:100%}
 </style>
 </head>
 <body>
@@ -199,7 +203,7 @@ function ecranConnexion(msg) {
 }
 
 /* ===================== Cadre et onglets ===================== */
-const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["taches", "À faire"], ["intervenantes", "Intervenantes"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenantes"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
 async function afficher(o) {
   if (o) onglet = o;
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque"><img src="../intervenante/icone-192.png" alt="">OIKOS Pilotage</div>
@@ -209,7 +213,7 @@ async function afficher(o) {
   app.querySelector("nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) afficher(b.dataset.o); };
   document.getElementById("sortir").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, planning: vuePlanning, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, papiers: vuePapiers })[onglet](); }
+  try { await ({ avoir: vueAVoir, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, papiers: vuePapiers })[onglet](); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
@@ -370,6 +374,205 @@ async function vuePlanning() {
     if (s) { plSemaine = s.dataset.sem === "0" ? lundi(new Date()) : plusJours(plSemaine, Number(s.dataset.sem)); return afficher("planning"); }
     if (c) return fichePassagePrevu(cr.find(x => x.id === c.dataset.cr));
     if (a) { const [id, j] = a.dataset.ajout.split("|"); return fichePassagePrevu(null, id, j); }
+  };
+}
+/* ===================== Reporting : le mois d'une intervenante, et ses passages saisis à sa place ===================== */
+/* Même lecture que l'onglet Reporting de l'appli : « Bibas 3h ce matin, Haddad 9h-12h hier » */
+const MOIS_FR = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
+const JOURS_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const NOMBRES = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8 };
+const VIDES = new Set("le la les l du de des d chez pour avec et puis ensuite apres un une a au aux ce cet cette matin midi soir aprem apresmidi j ai fait fais vu menage passage heure heures h min minutes mn aujourd hui aujourdhui hier avant demi demie quart madame monsieur mme mr m".split(" "));
+const sansAcc = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function distance(a, b) {   // nombre de lettres à changer pour passer de a à b
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+/* Comme ça se prononce : « lieutot » = « Lieutaud », « bibasse » = « Bibas » */
+const oreille = w => w.replace(/ph/g, "f").replace(/qu/g, "k").replace(/c([eiy])/g, "s$1").replace(/(eau|ault|aud|aut|au)/g, "o").replace(/(.)\1+/g, "$1").replace(/[dtsxe]+$/, "");
+const proche = (a, b) => a === b ? 1 : (a.length >= 3 && b.startsWith(a)) || (b.length >= 3 && a.startsWith(b)) ? .9 : 1 - distance(a, b) / Math.max(a.length, b.length);
+const ressemblance = (a, b) => Math.max(proche(a, b), a.length >= 3 && b.length >= 3 ? proche(oreille(a), oreille(b)) * .95 : 0);
+function devinerClient(mots, clients) {
+  let mieux = null, second = 0;
+  clients.forEach(c => {
+    const siens = sansAcc(c.nom).split(/[^a-z0-9]+/).filter(m => m.length >= 2);
+    const score = Math.max(0, ...mots.map(m => Math.max(0, ...siens.map(s => ressemblance(m, s)))));
+    if (!mieux || score > mieux.score) { second = mieux ? mieux.score : 0; mieux = { c, score }; } else second = Math.max(second, score);
+  });
+  return mieux && mieux.score >= .75 && mieux.score - second > .05 ? mieux.c.id : "";
+}
+function lireDate(t, aujourdhui) {
+  let m;
+  if (/avant[- ]?hier/.test(t)) return [plusJours(aujourdhui, -2), /avant[- ]?hier/];
+  if (/\bhier\b/.test(t)) return [plusJours(aujourdhui, -1), /\bhier\b/];
+  if (/aujourd ?'?hui/.test(t)) return [aujourdhui, /aujourd ?'?hui/];
+  if (/\bce (matin|midi|soir)\b|\bcet apres ?-?midi\b/.test(t)) return [aujourdhui, /\bce (matin|midi|soir)\b|\bcet apres ?-?midi\b/];
+  if ((m = /\b(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?\b/.exec(t))) {
+    let a = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : aujourdhui.getFullYear(), d = new Date(a, +m[2] - 1, +m[1]);
+    if (!m[3] && d > aujourdhui) d = new Date(a - 1, +m[2] - 1, +m[1]);
+    return [d, m[0]];
+  }
+  if ((m = new RegExp("\\b(\\d{1,2}|1er) (" + MOIS_FR.join("|") + ")\\b").exec(t))) {
+    let d = new Date(aujourdhui.getFullYear(), MOIS_FR.indexOf(m[2]), parseInt(m[1]));
+    if (d > aujourdhui) d = new Date(aujourdhui.getFullYear() - 1, MOIS_FR.indexOf(m[2]), parseInt(m[1]));
+    return [d, m[0]];
+  }
+  if ((m = new RegExp("\\b(" + JOURS_FR.join("|") + ")\\b").exec(t))) {
+    const recul = (aujourdhui.getDay() - JOURS_FR.indexOf(m[1]) + 7) % 7;
+    return [plusJours(aujourdhui, -recul), m[0]];
+  }
+  if ((m = /\ble (\d{1,2})(?![\dh:.,])/.exec(t))) {
+    let d = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), +m[1]);
+    if (d > aujourdhui) d = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() - 1, +m[1]);
+    return [d, m[0]];
+  }
+  return [null, null];
+}
+function lireMorceau(brut, jourParDefaut, clients) {
+  let t = " " + sansAcc(brut).replace(/[’']/g, " ").replace(/\s+/g, " ") + " ", m;
+  const l = { client_id: "", jour: "", debut: "", fin: "", minutes: 0, note: "" };
+  const [d, trouve] = lireDate(t, plusJours(new Date(), 0));
+  if (d) { l.jour = ymd(d); t = t.replace(trouve, " "); } else l.jour = jourParDefaut;
+  // créneau : 9h-12h, 9h30 à 12h, de 14 h à 16h30
+  if ((m = /(?:de )?(\d{1,2}) ?[h:] ?(\d{2})? ?(?:-|a|au|jusqu a) ?(\d{1,2}) ?[h:]? ?(\d{2})?(?![\d])/.exec(t))) {
+    const a = +m[1] * 60 + +(m[2] || 0), b = +m[3] * 60 + +(m[4] || 0);
+    if (b > a && b <= 24 * 60) { l.debut = pad2(m[1]) + ":" + pad2(m[2] || 0); l.fin = pad2(m[3]) + ":" + pad2(m[4] || 0); l.minutes = b - a; t = t.replace(m[0], " "); }
+  }
+  if (!l.minutes) {   // durée : 3h, 3h30, 2,5h, 45 min, trois heures et demie
+    if ((m = /(\d{1,2})[.,](\d{1,2}) ?h\b/.exec(t))) l.minutes = Math.round(parseFloat(m[1] + "." + m[2]) * 60);
+    else if ((m = /(\d{1,2}) ?h ?(\d{2})?(?!\d)/.exec(t))) l.minutes = +m[1] * 60 + +(m[2] || 0);
+    else if ((m = /(\d{1,3}) ?(?:min|mn|minutes?)\b/.exec(t))) l.minutes = +m[1];
+    else if ((m = new RegExp("\\b(" + Object.keys(NOMBRES).join("|") + ") heures?( et demie?| et quart)?").exec(t))) l.minutes = NOMBRES[m[1]] * 60 + (m[2] ? (/quart/.test(m[2]) ? 15 : 30) : 0);
+    if (m) { t = t.replace(m[0], " "); if (/et demie?/.test(t) && !/et demie?|et quart/.test(m[0])) { l.minutes += 30; t = t.replace(/et demie?/, " "); } }
+  }
+  const mots = t.split(/[^a-z0-9]+/).filter(x => x.length >= 2 && !VIDES.has(x) && !/^\d+$/.test(x));
+  l.client_id = devinerClient(mots, clients);
+  l.lu = brut.trim();
+  return l;
+}
+function lireDeclaration(texte, clients) {
+  const lignes = [];
+  texte.split(/\n+/).forEach(ligne => {
+    // virgule, point-virgule, « puis », « et » séparent les passages (mais pas « 2,5h » ni « 3h et demie »)
+    const morceaux = ligne.split(/,(?!\d)|(?<!\d),|;| puis | ensuite | et (?!demi|quart)/i).map(s => s.trim()).filter(Boolean);
+    let jourLigne = ymd(new Date());   // « hier : Bibas 3h, Haddad 2h » : le jour vaut aussi pour les suivants
+    morceaux.forEach(mc => {
+      const l = lireMorceau(mc, jourLigne, clients);
+      jourLigne = l.jour;
+      if (l.client_id || l.minutes) lignes.push(l);
+      else if (lignes.length) lignes[lignes.length - 1].note = ((lignes[lignes.length - 1].note || "") + " " + mc).trim();   // reste = remarque
+    });
+  });
+  return lignes;
+}
+const heuresSaisie = min => min ? String(Math.round(min / 60 * 100) / 100).replace(".", ",") : "";
+const minutesSaisie = v => { v = String(v || "").trim().toLowerCase().replace(",", "."); const m = /^(\d+)\s*h\s*(\d{1,2})$/.exec(v); return m ? +m[1] * 60 + +m[2] : Math.round(parseFloat(v) * 60) || 0; };
+const ligneOk = l => l.client_id && l.minutes > 0 && l.jour && l.jour <= ymd(new Date());
+/* Une ligne → un passage : avec un créneau, les vraies heures ; sinon midi + la durée (seule la durée compte) */
+function versPassage(l, intervenante) {
+  const avecCreneau = !!(l.debut && l.fin);
+  const a = new Date(l.jour + "T" + (avecCreneau ? l.debut : "12:00"));
+  return { intervenante_id: intervenante, client_id: l.client_id, arrivee: a.toISOString(), depart: new Date(a.getTime() + l.minutes * 60000).toISOString(),
+    source: "declaration", creneau_connu: avecCreneau, note: (l.note || "").trim() || null };
+}
+/* Lignes à vérifier : gardées dans ce navigateur jusqu'à l'envoi, chacune rattachée à son intervenante */
+const RP_CLE = "oikos-gerant-reporting";
+let rpBrouillon = []; try { rpBrouillon = JSON.parse(localStorage.getItem(RP_CLE)) || []; } catch (e) {}
+const rpGarder = () => { try { localStorage.setItem(RP_CLE, JSON.stringify(rpBrouillon)); } catch (e) {} };
+let rpQui = "", rpMois = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+async function vueReporting() {
+  await chargerBase();
+  const gens = cacheProfils.filter(p => p.role === "intervenante").sort((a, b) => b.actif - a.actif);
+  if (!gens.some(p => p.id === rpQui)) rpQui = (gens[0] || {}).id || "";
+  if (!rpQui) return contenu(`<h1>Reporting</h1><p class="muted" style="margin-top:12px">Aucune intervenante.</p>`);
+  const m0 = rpMois, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1), aujourd = ymd(new Date());
+  const [pt, attrib] = await Promise.all([
+    q(sb.from("pointages").select("*").eq("intervenante_id", rpQui).gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).order("arrivee")),
+    q(sb.from("attributions").select("*").eq("intervenante_id", rpQui))]);
+  const siens = attrib.filter(a => !a.fin || a.fin >= aujourd).map(a => a.client_id);
+  const clients = cacheClients.filter(c => siens.includes(c.id));
+  const lignes = rpBrouillon.filter(l => l.intervenante_id === rpQui);
+  const ajouter = ls => { rpBrouillon = rpBrouillon.concat(ls.map(l => ({ ...l, intervenante_id: rpQui, cle: Math.random().toString(36).slice(2) }))); rpGarder(); };
+  const minutes = p => p.depart ? (new Date(p.depart) - new Date(p.arrivee)) / 6e4 : 0;
+  const finis = pt.filter(p => p.depart), total = finis.reduce((s, p) => s + minutes(p), 0);
+  const parClient = {}; finis.forEach(p => parClient[p.client_id] = (parClient[p.client_id] || 0) + minutes(p));
+  const choix = sel => `<option value="">— quel client ? —</option>` + clients.map(c => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nom)}</option>`).join("");
+  const carte = l => `<div class="card rp-ligne${ligneOk(l) ? "" : " incomplete"}" data-cle="${l.cle}">
+      ${l.lu ? `<p class="muted small">« ${esc(l.lu)} »</p>` : ""}
+      <div class="row" style="flex-wrap:nowrap"><select name="client_id" aria-label="Client" style="flex:1;min-width:0">${choix(l.client_id)}</select>
+        <button class="btn flat" data-suppr aria-label="Retirer cette ligne">✕</button></div>
+      <div class="rp-champs"><label class="f">Jour<input name="jour" type="date" value="${esc(l.jour)}" max="${aujourd}"></label>
+        <label class="f">Heures<input name="heures" type="text" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label>
+        <label class="f">Début (facultatif)<input name="debut" type="time" value="${esc(l.debut || "")}"></label>
+        <label class="f">Fin (facultatif)<input name="fin" type="time" value="${esc(l.fin || "")}"></label></div>
+      <label class="f">Remarque (facultatif)<input name="note" type="text" value="${esc(l.note || "")}"></label></div>`;
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Reporting</h1>
+      <select id="rp-qui" aria-label="Intervenante" style="max-width:260px">${gens.map(p => `<option value="${p.id}" ${p.id === rpQui ? "selected" : ""}>${esc(nomPers(p))}${p.actif ? "" : " (accès coupé)"}</option>`).join("")}</select></div>
+    <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Saisir à sa place</h2>
+      ${clients.length ? `<label class="f" for="rp-texte">Ce qu'elle a fait</label>
+      <textarea id="rp-texte" rows="3" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="rp-verifier">Vérifier</button><button class="btn flat" id="rp-vide">➕ Ajouter une ligne à la main</button></div>`
+      : `<p class="muted">Aucun client ne lui est confié : va dans Intervenantes › sa fiche › « Confier » avant de saisir ses passages.</p>`}
+    </section>
+    ${lignes.length ? `<h2>À vérifier avant d'envoyer</h2>${lignes.map(carte).join("")}
+      <button class="btn go" id="rp-envoyer" style="margin-top:12px">📤 Envoyer ${lignes.length} passage${lignes.length > 1 ? "s" : ""}</button>
+      <p class="muted small" style="margin-top:6px">Une ligne orange est incomplète : choisis le client, le jour et les heures.</p>` : ""}
+    <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn" id="rp-prec" aria-label="Mois précédent">‹</button>
+      <h2 style="margin:0;text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</h2>
+      <button class="btn" id="rp-suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>›</button></div>
+    <div class="deux" style="margin-top:10px">
+      <section class="card"><h3 style="margin-top:0">Heures du mois</h3><p style="font-size:24px;font-weight:800">${heures(total)}</p>
+        <p class="muted small">${finis.length} passage${finis.length > 1 ? "s" : ""} · ${Object.keys(parClient).length} client${Object.keys(parClient).length > 1 ? "s" : ""}</p>
+        ${finis.length && finis.every(p => p.valide_par_intervenante) ? `<span class="tag">✓ Validé par elle</span>` : ""}</section>
+      <section class="card"><h3 style="margin-top:0">Par client</h3>${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${heures(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</section>
+    </div>
+    <section class="card" style="margin-top:12px"><h3 style="margin-top:0">Chaque passage</h3>${pt.length ? pt.map(p => `<div class="ligne"><span><b>${esc(nomClient(p.client_id))}</b><br><span class="muted small">${jour(p.arrivee)}${p.creneau_connu !== false ? " · " + hm(p.arrivee) + " → " + (p.depart ? hm(p.depart) : "?") : ""}</span>${p.note ? `<br><span class="small">${esc(p.note)}</span>` : ""}
+        <span class="row" style="gap:4px;margin-top:3px">${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans son rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></span>
+        <b style="flex:none">${p.depart ? heures(minutes(p)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</section>`);
+  el.querySelector("#rp-qui").onchange = e => { rpQui = e.target.value; afficher("reporting"); };
+  el.querySelector("#rp-prec").onclick = () => { rpMois = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); afficher("reporting"); };
+  el.querySelector("#rp-suiv").onclick = () => { rpMois = m1; afficher("reporting"); };
+  if (el.querySelector("#rp-verifier")) el.querySelector("#rp-verifier").onclick = () => {
+    const ls = lireDeclaration(el.querySelector("#rp-texte").value, clients);
+    if (!ls.length) return toast("Écris par exemple : Bibas 3h ce matin");
+    ajouter(ls);
+    const manque = ls.filter(l => !ligneOk(l)).length;
+    toast(ls.length + " passage" + (ls.length > 1 ? "s" : "") + " à vérifier" + (manque ? " (" + manque + " à compléter)" : ""));
+    afficher("reporting");
+  };
+  if (el.querySelector("#rp-vide")) el.querySelector("#rp-vide").onclick = () => { ajouter([{ client_id: "", jour: aujourd, minutes: 0, debut: "", fin: "", note: "" }]); afficher("reporting"); };
+  // chaque changement dans une ligne est gardé tout de suite
+  el.addEventListener("input", e => {
+    const c = e.target.closest("[data-cle]"); if (!c) return;
+    const l = rpBrouillon.find(x => x.cle === c.dataset.cle), n = e.target.name;
+    if (n === "heures") l.minutes = minutesSaisie(e.target.value);
+    else if (n) l[n] = e.target.value;
+    if ((n === "debut" || n === "fin") && l.debut && l.fin) {
+      const [ha, ma] = l.debut.split(":").map(Number), [hb, mb] = l.fin.split(":").map(Number), mn = hb * 60 + mb - ha * 60 - ma;
+      if (mn > 0) { l.minutes = mn; c.querySelector("[name=heures]").value = heuresSaisie(mn); }
+    }
+    c.classList.toggle("incomplete", !ligneOk(l));
+    rpGarder();
+  });
+  el.addEventListener("click", e => {
+    const s = e.target.closest("[data-suppr]"); if (!s) return;
+    rpBrouillon = rpBrouillon.filter(x => x.cle !== s.closest("[data-cle]").dataset.cle); rpGarder(); afficher("reporting");
+  });
+  if (el.querySelector("#rp-envoyer")) el.querySelector("#rp-envoyer").onclick = async e => {
+    if (!lignes.every(ligneOk)) return toast("Complète les lignes en orange (client, jour, heures) ou retire-les ✕");
+    const bouton = e.currentTarget; bouton.disabled = true;
+    try {
+      // Elle a pu déclarer le même passage de son côté : les heures partiraient deux fois vers sa facture
+      const jours = lignes.map(l => l.jour).sort(), deb = new Date(jours[0] + "T00:00"), fin = plusJours(new Date(jours[jours.length - 1] + "T12:00"), 1);
+      const deja = await q(sb.from("pointages").select("client_id,arrivee").eq("intervenante_id", rpQui).gte("arrivee", deb.toISOString()).lt("arrivee", fin.toISOString()));
+      const doublons = lignes.filter(l => deja.some(p => p.client_id === l.client_id && ymd(new Date(p.arrivee)) === l.jour));
+      if (doublons.length && !confirm("Déjà un passage déclaré le même jour pour :\n" + doublons.map(l => "- " + nomClient(l.client_id) + " (" + new Date(l.jour + "T12:00").toLocaleDateString("fr-FR") + ")").join("\n") + "\n\nEnvoyer quand même ?")) { bouton.disabled = false; return; }
+      await q(sb.from("pointages").insert(lignes.map(l => versPassage(l, rpQui))));
+    } catch (err) { bouton.disabled = false; return souci(err); }
+    rpBrouillon = rpBrouillon.filter(l => l.intervenante_id !== rpQui); rpGarder();
+    toast("Envoyé ✓ " + lignes.length + " passage" + (lignes.length > 1 ? "s" : "") + " : ils arrivent dans son rapport d'ici quelques minutes"); afficher("reporting");
   };
 }
 /* Saisie rapide reprise de Pense intelligent : « mardi pro 14h30 », « demain 9h », « jeudi dans 2 semaines », « le 12/11 à 10h » */

@@ -1307,7 +1307,6 @@ function ajouterPassage(pre = {}) {
 }
 
 /* ---------- Reporting : elle déclare ses passages (comme l'appli Reporting d'OIKOS), puis voit son mois ---------- */
-const DICTEE = window.SpeechRecognition || window.webkitSpeechRecognition;
 const heuresSaisie = min => min ? String(Math.round(min / 60 * 100) / 100).replace(".", ",") : "";
 const minutesSaisie = v => { v = String(v || "").trim().toLowerCase().replace(",", "."); const m = /^(\d+)\s*h\s*(\d{1,2})$/.exec(v); return m ? +m[1] * 60 + +m[2] : Math.round(parseFloat(v) * 60) || 0; };
 const ligneOk = l => l.client_id && l.minutes > 0 && l.jour && l.jour <= versLocal(new Date()).slice(0, 10);
@@ -1335,8 +1334,7 @@ async function vueMois() {
     <div class="card" style="margin-top:10px">
       <label class="f" for="dire">Ce que tu as fait</label>
       <textarea id="dire" rows="3" style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);font-size:17px;width:100%" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier"></textarea>
-      <div class="grid2">${DICTEE ? `<button class="btn" id="micro"><span class="ic">🎤</span>Dicter</button>` : `<span class="muted small">Astuce : le micro 🎤 de ton clavier marche aussi.</span>`}
-        <button class="btn primary" id="verifier">Vérifier</button></div>
+      <button class="btn primary" id="verifier">Vérifier</button>
       <button class="btn flat" id="vide">➕ Ajouter une ligne à la main</button></div>
     ${brouillon.length ? `<h2>À vérifier avant d'envoyer</h2><div class="stack" id="brouillon">${brouillon.map(carte).join("")}</div>
       <button class="btn go big" id="envoyer" style="margin-top:12px;width:100%"><span class="ic">📤</span>Envoyer ${brouillon.length} passage${brouillon.length > 1 ? "s" : ""}</button>
@@ -1363,13 +1361,6 @@ async function vueMois() {
     accueil("mois");
   };
   document.getElementById("vide").onclick = () => { ajouterAuBrouillon([{ client_id: "", jour: versLocal(new Date()).slice(0, 10), minutes: 0, debut: "", fin: "", note: "" }]); accueil("mois"); };
-  if (document.getElementById("micro")) document.getElementById("micro").onclick = e => {
-    const b = e.currentTarget, rec = new DICTEE(); rec.lang = "fr-FR"; rec.interimResults = false;
-    rec.onresult = r => { const dit = r.results[0][0].transcript; zone.value = (zone.value.trim() ? zone.value.trim() + ", " : "") + dit; };
-    rec.onerror = () => toast("Je n'ai pas entendu : réessaie, ou tape le texte.");
-    rec.onend = () => { b.disabled = false; b.lastChild.textContent = "Dicter"; };
-    b.disabled = true; b.lastChild.textContent = "J'écoute…"; rec.start();
-  };
   // chaque changement dans une ligne est gardé tout de suite
   el.addEventListener("input", e => {
     const c = e.target.closest("[data-cle]"); if (!c) return;
