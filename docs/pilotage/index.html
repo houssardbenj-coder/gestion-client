@@ -266,6 +266,9 @@ async function chargerBase() {
     q(sb.from("clients").select("*").order("nom"))]);
 }
 const nomClient = id => (cacheClients.find(c => c.id === id) || {}).nom || "?";
+const ACTIVITES_CLIENT = ["Cours", "Ménage", "Jardinage", "Bricolage"];
+const activitesClient = c => [...new Set([c.activite, ...(c.activites || [])].filter(Boolean))];
+const elevesClient = c => (c.eleves || []).join(", ");
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
 const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
 
@@ -653,7 +656,7 @@ async function fichePassagePrevu(x, interv, jourTxt) {
     const $ = s => el.querySelector(s), champDuree = $("#fp-duree");
     const dureeH = () => parseFloat(champDuree.value.replace(",", "."));
     const peindreDurees = () => { $("#fp-durees").innerHTML = DUREES.map(h => `<button type="button" class="chip" data-duree="${h}" aria-pressed="${dureeH() === h}">${String(h).replace(".", ",")} h</button>`).join(""); };
-    const clientsTrouves = t => choix.filter(c => norm(c.nom + " " + (c.adresse || "")).includes(norm(t))).slice(0, 8);
+    const clientsTrouves = t => choix.filter(c => norm(c.nom + " " + elevesClient(c) + " " + (c.adresse || "")).includes(norm(t))).slice(0, 8);
     const peindreResultats = () => { const t = $("#cl-q").value, l = clientsTrouves(t);
       $("#cl-res").innerHTML = l.map(c => `<button type="button" class="btn" data-client="${c.id}"><b>${esc(c.nom)}</b>${c.adresse ? `<br><span class="muted small">${esc(c.adresse)}</span>` : ""}</button>`).join("") || `<span class="muted small">Aucun client trouvé.</span>`; };
     const peindreClient = () => {
@@ -1098,15 +1101,18 @@ async function vueClients() {
   const tampon = await q(sb.from("clients_import").select("*").in("etat", ["nouveau", "different", "a_verifier"]).order("nom"));
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1>
       <span class="row"><button class="btn primary" id="imp">📥 Importer une extraction</button><button class="btn" id="nv">➕ Nouveau client</button></span></div>
-    <p class="muted small" style="margin:6px 0 0">Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    <p class="muted small" style="margin:6px 0 0">Les clients actifs de Pense intelligent (cours et services) arrivent ici tout seuls. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
     ${tampon.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Zone tampon : ${tampon.length} ligne(s) à traiter</h2>
       <table><tr><th>Extraction</th><th>Rapprochement</th><th></th></tr>${tampon.map(t => { const c = cacheClients.find(k => k.id === t.client_id);
         return `<tr><td><b>${esc(t.nom)}</b><br><span class="muted small">${esc([t.telephone, t.email, t.adresse].filter(Boolean).join(" · "))}</span></td>
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
-    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Clients enregistrés (${cacheClients.length})</h2><input type="text" id="cherche" placeholder="Chercher…" style="max-width:240px"></div>
-      <table id="tc"><tr><th>Nom</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${cacheClients.map(c => `<tr class="cliquable" data-c="${c.id}"><td><b>${esc(c.nom)}</b></td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
-  el.querySelector("#cherche").oninput = e => { const v = norm(e.target.value); el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = v && !norm(r.textContent).includes(v)); };
+    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Clients enregistrés (${cacheClients.length})</h2><span class="row"><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${cacheClients.map(c => `<tr class="cliquable" data-c="${c.id}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
+  const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value;
+    el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v && !norm(r.textContent).includes(v)) || (a && !r.dataset.act.split("|").includes(a))); };
+  el.querySelector("#cherche").oninput = filtrer;
+  el.querySelector("#filtre-act").onchange = filtrer;
   el.querySelector("#imp").onclick = importer;
   el.querySelector("#nv").onclick = () => ficheClient(null);
   el.onclick = async e => {
@@ -1246,7 +1252,7 @@ async function vueDossiers() {
     <p class="muted small" style="margin:6px 0 12px">Les plus récemment actifs d'abord. Toi seul vois tout : un intervenant ne voit que ce qui lui est partagé et ses propres dossiers de tâche, jamais le Drive.</p>
     <div class="dos-grille">${liste.map(({ c, s }) => `<button class="dos-carte" data-c="${c.id}"><span class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>${esc(c.nom)}</b>${s.nouveaux ? `<span class="tag warn">${s.nouveaux} nouveau${s.nouveaux > 1 ? "x" : ""}</span>` : ""}</span>
         <span class="row" style="gap:4px"><span class="tag">📁 ${s.dossiers} dossier${s.dossiers > 1 ? "s" : ""} · ${s.elements} élément${s.elements > 1 ? "s" : ""}</span><span class="tag">📷 ${s.photos}</span><span class="tag">💬 ${s.ecrits}</span><span class="tag">🔒 ${s.juridique}</span></span>
-        <span class="muted small">${s.dernier ? "Dernier ajout : " + jour(s.dernier) : "Rien pour l'instant"}${c.dossier_drive ? "" : " · Drive en préparation"}</span></button>`).join("") || `<p class="muted">Aucun client.</p>`}</div>`);
+        ${elevesClient(c) ? `<span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}<span class="muted small">${s.dernier ? "Dernier ajout : " + jour(s.dernier) : "Rien pour l'instant"}${c.dossier_drive || c.activite === "Cours" ? "" : " · Drive en préparation"}</span></button>`).join("") || `<p class="muted">Aucun client.</p>`}</div>`);
   el.querySelector("#cherche").oninput = e => { const v = norm(e.target.value); el.querySelectorAll("[data-c]").forEach(r => r.hidden = v && !norm(r.textContent).includes(v)); };
   el.onclick = e => { const r = e.target.closest("[data-c]"); if (r) ficheClient(r.dataset.c); };
 }
@@ -1262,7 +1268,7 @@ async function dosEnsemble(c, corps, re) {
   const docs = taches.length ? await q(sb.from("tache_documents").select("*").in("tache_id", taches.map(t => t.id)).order("cree_le")) : [];
   const [urlsP, urlsT] = await Promise.all([urlsSignees(photos.map(p => p.apercu)), urlsDocs(docs)]);
   const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
-  corps.innerHTML = `${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">🤖 Analyses (${analyses.length})</h2>
+  corps.innerHTML = `${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">🤖 Analyses (${analyses.length})</h2>
       ${analyses.map(a => `<div class="ligne"><span>${a.type === "menage" ? "🧽 Ménage" : "🌿 Jardin"} · ${jourAn(a.fait_le)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`).join("")}</section>` : ""}
     <section class="card"><h2 style="margin-top:0">📁 Dossiers de tâches (${taches.length})</h2>
       ${taches.map(t => { const l = docs.filter(d => d.tache_id === t.id); return `<div class="dos-tache" data-t="${t.id}"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow-wrap:anywhere">${esc(t.dossier_nom)}</b>
@@ -1652,7 +1658,8 @@ function formClient(c) {
       <div class="deux">${ch("nom", "Nom")}${ch("telephone", "Téléphone", "tel")}</div>
       <div class="deux">${ch("email", "E-mail", "email")}${ch("adresse", "Adresse")}</div>
       <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
-        <label class="f">Activité<select name="activite">${["Ménage", "Jardinage", "Bricolage"].map(a => `<option ${c.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
+        <label class="f">Activité<select name="activite">${ACTIVITES_CLIENT.map(a => `<option ${c.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
+      <label class="f">Élèves, séparés par des virgules${c.source_pense ? " (repris de Pense intelligent : à corriger là-bas)" : ""} — vu par l'intervenant<input type="text" name="eleves" value="${esc(elevesClient(c))}"></label>
       <label class="f">État<select name="etat">${["prospect", "avance_attente", "actif", "pause", "termine"].map(a => `<option ${c.etat === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
       <label class="f">Accès (digicode, étage…) — vu par l'intervenant<textarea name="acces">${esc(c.acces || "")}</textarea></label>
       <label class="f">Clé — vu par l'intervenant<textarea name="cle">${esc(c.cle || "")}</textarea></label>
@@ -1664,6 +1671,7 @@ function brancherFormClient(el, c, apres) {
     e.preventDefault(); const d = {};
     for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
     d.zone = d.zone ? Number(d.zone) : null;
+    d.eleves = (d.eleves || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
     if (!d.nom) return toast("Le nom est obligatoire");
     if (c && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
     await maj(c ? sb.from("clients").update(d).eq("id", c.id) : sb.from("clients").insert(d));

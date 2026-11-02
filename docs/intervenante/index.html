@@ -651,7 +651,8 @@ async function accueil(o) {
   const ind = app.querySelector(".nav-ind"); void ind.offsetWidth; if (apres >= 0) ind.style.setProperty("--p", apres);
   try {
     if (!(await chargerMoi())) return;
-    let c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,temps_semaine_min,meteo").order("nom");
+    let c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,eleves,acces,cle,consignes,temps_semaine_min,meteo").order("nom");
+    if (c.error && /eleves/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,temps_semaine_min,meteo").order("nom");   // base pas encore à jour (SQL 20)
     if (c.error && /temps_semaine_min|meteo/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes").order("nom");   // base pas encore à jour (SQL 14)
     if (c.error) throw c.error;
     clients = c.data;
@@ -1080,7 +1081,7 @@ async function vueTaches() {
 async function vueClients() {
   contenu(`<h1>Mes clients</h1><p class="muted" style="margin-bottom:14px">Les clients que OIKOS t'a confiés. Touche un client pour sa fiche.</p>
     <div class="stack">${clients.length ? clients.map(c => `<button class="card" style="text-align:left;cursor:pointer" data-fiche="${c.id}">
-      <span class="client-nom">${esc(c.nom)} ›</span><span class="muted">${esc(c.adresse || "")}</span>
+      <span class="client-nom">${esc(c.nom)} ›</span>${(c.eleves || []).length ? `<span class="muted">Élèves : ${esc(c.eleves.join(", "))}</span>` : ""}<span class="muted">${esc(c.adresse || "")}</span>
       <span class="row">${c.zone ? `<span class="tag">Zone ${c.zone}</span>` : ""}<span class="tag">${esc(c.activite || "")}</span></span></button>`).join("") : `<p class="muted">Aucun client pour l'instant.</p>`}</div>`);
   document.getElementById("contenu").onclick = e => { const f = e.target.closest("[data-fiche]"); if (f) ficheClient(f.dataset.fiche); };
 }
@@ -1095,6 +1096,7 @@ function ficheClient(id) {
       <a class="btn" href="${lienSMS(tel, "")}"><span class="ic">💬</span>SMS</a>
       <a class="btn" href="${lienWhatsApp(tel)}" target="_blank" rel="noopener"><span class="ic">🟢</span>WhatsApp</a></div>` : ""}
     <dl class="info card">
+      ${(c.eleves || []).length ? `<dt>Élèves</dt><dd>${esc(c.eleves.join(", "))}</dd>` : ""}
       <dt>Adresse</dt><dd>${c.adresse ? lien(lienItineraire(c.adresse), c.adresse) : "—"}</dd>
       <dt>Téléphone</dt><dd>${tel ? `<a class="lien" href="${lienTel(tel)}">${esc(tel)}</a>` : "—"}</dd>
       ${c.email ? `<dt>E-mail</dt><dd><a class="lien" href="mailto:${esc(c.email)}">${esc(c.email)}</a></dd>` : ""}
