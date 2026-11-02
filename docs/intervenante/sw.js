@@ -1,7 +1,7 @@
 /* Garde seulement le code de l'appli (jamais les données) pour qu'elle s'ouvre vite.
    Toujours le réseau d'abord : une nouvelle version arrive dès qu'il y a Internet. */
-const VERSION = "oikos-int-12";
-const FICHIERS = ["./", "index.html", "manifest.webmanifest", "icone-192.png", "icone-512.png"];
+const VERSION = "oikos-int-13";
+const FICHIERS = ["./", "index.html", "manifest.webmanifest", "icone-192.png", "icone-512.png", "logo-oikos.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FICHIERS)).then(() => self.skipWaiting()));
