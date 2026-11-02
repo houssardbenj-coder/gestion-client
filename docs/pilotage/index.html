@@ -160,6 +160,19 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
 const SB_CLE = "sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q";
 const ANALYSE_IA = "https://claude.ai/artifact/7rdJyKKdipwtb5QNnWAnyV";   // page Claude « Analyse et devis » (ton abonnement, compte claude.ai OIKOS)
+const ANALYSE_IA_2 = "https://claude.ai/artifact/Kfd4g6zGHQdZSC2AXdnsBx";   // sa copie sur le compte claude.ai houssard.benj, ouverte par le lien oikos-compte2: (raccourci\Installer le bouton compte 2.bat, PC seulement) ; vide = pas de choix du compte
+function boutonsIA(c) {
+  const dossier = esc(c.dossier_drive), deux = ANALYSE_IA_2 && !matchMedia("(pointer: coarse)").matches;
+  return [["🤖 Analyse IA", "", "Rapport jardin ou ménage par Claude, à partir des photos"], ["🧾 Faire un devis", "devis~", "Devis VosFactures : tu donnes ton prix, il n'est créé qu'après ton Oui"]].map(([nom, debut, aide]) => deux
+    ? `<button class="btn" type="button" data-ia="${debut}${dossier}" data-ia-nom="${nom}" title="${aide}">${nom}</button>`
+    : `<a class="btn" href="${ANALYSE_IA}#${debut}${dossier}" target="_blank" rel="noopener" title="${aide}">${nom}</a>`).join(" ");
+}
+function choisirCompteIA(cible, nom) {
+  fenetre(`<h2 style="margin:0">${nom}</h2><p class="muted">Avec quel compte Claude ? Si l'un a atteint sa limite, prends l'autre. Chaque compte garde ses propres rapports.</p>
+    <div class="row"><a class="btn" href="${ANALYSE_IA}#${cible}" target="_blank" rel="noopener" data-fermer>Compte OIKOS</a>
+      <a class="btn" href="oikos-compte2:${ANALYSE_IA_2}#${cible}" data-fermer>Compte Benjamin Houssard</a>
+      <button class="btn flat" type="button" data-fermer>Annuler</button></div>`);
+}
 const SUPABASE_USERS ="https://supabase.com/dashboard/project/nzxphozupnmqyikitwhv/auth/users";
 const sb = window.supabase.createClient(SB_URL, SB_CLE, { auth: { persistSession: true, storageKey: "oikos-gerant-session" } });
 
@@ -1193,12 +1206,12 @@ function ficheClient(id, ong = "ensemble") {
   if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activite: "Ménage", etat: "actif" })}`, (el, fermer) =>
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
-      ${c.dossier_drive ? `<a class="btn" href="${ANALYSE_IA}#${esc(c.dossier_drive)}" target="_blank" rel="noopener" title="Rapport jardin ou ménage par Claude, à partir des photos">🤖 Analyse IA</a>
-        <a class="btn" href="${ANALYSE_IA}#devis~${esc(c.dossier_drive)}" target="_blank" rel="noopener" title="Devis VosFactures : tu donnes ton prix, il n'est créé qu'après ton Oui">🧾 Faire un devis</a>
+      ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">📁 Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
     <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
     <div id="dos-corps"></div>`, el => {
+    el.querySelectorAll("[data-ia]").forEach(b => b.onclick = () => choisirCompteIA(b.dataset.ia, b.dataset.iaNom));
     const corps = el.querySelector("#dos-corps");
     const aller = async o => {
       ong = o; el.querySelectorAll("[data-dos]").forEach(b => b.dataset.dos === o ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
