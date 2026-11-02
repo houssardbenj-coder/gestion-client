@@ -51,7 +51,7 @@ p{margin:0}
 .marque-nom b{font-weight:600}
 .marque-sous{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .entete{position:sticky;top:0;z-index:9;display:flex;align-items:center;gap:10px;background:var(--surface);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px}
-.entete .tuile{width:44px;height:44px;padding:2px}
+.entete .tuile{width:50px;height:50px;padding:1px}
 .entete .marque-nom{font-size:18px}
 .entete .marque-sous{font-size:10px}
 .entete + .page{padding-top:16px}
@@ -171,14 +171,16 @@ a.lien.muted{color:var(--muted)}
 /* clavier du code */
 /* Écran du code : fond olive, triangles du logo, chiffres fins. Toujours sombre, quel que soit le thème. */
 .verrou{position:fixed;inset:0;z-index:15;overflow:auto;isolation:isolate;color:#F3F1E7;background:radial-gradient(120% 80% at 50% 16%,#6C7458 0%,#515741 52%,#383C2E 100%);display:flex;flex-direction:column;align-items:center;gap:clamp(6px,1.5dvh,16px);padding:calc(env(safe-area-inset-top,0px) + 16px) 20px calc(env(safe-area-inset-bottom,0px) + 14px)}
-.verrou>:first-of-type{margin-top:auto}
+.verrou>.v-logo{margin-top:auto}
 .verrou>:last-child{margin-bottom:auto}
+.verrou::before{content:"";position:fixed;z-index:-1;width:120vmax;height:120vmax;left:calc(50% - 60vmax);top:calc(50% - 60vmax);border-radius:50%;background:radial-gradient(circle,rgb(247 245 238 / .17),transparent 58%);pointer-events:none;animation:v-lumiere 24s ease-in-out infinite alternate}
 .v-fond{position:fixed;inset:-25%;width:150%;height:150%;z-index:-1;pointer-events:none}
-.v-fond path{fill:none;stroke:#F3F1E7;stroke-opacity:.13;stroke-width:.14;transform-origin:50% 50%;transform-box:view-box}
+.v-fond path{fill:none;stroke:#F3F1E7;stroke-opacity:.15;stroke-width:.14;transform-origin:50% 50%;transform-box:view-box}
 .v-fond .t1{animation:v-tourne 90s linear infinite}
-.v-fond .t2{animation:v-tourne 130s linear infinite reverse;stroke-opacity:.17}
-.v-logo{position:relative;width:clamp(72px,13dvh,112px);aspect-ratio:1;flex:none}
-.v-logo img{width:100%;height:100%;display:block}
+.v-fond .t2{animation:v-tourne 130s linear infinite reverse;stroke-opacity:.2}
+.v-logo{position:relative;width:clamp(84px,17dvh,148px);aspect-ratio:1;flex:none}
+.v-logo::before{content:"";position:absolute;inset:-34%;z-index:-1;border-radius:50%;background:radial-gradient(circle,rgb(247 245 238 / .26),transparent 66%);animation:v-halo 7s ease-in-out infinite alternate}
+.v-logo img{width:100%;height:100%;display:block;filter:drop-shadow(0 2px 6px rgb(26 28 21 / .28))}
 .v-logo i{position:absolute;inset:0;-webkit-mask:url(logo-clair.png) center/contain no-repeat;mask:url(logo-clair.png) center/contain no-repeat;background:linear-gradient(105deg,transparent 42%,rgb(255 255 255 / .85) 50%,transparent 58%) 130% 0/300% 100% no-repeat;animation:v-reflet 9s 1s ease-in-out infinite}
 .v-marque{font-size:10.5px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:rgb(243 241 231 / .95);padding-left:.32em}
 .verrou h1{font-weight:300;font-size:clamp(28px,4.6dvh,40px);letter-spacing:-.015em;text-align:center;margin-top:clamp(4px,1.6dvh,18px)}
@@ -214,13 +216,27 @@ a.lien.muted{color:var(--muted)}
 .verrou.ouvert .v-slots svg:nth-child(3){transform:translateX(-17px)}
 .verrou.ouvert .v-slots svg:nth-child(4){transform:translateX(-51px)}
 .iris{position:fixed;inset:0;z-index:40;background:var(--bg);pointer-events:none}
+@keyframes v-halo{to{transform:scale(1.14);opacity:.65}}
+@keyframes v-lumiere{from{transform:translate(-26vw,-20vh)}to{transform:translate(26vw,24vh)}}
 @keyframes v-tourne{to{transform:rotate(360deg)}}
 @keyframes v-reflet{0%{background-position:130% 0}28%,100%{background-position:-30% 0}}
 @keyframes v-monte{from{opacity:0;transform:translateY(12px)}}
 @keyframes v-apparait{from{opacity:0;filter:blur(8px);transform:scale(.9)}}
 @keyframes v-onde{from{transform:scale(.25);opacity:1}to{transform:scale(1);opacity:0}}
 @keyframes v-non{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(5px)}30%,50%,70%{transform:translateX(-9px)}40%,60%{transform:translateX(9px)}}
-@media (prefers-reduced-motion: reduce){.verrou *{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion: reduce){.verrou *,.verrou::before,.v-logo::before{animation:none!important;transition:none!important}}
+/* Fond animé de toute l'appli, derrière les cartes */
+.fond{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.fond i{position:absolute;border-radius:50%;width:95vmax;height:95vmax;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 26%,transparent),transparent 62%)}
+.fond i:nth-of-type(1){left:-45vmax;top:-40vmax;animation:f-derive1 34s ease-in-out infinite alternate}
+.fond i:nth-of-type(2){right:-50vmax;bottom:-45vmax;animation:f-derive2 42s ease-in-out infinite alternate}
+.fond svg{position:absolute;inset:-25%;width:150%;height:150%}
+.fond path{fill:none;stroke:var(--accent);stroke-width:.14;transform-origin:50% 50%;transform-box:view-box}
+.fond .t1{stroke-opacity:.2;animation:v-tourne 120s linear infinite}
+.fond .t2{stroke-opacity:.14;animation:v-tourne 170s linear infinite reverse}
+@keyframes f-derive1{to{transform:translate(38vw,34vh) scale(1.15)}}
+@keyframes f-derive2{to{transform:translate(-36vw,-38vh) scale(.9)}}
+@media (prefers-reduced-motion: reduce){.fond *{animation:none!important}}
 /* Effets dans l'appli : jamais à chaque rafraîchissement, seulement quand on change d'écran */
 .nav div{position:relative}
 .nav button{position:relative;overflow:hidden}
@@ -279,6 +295,7 @@ a.lien.muted{color:var(--muted)}
 </style>
 </head>
 <body>
+<div class="fond" aria-hidden="true"><i></i><i></i><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg></div>
 <div id="app"></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
