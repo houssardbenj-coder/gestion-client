@@ -1182,7 +1182,7 @@ function importer() {
    « Pont photos OIKOS » (compte OIKOS) la range dans le Drive d'OIKOS : CLIENTS OIKOS › NOM › Photos. */
 const CATS = { etat_des_lieux: "État des lieux", avant: "Avant", apres: "Après", degat: "Dégât", acces: "Accès", autre: "Autre" };
 const TYPES_J = { note: "Note", contrat: "Contrat", litige: "Litige", reclamation: "Réclamation", sinistre: "Sinistre", impaye: "Impayé", courrier: "Courrier", autre: "Autre" };
-const DOS_ONGLETS = [["ensemble", "Vue d'ensemble"], ["fiche", "Fiche"], ["route", "Feuille de route"], ["fil", "Commentaires"], ["photos", "Photos"], ["juridique", "Juridique 🔒"]];
+const DOS_ONGLETS = [["ensemble", "Vue d'ensemble"], ["fiche", "Fiche"], ["analyses", "Analyses"], ["route", "Feuille de route"], ["fil", "Commentaires"], ["photos", "Photos"], ["juridique", "Juridique 🔒"]];
 async function reduire(f, max, qualite) {
   const img = await createImageBitmap(f), k = Math.min(1, max / Math.max(img.width, img.height));
   const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
@@ -1216,7 +1216,7 @@ function ficheClient(id, ong = "ensemble") {
     const aller = async o => {
       ong = o; el.querySelectorAll("[data-dos]").forEach(b => b.dataset.dos === o ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
       corps.innerHTML = `<p class="muted">Chargement…</p>`; corps.onclick = null;
-      try { await ({ ensemble: dosEnsemble, fiche: dosFiche, route: dosRoute, fil: dosFil, photos: dosPhotos, juridique: dosJuridique })[o](c, corps, () => aller(o)); }
+      try { await ({ ensemble: dosEnsemble, fiche: dosFiche, analyses: dosAnalyses, route: dosRoute, fil: dosFil, photos: dosPhotos, juridique: dosJuridique })[o](c, corps, () => aller(o)); }
       catch (e) { corps.innerHTML = `<p class="err">${esc(e.message || e)}</p>`; }
     };
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
@@ -1252,7 +1252,8 @@ async function vueDossiers() {
 }
 /* Un client d'un coup d'œil : ses dossiers de tâche, ce qui est écrit, ses photos, le juridique */
 async function dosEnsemble(c, corps, re) {
-  const [taches, photos, com, notes, jur] = await Promise.all([
+  const [analyses, taches, photos, com, notes, jur] = await Promise.all([
+    q(sb.from("client_analyses").select("id,type,fait_le,etat,doc_url,doc_a_refaire").eq("client_id", c.id).order("fait_le", { ascending: false })),
     q(sb.from("taches").select("*").eq("client_id", c.id).not("dossier_nom", "is", null).order("cree_le", { ascending: false })),
     q(sb.from("client_photos").select("*").eq("client_id", c.id).is("supprime_le", null).order("prise_le", { ascending: false })),
     q(sb.from("client_commentaires").select("*").eq("client_id", c.id)),
@@ -1261,7 +1262,9 @@ async function dosEnsemble(c, corps, re) {
   const docs = taches.length ? await q(sb.from("tache_documents").select("*").in("tache_id", taches.map(t => t.id)).order("cree_le")) : [];
   const [urlsP, urlsT] = await Promise.all([urlsSignees(photos.map(p => p.apercu)), urlsDocs(docs)]);
   const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
-  corps.innerHTML = `<section class="card"><h2 style="margin-top:0">📁 Dossiers de tâches (${taches.length})</h2>
+  corps.innerHTML = `${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">🤖 Analyses (${analyses.length})</h2>
+      ${analyses.map(a => `<div class="ligne"><span>${a.type === "menage" ? "🧽 Ménage" : "🌿 Jardin"} · ${jourAn(a.fait_le)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`).join("")}</section>` : ""}
+    <section class="card"><h2 style="margin-top:0">📁 Dossiers de tâches (${taches.length})</h2>
       ${taches.map(t => { const l = docs.filter(d => d.tache_id === t.id); return `<div class="dos-tache" data-t="${t.id}"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow-wrap:anywhere">${esc(t.dossier_nom)}</b>
           <span class="row" style="flex:none">${t.fait_le ? `<span class="tag off">fait le ${jour(t.fait_le)}</span>` : `<span class="tag">à faire</span>`}${t.dossier_drive ? `<a class="btn flat" href="https://drive.google.com/drive/folders/${esc(t.dossier_drive)}" target="_blank" rel="noopener">Drive</a>` : `<span class="tag warn">rangement en cours</span>`}<button class="btn" data-ouvre>Ouvrir</button></span></div>
         ${t.commentaire ? `<p class="small" style="white-space:pre-wrap;margin:4px 0">💬 ${esc(t.commentaire)}</p>` : ""}
@@ -1276,6 +1279,97 @@ async function dosEnsemble(c, corps, re) {
     const v = e.target.closest("[data-voir]"); if (v) return ouvrirDocTache(v.dataset.voir);
     const b = e.target.closest("[data-ouvre]"); if (b) ficheTache(taches.find(t => t.id === b.closest("[data-t]").dataset.t), re);
   };
+}
+/* ---------- Analyses IA gardées dans le dossier : brouillon → proposée au client → acceptée (ses tâches passent dans la feuille de route) ---------- */
+const ETATS_ANALYSE = { brouillon: ["Brouillon", "off"], proposee: ["Proposée au client", "warn"], acceptee: ["Acceptée", ""], abandonnee: ["Abandonnée", "off"] };
+const jourAn = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const tagAnalyse = a => { const [t, k] = ETATS_ANALYSE[a.etat] || [a.etat, "off"]; return `<span class="tag ${k}">${esc(t)}</span>`; };
+const lienDocAnalyse = a => a.doc_a_refaire && a.etat !== "abandonnee" ? `<span class="tag warn">document en préparation (5 min)</span>`
+  : a.doc_url ? `<a class="btn" href="${esc(a.doc_url)}" target="_blank" rel="noopener">📄 Document client</a>` : "";
+async function dosAnalyses(c, corps, re) {
+  const liste = await q(sb.from("client_analyses").select("*").eq("client_id", c.id).order("fait_le", { ascending: false }));
+  const ouverte = liste.find(a => a.etat !== "abandonnee");
+  const tab = v => (Array.isArray(v) ? v : []).filter(Boolean);
+  corps.innerHTML = liste.map(a => { const r = a.rapport || {}, modif = a.etat === "brouillon"; return `<details class="card" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
+      <summary class="row" style="cursor:pointer;justify-content:space-between"><b>${a.type === "menage" ? "🧽 Ménage" : "🌿 Jardin"} · ${jourAn(a.fait_le)}</b><span class="row">${tagAnalyse(a)}${lienDocAnalyse(a)}</span></summary>
+      <div class="row" style="margin-top:10px">
+        ${modif ? `<button class="btn primary" data-etat="proposee">📨 Marquer comme proposée au client</button>` : ""}
+        ${a.etat === "proposee" ? `<button class="btn primary" data-accepter>✓ Le client accepte : créer sa routine</button><button class="btn" data-etat="brouillon">Revenir au brouillon pour modifier</button>` : ""}
+        ${modif || a.etat === "proposee" ? `<button class="btn flat stop" data-etat="abandonnee">Abandonner</button>` : ""}
+        ${a.etat === "abandonnee" ? `<button class="btn" data-etat="brouillon">Reprendre</button>` : ""}
+        ${a.etat === "acceptee" && a.accepte_le ? `<span class="muted small">Acceptée le ${jourAn(a.accepte_le)} : la routine se règle dans l'onglet Feuille de route.</span>` : ""}
+        ${a.etat === "proposee" && a.propose_le ? `<span class="muted small">Proposée le ${jourAn(a.propose_le)}</span>` : ""}</div>
+      ${r.resume ? `<p style="margin-top:10px">${esc(r.resume)}</p>` : ""}
+      ${a.temps_semaine_min ? `<p class="muted small" style="margin-top:6px">Temps acheté : ${heures(a.temps_semaine_min)} par semaine</p>` : ""}
+      ${a.notes ? `<p class="muted small" style="margin-top:6px">Tes précisions : ${esc(a.notes)}</p>` : ""}
+      <h3>Texte pour le client</h3>
+      ${modif ? `<textarea data-texte maxlength="4000" style="min-height:110px;width:100%">${esc(r.texte_devis || "")}</textarea><div style="margin-top:6px"><button class="btn" data-garder-texte>Enregistrer le texte</button></div>`
+        : `<p style="white-space:pre-wrap">${esc(r.texte_devis || "—")}</p>`}
+      <div class="row" style="justify-content:space-between"><h3>Routine proposée</h3>${modif ? `<button class="btn flat" data-tajout>➕ Ajouter une tâche</button>` : ""}</div>
+      <div style="overflow-x:auto"><table><tr><th>Tâche</th><th>Quand</th><th>Durée</th><th>Prio.</th>${modif ? "<th></th>" : ""}</tr>
+        ${tab(r.taches).map((t, i) => `<tr><td><b>${esc(t.titre)}</b>${t.detail ? `<br><span class="muted small">${esc(t.detail)}</span>` : ""}</td><td class="small">${esc(quandTache(t))}</td><td>${t.duree_min ? esc(t.duree_min) + " min" : "—"}</td><td>${esc(t.priorite || 3)}/5</td>
+          ${modif ? `<td><span class="row" style="gap:2px"><button class="btn flat" data-tmod="${i}">Modifier</button><button class="btn flat stop" data-tret="${i}">Retirer</button></span></td>` : ""}</tr>`).join("") || `<tr><td colspan="5" class="muted">Aucune tâche.</td></tr>`}</table></div>
+      ${tab(r.vegetaux).length ? `<h3>Végétaux repérés</h3>${tab(r.vegetaux).map(v => `<p class="small" style="margin:0 0 8px"><b>${esc(v.nom)}</b> ${v.latin ? `<i>${esc(v.latin)}</i>` : ""} <span class="tag ${/s[uû]r/i.test(v.certitude || "") ? "" : "warn"}">${esc(v.certitude || "à confirmer")}</span>${v.etat ? `<br>${esc(v.etat)}` : ""}${tab(v.entretien).map(x => `<br>· ${esc(x)}`).join("")}${v.attention ? `<br>⚠ ${esc(v.attention)}` : ""}</p>`).join("")}` : ""}
+      ${tab(r.pieces).length ? `<h3>Pièce par pièce</h3><p class="small">${tab(r.pieces).map(p => `<b>${esc(p.piece)}</b> : ${esc(p.etat)}`).join("<br>")}</p>` : ""}
+      ${tab(r.produits).concat(tab(r.materiel)).length ? `<h3>À emporter (pour l'intervenant)</h3><p class="small">${tab(r.produits).concat(tab(r.materiel)).map(esc).join(" · ")}</p>` : ""}
+      ${r.dechets ? `<h3>Déchets verts</h3><p class="small">${esc(r.dechets)}</p>` : ""}
+      ${r.frequence ? `<h3>Fréquence conseillée</h3><p class="small">${esc(r.frequence)}</p>` : ""}
+      ${tab(r.remarques).length ? `<h3>Points d'attention (toi seul)</h3><p class="small">${tab(r.remarques).map(esc).join("<br>")}</p>` : ""}
+      ${tab(a.photos).length ? `<p class="muted small" style="margin-top:10px">Photos étudiées : ${tab(a.photos).map(esc).join(" · ")}</p>` : ""}</details>`; }).join("")
+    || `<p class="muted">Aucune analyse pour l'instant. Lance-en une avec le bouton « 🤖 Analyse IA » : elle arrivera ici toute seule, dans les 5 minutes.</p>`;
+  const garder = async a => { await maj(sb.from("client_analyses").update({ rapport: a.rapport, doc_a_refaire: true }).eq("id", a.id)); };
+  corps.onclick = async e => {
+    const b = e.target.closest("button"), bloc = b && b.closest("[data-a]"); if (!bloc) return;
+    const a = liste.find(x => x.id === bloc.dataset.a), r = a.rapport = a.rapport || {};
+    if (b.dataset.etat) {
+      if (b.dataset.etat === "abandonnee" && !confirm("Abandonner cette analyse ? Elle reste gardée dans le dossier et peut être reprise.")) return;
+      const maintenant = new Date().toISOString();
+      await maj(sb.from("client_analyses").update({ etat: b.dataset.etat, ...(b.dataset.etat === "proposee" ? { propose_le: maintenant } : {}), ...(b.dataset.etat === "brouillon" && !a.doc_url ? { doc_a_refaire: true } : {}) }).eq("id", a.id));
+      toast("Analyse : " + ETATS_ANALYSE[b.dataset.etat][0].toLowerCase()); return re();
+    }
+    if (b.hasAttribute("data-accepter")) return accepterAnalyse(c, a, re);
+    if (b.hasAttribute("data-garder-texte")) { r.texte_devis = bloc.querySelector("[data-texte]").value.trim(); await garder(a); toast("Texte enregistré : le document client se refait dans les 5 minutes"); return re(); }
+    if (b.hasAttribute("data-tajout")) return modifierTacheAnalyse(a, null, garder, re);
+    if (b.dataset.tmod !== undefined) return modifierTacheAnalyse(a, +b.dataset.tmod, garder, re);
+    if (b.dataset.tret !== undefined) { const t = tab(r.taches)[+b.dataset.tret]; if (!t || !confirm("Retirer « " + t.titre + " » de cette proposition ?")) return;
+      r.taches = tab(r.taches).filter((x, i) => i !== +b.dataset.tret); await garder(a); toast("Tâche retirée"); re(); }
+  };
+}
+/* La tâche d'une proposition (pas encore dans la feuille de route) : mêmes champs, les mois sont gardés tels quels */
+function modifierTacheAnalyse(a, i, garder, re) {
+  const taches = a.rapport.taches = (Array.isArray(a.rapport.taches) ? a.rapport.taches : []).filter(Boolean);
+  const v = i === null ? { titre: "", detail: "", categorie: a.type === "menage" ? "menage" : "autre", frequence_jours: 14, mois: [], duree_min: 30, priorite: 3 } : taches[i];
+  const freqs = FREQS.some(([k]) => String(k) === String(v.frequence_jours || "")) ? FREQS : FREQS.concat([[v.frequence_jours, "Tous les " + v.frequence_jours + " jours"]]);
+  fenetre(`<h2 style="margin:0">${i === null ? "Nouvelle tâche" : "Modifier la tâche"}</h2>
+    <form id="fta" style="display:flex;flex-direction:column;gap:10px">
+      <label class="f">Tâche<input type="text" name="titre" required maxlength="200" value="${esc(v.titre)}"></label>
+      <label class="f">Comment faire (le client le lit)<textarea name="detail" maxlength="2000">${esc(v.detail || "")}</textarea></label>
+      <div class="deux"><label class="f">Quand<select name="frequence_jours">${freqs.map(([k, x]) => `<option value="${esc(k)}" ${String(v.frequence_jours || "") === String(k) ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
+        <label class="f">Durée indicative (minutes)<input type="number" name="duree_min" min="0" step="15" value="${esc(v.duree_min ?? "")}"></label></div>
+      <label class="f">Priorité<select name="priorite">${[5, 4, 3, 2, 1].map(n => `<option value="${n}" ${+v.priorite === n ? "selected" : ""}>${n} ${n === 5 ? "(essentiel)" : n === 1 ? "(confort)" : ""}</option>`).join("")}</select></label>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fta").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), titre = String(f.get("titre")).trim();
+      if (!titre) return toast("Le nom de la tâche est obligatoire");
+      const d = { ...v, titre, detail: String(f.get("detail")).trim(), frequence_jours: Number(f.get("frequence_jours")) || null, duree_min: f.get("duree_min") === "" ? null : Number(f.get("duree_min")), priorite: Number(f.get("priorite")) };
+      if (i === null) taches.push(d); else taches[i] = d;
+      await garder(a); fermer(); toast("Proposition modifiée : le document client se refait dans les 5 minutes"); re();
+    };
+  });
+}
+/* Le client accepte : les tâches passent dans sa feuille de route, sans doublon avec celles déjà actives */
+async function accepterAnalyse(c, a, re) {
+  const taches = (Array.isArray(a.rapport.taches) ? a.rapport.taches : []).filter(t => t && t.titre);
+  if (!confirm("Le client accepte ? " + taches.length + " tâche(s) passeront dans sa feuille de route, visibles par l'intervenant qui a ce client.")) return;
+  const vus = new Set((await q(sb.from("route_taches").select("titre").eq("client_id", c.id).eq("actif", true).eq("termine", false))).map(t => norm(t.titre)));
+  const entier = (v, min, max) => { v = Math.round(+v); return Number.isFinite(v) && v >= min && v <= max ? v : null; };
+  const neuves = taches.filter(t => !vus.has(norm(t.titre))).map(t => ({ client_id: c.id, titre: String(t.titre).slice(0, 200), detail: t.detail ? String(t.detail).slice(0, 2000) : null,
+    categorie: CATS_ROUTE[t.categorie] ? t.categorie : "autre", frequence_jours: entier(t.frequence_jours, 1, 730), duree_min: entier(t.duree_min, 0, 1440), priorite: entier(t.priorite, 1, 5) || 3,
+    mois: (Array.isArray(t.mois) ? t.mois : []).map(Number).filter(m => m >= 1 && m <= 12), source: "ia" }));
+  if (neuves.length) await maj(sb.from("route_taches").insert(neuves));
+  if (a.temps_semaine_min > 0) { await maj(sb.from("clients").update({ temps_semaine_min: a.temps_semaine_min }).eq("id", c.id)); c.temps_semaine_min = a.temps_semaine_min; }
+  await maj(sb.from("client_analyses").update({ etat: "acceptee", accepte_le: new Date().toISOString() }).eq("id", a.id));
+  toast(neuves.length + " tâche(s) ajoutée(s) à la feuille de route" + (taches.length > neuves.length ? ", " + (taches.length - neuves.length) + " déjà présente(s)" : "")); re();
 }
 async function dosFiche(c, corps, re) {
   corps.innerHTML = formClient(c);
@@ -1349,7 +1443,7 @@ async function dosRoute(c, corps, re) {
           <td><b>${esc(o.t.titre)}</b> <span class="muted small">· ${CATS_ROUTE[o.t.categorie] || ""}${o.t.source === "intervenante" ? " · ajoutée par l'intervenant" : o.t.source === "ia" ? " · IA" : ""}</span>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</td>
           <td class="small">${esc(quandTache(o.t))}</td><td>${o.t.duree_min ? o.t.duree_min + " min" : "—"}</td><td>${o.t.priorite}/5</td>
           <td class="small">${o.t.derniere_fois ? jour(o.t.derniere_fois) : "jamais"}${o.t.derniere_partielle && (!o.t.derniere_fois || o.t.derniere_partielle > o.t.derniere_fois) ? `<br><span class="muted">en partie le ${jour(o.t.derniere_partielle)}</span>` : ""}</td>
-          <td><span class="row" style="gap:2px"><button class="btn flat" data-rmod>Modifier</button><button class="btn flat stop" data-rret>Retirer</button></span></td></tr>`).join("")}</table></div>` : `<p class="muted">Aucune tâche : crée la feuille de route depuis l'analyse IA (bouton « 🤖 Analyse IA »), ou ajoute des tâches ici.</p>`}
+          <td><span class="row" style="gap:2px"><button class="btn flat" data-rmod>Modifier</button><button class="btn flat stop" data-rret>Retirer</button></span></td></tr>`).join("")}</table></div>` : `<p class="muted">Aucune tâche : lance une analyse IA (bouton « 🤖 Analyse IA ») et, une fois acceptée par le client, ses tâches arrivent ici (onglet Analyses). Tu peux aussi en ajouter toi-même.</p>`}
       ${finies.length ? `<p class="muted small" style="margin-top:8px">${finies.length} tâche(s) terminée(s) ou retirée(s).</p>` : ""}</section>
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Dernières coches</h2>
       ${coches.length ? coches.slice(0, 25).map(k => { const t = taches.find(x => x.id === k.tache_id) || {};
