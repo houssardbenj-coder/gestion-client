@@ -1,1 +1,1 @@
-Client : l'adresse se saisit tout de suite (sous le téléphone) ; Aujourd'hui : les RDV programmés ne demandent plus de confirmation (seulement ceux du jour, sans ✓ ni « Retard »)
+RDV : choix clair « Avec un client » ou « Hors client » (objet, avec qui, lieu)

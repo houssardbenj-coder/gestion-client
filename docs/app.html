@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=17;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=18;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1671,20 +1671,20 @@ let ap=null, apConfirm=false;
 function openApptSheet(a,preset){
   if(!db){$("#status").textContent="Connecte-toi pour créer des RDV.";return}
   ap=a?{...JSON.parse(JSON.stringify(a)),isNew:false}:{id:"r"+uid(),isNew:true,firstName:"",lastName:"",title:"",phone:"",address:"",when:null,dur:60,note:"",customerId:"",...(preset||{})};
-  apConfirm=false;drawApptSheet();
+  ap._hors=!ap.isNew&&!ap.customerId;apConfirm=false;drawApptSheet();
 }
 function drawApptSheet(){
   const d=ap,root=$("#sheet-root");if(!d){root.innerHTML="";return}
   const c=d.customerId&&customers.find(x=>x.id===d.customerId);
   root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ap-h">
    <h3 id="ap-h">${d.isNew?"Nouveau RDV":"Modifier le RDV"}</h3>
-   ${c?`<div class="field"><label>Avec</label><div class="card-head" style="padding:0"><b style="flex:1">${esc(fullName(c))}</b><button type="button" class="iconbtn" id="ap-unpick">Changer</button></div></div>${infoBox(c)}`:`
-   <div class="field"><label for="ap-q">Avec un client (nom du parent ou de l'élève)</label><input type="search" id="ap-q" autocomplete="off" placeholder="Tape un nom, un prénom d'élève…"><div class="svc-list" id="ap-res"></div></div>
-   <div class="status" style="text-align:left">Ou une autre personne / sans client :</div>
-   <div class="row"><div class="field"><label for="ap-fn">Prénom / objet</label><input type="text" id="ap-fn" autocomplete="off" placeholder="Ex. Réunion, comptable…" value="${esc(d.firstName||d.title)}"></div>
-   <div class="field"><label for="ap-ln">Nom</label><input type="text" id="ap-ln" autocomplete="off" value="${esc(d.lastName)}"></div></div>
-   <div class="field"><label for="ap-ph">Téléphone</label><input type="tel" id="ap-ph" autocomplete="off" value="${esc(d.phone)}"></div>
-   <div class="field"><label for="ap-ad">Lieu / adresse</label><input type="text" id="ap-ad" autocomplete="off" value="${esc(d.address)}"></div>`}
+   <div class="seg" role="group" aria-label="Type de RDV"><button type="button" data-apmode="client" aria-pressed="${!d._hors}">Avec un client</button><button type="button" data-apmode="hors" aria-pressed="${!!d._hors}">Hors client</button></div>
+   ${d._hors?`
+   <div class="field"><label for="ap-fn">Objet</label><input type="text" id="ap-fn" autocomplete="off" placeholder="Ex. Réunion, comptable, dentiste…" value="${esc(d.firstName||d.title)}"></div>
+   <div class="row"><div class="field"><label for="ap-ln">Avec qui (facultatif)</label><input type="text" id="ap-ln" autocomplete="off" value="${esc(d.lastName)}"></div>
+   <div class="field"><label for="ap-ph">Téléphone</label><input type="tel" id="ap-ph" autocomplete="off" value="${esc(d.phone)}"></div></div>
+   <div class="field"><label for="ap-ad">Lieu / adresse</label><input type="text" id="ap-ad" autocomplete="off" value="${esc(d.address)}"></div>`:c?`<div class="field"><label>Avec</label><div class="card-head" style="padding:0"><b style="flex:1">${esc(fullName(c))}</b><button type="button" class="iconbtn" id="ap-unpick">Changer</button></div></div>${infoBox(c)}`:`
+   <div class="field"><label for="ap-q">Avec un client (nom du parent ou de l'élève)</label><input type="search" id="ap-q" autocomplete="off" placeholder="Tape un nom, un prénom d'élève…"><div class="svc-list" id="ap-res"></div></div>`}
    <div class="field"><label for="ap-dur">Durée</label>${durSelect("ap-dur",durOf("appts",d))}</div>
    <div class="field"><label>Choisis le créneau</label><div class="pk" id="ap-pk"></div>
    <label for="ap-wh" class="pk-fine-l">ou heure précise</label><input type="datetime-local" id="ap-wh" value="${esc(toLocalInput(d.when))}"></div>
@@ -1697,6 +1697,7 @@ function drawApptSheet(){
    <div class="status" id="ap-msg"></div></div></div>`;
   const s=$("#sheet-bg");
   s.addEventListener("click",ev=>{if(ev.target===s)closeAppt()});
+  s.querySelectorAll("[data-apmode]").forEach(b=>b.addEventListener("click",()=>{d._hors=b.dataset.apmode==="hors";if(d._hors)d.customerId="";drawApptSheet();const f=$(d._hors?"#ap-fn":"#ap-q");if(f)f.focus()}));
   const bind=(id,k)=>{const el=$(id);if(el)el.addEventListener("input",ev=>d[k]=ev.target.value)};
   bind("#ap-fn","firstName");bind("#ap-ln","lastName");bind("#ap-ph","phone");bind("#ap-ad","address");bind("#ap-no","note");
   const un=$("#ap-unpick");if(un)un.addEventListener("click",()=>{d.customerId="";drawApptSheet();const q=$("#ap-q");if(q)q.focus()});
@@ -1713,7 +1714,8 @@ function drawApptSheet(){
   pkStart({d,field:"when",dur:()=>durOf("appts",d)*6e4,kind:"appts",id:d.id,inputId:"ap-wh",boxId:"ap-pk",saveId:"ap-save"});
   $("#ap-cancel").addEventListener("click",closeAppt);
   $("#ap-save").addEventListener("click",async()=>{
-    if(!d.customerId&&!(d.firstName||"").trim()&&!(d.lastName||"").trim()){$("#ap-msg").textContent="Choisis un client ou indique avec qui / l'objet du RDV.";return}
+    if(!d.customerId&&!d._hors){$("#ap-msg").textContent="Choisis un client, ou touche « Hors client ».";return}
+    if(!d.customerId&&!(d.firstName||"").trim()&&!(d.lastName||"").trim()){$("#ap-msg").textContent="Indique l'objet du RDV.";return}
     if(!d.when){$("#ap-msg").textContent="Choisis le créneau du RDV.";return}
     if(d._clash&&d._clash.length&&!d._forced){d._forced=true;$("#ap-msg").textContent="⚠️ Créneau déjà occupé. Touche encore « Enregistrer » pour confirmer quand même.";$("#ap-save").textContent="Enregistrer quand même";return}
     const cb=$("#ap-cal");const wantCal=!!(cb&&cb.checked);
