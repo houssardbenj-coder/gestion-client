@@ -169,7 +169,7 @@ const heures = min => (Math.round(min / 60 * 100) / 100).toLocaleString("fr-FR")
 const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const chiffres = s => String(s || "").replace(/\D/g, "").slice(-9);
 const nomPers = p => ((p.prenom || "") + " " + (p.nom || "")).trim() || p.email || "?";
-const STATUTS = { "sous-traitant": "Sous-traitante", salarie: "Salariée" };
+const STATUTS = { "sous-traitant": "Sous-traitant", salarie: "Salarié" };
 async function q(promesse) { const { data, error } = await promesse; if (error) throw error; return data; }
 function fenetre(html, brancher, quandFerme) {
   const v = document.createElement("div"); v.className = "voile";
@@ -211,7 +211,7 @@ function ecranConnexion(msg) {
 }
 
 /* ===================== Cadre et onglets ===================== */
-const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenantes"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenants"], ["clients", "Clients"], ["papiers", "Papiers demandés"]];
 async function afficher(o) {
   if (o) onglet = o;
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque"><img src="logo-oikos.png" alt=""><span><b>Oikos</b> Pilotage</span></div>
@@ -280,7 +280,7 @@ async function vueAVoir() {
         ${docs.length ? docs.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
           <span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
     </div>
-    ${taches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenantes <span class="tag">${taches.length}</span></h2>
+    ${taches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenants <span class="tag">${taches.length}</span></h2>
         <button class="btn" data-tlu="tout">Tout marquer lu ✓</button></div>
       ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté ou modifié dans sa liste" : "a commenté ou remis à faire"} : ${esc(t.texte)}${t.commentaire ? `<br><span class="muted small">💬 ${esc(t.commentaire)}</span>` : ""}
           ${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
@@ -292,7 +292,7 @@ async function vueAVoir() {
     ${echeances.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">⚖️ Rappels juridiques (7 prochains jours ou en retard) <span class="tag warn">${echeances.length}</span></h2>
       ${echeances.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b> · ${esc(TYPES_J[x.type])} : ${esc(x.titre)}<br><span class="muted small">rappel le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span></span>
         <span class="row"><button class="btn" data-dossier="${x.client_id}|juridique">Ouvrir le dossier</button><button class="btn go" data-jtraite="${x.id}">Traité ✓</button></span></div>`).join("")}</section>` : ""}
-    ${photos.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📷 Nouvelles photos des intervenantes <span class="tag">${photos.length}</span></h2>
+    ${photos.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📷 Nouvelles photos des intervenants <span class="tag">${photos.length}</span></h2>
         <button class="btn" data-phlu="tout">Tout marquer vu ✓</button></div>
       <div class="photos">${photos.slice(0, 12).map(p => `<figure class="photo"><button class="vignette" data-dossier="${p.client_id}|photos" title="Ouvrir le dossier"><img src="${esc(apercusAVoir[p.apercu] || "")}" alt="" loading="lazy"></button>
         <figcaption><b>${esc(nomClient(p.client_id))}</b> · ${CATS[p.categorie] || "Photo"}${p.legende ? " · " + esc(p.legende) : ""}<br><span class="muted small">${esc(nomInterv(p.auteur))} · ${jour(p.prise_le)} ${hm(p.prise_le)}</span>
@@ -337,9 +337,9 @@ async function voirFichier(chemin) {
   window.open(data.signedUrl, "_blank", "noopener");
 }
 function refuserDoc(id, apres) {
-  fenetre(`<h2 style="margin:0">Refuser ce papier</h2><label class="f">Pourquoi ? (elle le lira dans son appli)<input type="text" id="mo" placeholder="Ex. photo floue, document périmé…"></label>
+  fenetre(`<h2 style="margin:0">Refuser ce papier</h2><label class="f">Pourquoi ? (il le lira dans son appli)<input type="text" id="mo" placeholder="Ex. photo floue, document périmé…"></label>
     <div class="row"><button class="btn stop" id="ok">Refuser</button><button class="btn flat" data-fermer>Annuler</button></div>`, (el, fermer) => {
-    el.querySelector("#ok").onclick = async () => { await maj(sb.from("documents").update({ etat: "refuse", motif: el.querySelector("#mo").value.trim() || null, traite_le: new Date().toISOString() }).eq("id", id)); fermer(); toast("Refusé : elle doit le renvoyer"); apres(); };
+    el.querySelector("#ok").onclick = async () => { await maj(sb.from("documents").update({ etat: "refuse", motif: el.querySelector("#mo").value.trim() || null, traite_le: new Date().toISOString() }).eq("id", id)); fermer(); toast("Refusé : il doit le renvoyer"); apres(); };
   });
 }
 
@@ -371,11 +371,11 @@ async function vuePlanning() {
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Planning</h1>
       <span class="row"><button class="btn" data-sem="-7" aria-label="Semaine précédente">‹</button><b>${titre}</b><button class="btn" data-sem="7" aria-label="Semaine suivante">›</button>
       ${ymd(plSemaine) !== ymd(lundi(new Date())) ? `<button class="btn flat" data-sem="0">Cette semaine</button>` : ""}
-      <select id="qui" style="max-width:220px"><option value="">Toutes les intervenantes</option>${cacheProfils.filter(p => p.role === "intervenante" && p.actif).map(p => `<option value="${p.id}" ${p.id === plQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></span></div>
+      <select id="qui" style="max-width:220px"><option value="">Tous les intervenants</option>${cacheProfils.filter(p => p.role === "intervenante" && p.actif).map(p => `<option value="${p.id}" ${p.id === plQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></span></div>
     <p class="muted small" style="margin:6px 0 12px">Encadré vert = passage prévu et déclaré. Touche un passage pour le déplacer ou l'annuler, ＋ pour en ajouter un. Leur planning se met à jour dans leur appli et leur agenda Google.</p>
     <div class="card" style="overflow-x:auto;padding:8px"><table style="min-width:900px"><tr><th></th>${jours.map(j => `<th style="${ymd(j) === auj ? "color:var(--accent)" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</th>`).join("")}<th>Déclaré</th></tr>
       ${gens.map(p => `<tr><td><b>${esc(nomPers(p))}</b></td>${jours.map(j => `<td style="min-width:110px">${cellule(p, j)}</td>`).join("")}
-        <td><b>${heures(pt.filter(x => x.intervenante_id === p.id).reduce((s, x) => s + minutes(x), 0))}</b></td></tr>`).join("") || `<tr><td colspan="9" class="muted">Aucune intervenante active.</td></tr>`}</table></div>`);
+        <td><b>${heures(pt.filter(x => x.intervenante_id === p.id).reduce((s, x) => s + minutes(x), 0))}</b></td></tr>`).join("") || `<tr><td colspan="9" class="muted">Aucun intervenant actif.</td></tr>`}</table></div>`);
   el.querySelector("#qui").onchange = e => { plQui = e.target.value; afficher("planning"); };
   el.onclick = e => {
     const s = e.target.closest("[data-sem]"), c = e.target.closest("[data-cr]"), a = e.target.closest("[data-ajout]");
@@ -494,7 +494,7 @@ async function vueReporting() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante").sort((a, b) => b.actif - a.actif);
   if (!gens.some(p => p.id === rpQui)) rpQui = (gens[0] || {}).id || "";
-  if (!rpQui) return contenu(`<h1>Reporting</h1><p class="muted" style="margin-top:12px">Aucune intervenante.</p>`);
+  if (!rpQui) return contenu(`<h1>Reporting</h1><p class="muted" style="margin-top:12px">Aucun intervenant.</p>`);
   const m0 = rpMois, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1), aujourd = ymd(new Date());
   const [pt, attrib] = await Promise.all([
     q(sb.from("pointages").select("*").eq("intervenante_id", rpQui).gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).order("arrivee")),
@@ -517,12 +517,12 @@ async function vueReporting() {
         <label class="f">Fin (facultatif)<input name="fin" type="time" value="${esc(l.fin || "")}"></label></div>
       <label class="f">Remarque (facultatif)<input name="note" type="text" value="${esc(l.note || "")}"></label></div>`;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Reporting</h1>
-      <select id="rp-qui" aria-label="Intervenante" style="max-width:260px">${gens.map(p => `<option value="${p.id}" ${p.id === rpQui ? "selected" : ""}>${esc(nomPers(p))}${p.actif ? "" : " (accès coupé)"}</option>`).join("")}</select></div>
+      <select id="rp-qui" aria-label="Intervenant" style="max-width:260px">${gens.map(p => `<option value="${p.id}" ${p.id === rpQui ? "selected" : ""}>${esc(nomPers(p))}${p.actif ? "" : " (accès coupé)"}</option>`).join("")}</select></div>
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Saisir à sa place</h2>
-      ${clients.length ? `<label class="f" for="rp-texte">Ce qu'elle a fait</label>
+      ${clients.length ? `<label class="f" for="rp-texte">Ce qu'il a fait</label>
       <textarea id="rp-texte" rows="3" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn primary" id="rp-verifier">Vérifier</button><button class="btn flat" id="rp-vide">➕ Ajouter une ligne à la main</button></div>`
-      : `<p class="muted">Aucun client ne lui est confié : va dans Intervenantes › sa fiche › « Confier » avant de saisir ses passages.</p>`}
+      : `<p class="muted">Aucun client ne lui est confié : va dans Intervenants › sa fiche › « Confier » avant de saisir ses passages.</p>`}
     </section>
     ${lignes.length ? `<h2>À vérifier avant d'envoyer</h2>${lignes.map(carte).join("")}
       <button class="btn go" id="rp-envoyer" style="margin-top:12px">📤 Envoyer ${lignes.length} passage${lignes.length > 1 ? "s" : ""}</button>
@@ -533,7 +533,7 @@ async function vueReporting() {
     <div class="deux" style="margin-top:10px">
       <section class="card"><h3 style="margin-top:0">Heures du mois</h3><p style="font-size:24px;font-weight:800">${heures(total)}</p>
         <p class="muted small">${finis.length} passage${finis.length > 1 ? "s" : ""} · ${Object.keys(parClient).length} client${Object.keys(parClient).length > 1 ? "s" : ""}</p>
-        ${finis.length && finis.every(p => p.valide_par_intervenante) ? `<span class="tag">✓ Validé par elle</span>` : ""}</section>
+        ${finis.length && finis.every(p => p.valide_par_intervenante) ? `<span class="tag">✓ Validé par lui</span>` : ""}</section>
       <section class="card"><h3 style="margin-top:0">Par client</h3>${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${heures(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</section>
     </div>
     <section class="card" style="margin-top:12px"><h3 style="margin-top:0">Chaque passage</h3>${pt.length ? pt.map(p => `<div class="ligne"><span><b>${esc(nomClient(p.client_id))}</b><br><span class="muted small">${jour(p.arrivee)}${p.creneau_connu !== false ? " · " + hm(p.arrivee) + " → " + (p.depart ? hm(p.depart) : "?") : ""}</span>${p.note ? `<br><span class="small">${esc(p.note)}</span>` : ""}
@@ -618,7 +618,7 @@ async function fichePassagePrevu(x, interv, jourTxt) {
   fenetre(`<h2 style="margin:0">${x ? "Passage prévu" : "Ajouter un passage"} · ${esc(nomInterv(id))}</h2>
     <form id="fp" style="display:flex;flex-direction:column;gap:12px">
       <div class="f"><label class="f" for="cl-q">Client</label><div id="fp-client"></div></div>
-      ${!siens.length ? `<p class="muted small">Aucun client ne lui est confié : confie-le d'abord dans sa fiche, sinon elle ne le verra pas.</p>` : ""}
+      ${!siens.length ? `<p class="muted small">Aucun client ne lui est confié : confie-le d'abord dans sa fiche, sinon il ne le verra pas.</p>` : ""}
       <div class="f"><label class="f" for="fp-duree">Durée (heures)</label><div class="row"><div class="chips" id="fp-durees"></div>
         <input type="text" id="fp-duree" inputmode="decimal" autocomplete="off" style="width:80px" value="${String(dur / 60).replace(".", ",")}"></div></div>
       <div class="pk"><div class="pk" id="pk-haut"></div>
@@ -766,7 +766,7 @@ const taLigne = (t, nb) => `<li class="${t.fait_le ? "is-done" : ""}" data-t="${
     <input type="checkbox" data-coche ${t.fait_le ? "checked" : ""} title="Fait" aria-label="Fait">
     <button class="tk-open" data-ouvre><span class="txt">${esc(t.texte)}</span>
       ${t.commentaire ? `<span class="t-note">💬 ${esc(t.commentaire)}</span>` : ""}
-      <span class="row" style="gap:4px;margin-top:2px">${t.dossier_nom ? `<span class="tag">📁 ${esc(t.dossier_nom)}${nb ? " · " + nb : ""}</span>` : ""}${t.cree_par === t.intervenante_id ? `<span class="tag warn">ajoutée par elle</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}</span></button>
+      <span class="row" style="gap:4px;margin-top:2px">${t.dossier_nom ? `<span class="tag">📁 ${esc(t.dossier_nom)}${nb ? " · " + nb : ""}</span>` : ""}${t.cree_par === t.intervenante_id ? `<span class="tag warn">ajoutée par lui</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}</span></button>
     ${taBadge(t)}</li>`;
 let taQui = "", taQuand = "today", taDate = "", taOuverts = new Set(["late", "today", "week", "next", "later", "none", "done"]);
 async function vueTaches() {
@@ -777,21 +777,21 @@ async function vueTaches() {
   const [taches, docs] = await Promise.all([q(r), q(sb.from("tache_documents").select("tache_id"))]);
   const nb = taComptes(docs);
   const parQui = (taQui ? gens.filter(p => p.id === taQui) : gens).map(p => [p, taches.filter(t => t.intervenante_id === p.id)])
-    .concat([[{ id: "", prenom: "Anciennes intervenantes" }, taches.filter(t => !gens.some(p => p.id === t.intervenante_id))]]).filter(([p, l]) => l.length || p.id);
+    .concat([[{ id: "", prenom: "Anciens intervenants" }, taches.filter(t => !gens.some(p => p.id === t.intervenante_id))]]).filter(([p, l]) => l.length || p.id);
   const groupes = l => Object.keys(TA_GROUPES).map(g => [g, l.filter(t => taGroupe(t) === g)]).filter(([, x]) => x.length).map(([g, x]) =>
     `<details class="tk-grp tk-${g}" data-grp="${g}" ${taOuverts.has(g) ? "open" : ""}><summary>${TA_GROUPES[g]} <span>${x.length}</span></summary><ul class="tasks">${x.map(t => taLigne(t, nb[t.id])).join("")}</ul></details>`).join("");
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>À faire</h1>
-      <span class="row"><select id="qui" style="max-width:220px"><option value="">Toutes les intervenantes</option>${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select>
+      <span class="row"><select id="qui" style="max-width:220px"><option value="">Tous les intervenants</option>${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select>
       <button class="btn" id="archive">📚 Archive des tâches</button></span></div>
     <form class="card" id="fa" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
       <div class="row" style="flex-wrap:nowrap"><input type="text" name="texte" required maxlength="500" placeholder="Nouvelle tâche…" autocomplete="off">
         <button class="btn primary" type="submit" ${gens.length ? "" : "disabled"}>Ajouter</button></div>
       <div class="row"><span class="muted small">Pour quand ?</span>${taChips(taQuand, taDate)}</div>
-      <div class="deux"><label class="f">Pour<select name="qui" required>${gens.length > 1 ? `<option value="tous">Toutes les intervenantes</option>` : ""}${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label>
+      <div class="deux"><label class="f">Pour<select name="qui" required>${gens.length > 1 ? `<option value="tous">Tous les intervenants</option>` : ""}${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label>
         <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label></div>
       <div><button class="btn" type="submit" data-avec-dossier ${gens.length ? "" : "disabled"}>📁 Ajouter et créer un dossier</button></div></form>
     ${parQui.map(([p, l]) => `<section class="card tkc" style="margin-top:12px"><h2 style="margin:0;padding:14px 16px 8px">${esc(nomPers(p))} <span class="tag">${l.filter(t => !t.fait_le).length} à faire</span></h2>
-      ${groupes(l) || `<p class="muted small" style="padding:0 16px 14px">Aucune tâche en cours.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucune intervenante active.</p>`}`);
+      ${groupes(l) || `<p class="muted small" style="padding:0 16px 14px">Aucune tâche en cours.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucun intervenant actif.</p>`}`);
   const form = el.querySelector("#fa");
   const lu = taBrancherChips(form, x => { taQuand = x.w; taDate = x.date; });
   el.querySelector("#qui").onchange = e => { taQui = e.target.value; afficher("taches"); };
@@ -803,7 +803,7 @@ async function vueTaches() {
     if (w === "pick" && !date) return toast("Choisis la date");
     const pour = f.get("qui") === "tous" ? gens.map(p => p.id) : [f.get("qui")];
     const crees = await q(sb.from("taches").insert(pour.map(id => ({ intervenante_id: id, texte, client_id: f.get("client_id") || null, echeance: taEcheanceDe(w, date), dossier_nom: avec ? texte.slice(0, 200) : null }))).select());
-    toast(pour.length > 1 ? "Ajouté pour " + pour.length + " intervenantes" : "Ajouté : elle le voit dans son appli");
+    toast(pour.length > 1 ? "Ajouté pour " + pour.length + " intervenants" : "Ajouté : il le voit dans son appli");
     await afficher("taches");
     if (avec && crees.length === 1) ficheTache(crees[0]);
   };
@@ -852,7 +852,7 @@ function ficheTache(t, apres = () => afficher("taches")) {
 const taPoids = o => !o ? "" : o >= 1048576 ? (o / 1048576).toFixed(1).replace(".", ",") + " Mo" : Math.ceil(o / 1024) + " Ko";
 async function dessinerDossier(zone, t) {
   if (!t.dossier_nom) {
-    zone.innerHTML = `<h3 style="margin:0 0 6px">Dossier</h3><p class="muted small" style="margin-bottom:10px">Un espace pour ranger les papiers de cette tâche. Elle les retrouve dans son appli et peut en ajouter.</p>
+    zone.innerHTML = `<h3 style="margin:0 0 6px">Dossier</h3><p class="muted small" style="margin-bottom:10px">Un espace pour ranger les papiers de cette tâche. Il les retrouve dans son appli et peut en ajouter.</p>
       <button class="btn primary" id="creer">📁 Créer un dossier</button>`;
     zone.querySelector("#creer").onclick = async () => {
       const nom = t.texte.slice(0, 200);
@@ -945,13 +945,13 @@ async function vueIntervenantes() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante");
   const [docs, pieces] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true))]);
-  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Intervenantes</h1>
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Intervenants</h1>
       <a class="btn" href="${SUPABASE_USERS}" target="_blank" rel="noopener">➕ Créer un compte (Supabase)</a></div>
     <p class="muted small" style="margin:6px 0 12px">Nouvelle personne : crée son compte dans Supabase (e-mail + code d'accès, « Auto Confirm User »), puis règle-la ici.</p>
     <div class="grille">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b><br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
-      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>`; }).join("") || `<p class="muted">Aucune intervenante.</p>`}</div>`);
+      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>`);
   el.onclick = e => { const b = e.target.closest("[data-p]"); if (b) ficheIntervenante(b.dataset.p); };
 }
 function piecesPour(p, pieces) {
@@ -994,7 +994,7 @@ async function ficheIntervenante(id) {
       <section class="card"><h3 style="margin-top:0">Ses informations</h3>
         ${champ("email", "E-mail")}${champ("telephone", "Téléphone")}${champ("adresse", "Adresse")}${champ("date_naissance", "Naissance")}${champ("siret", "SIRET")}
         ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
-        ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par elle.</p>`}</section>
+        ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par lui.</p>`}</section>
     </div>
     <section class="card"><h3 style="margin-top:0">Papiers</h3>
       ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
@@ -1051,7 +1051,7 @@ async function vueClients() {
   const tampon = await q(sb.from("clients_import").select("*").in("etat", ["nouveau", "different", "a_verifier"]).order("nom"));
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1>
       <span class="row"><button class="btn primary" id="imp">📥 Importer une extraction</button><button class="btn" id="nv">➕ Nouveau client</button></span></div>
-    <p class="muted small" style="margin:6px 0 0">Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenantes ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    <p class="muted small" style="margin:6px 0 0">Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
     ${tampon.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Zone tampon : ${tampon.length} ligne(s) à traiter</h2>
       <table><tr><th>Extraction</th><th>Rapprochement</th><th></th></tr>${tampon.map(t => { const c = cacheClients.find(k => k.id === t.client_id);
         return `<tr><td><b>${esc(t.nom)}</b><br><span class="muted small">${esc([t.telephone, t.email, t.adresse].filter(Boolean).join(" · "))}</span></td>
@@ -1245,7 +1245,7 @@ async function dosRoute(c, corps, re) {
       <p class="muted small" style="margin:4px 0 8px">Les points montent tant qu'une tâche n'est pas cochée après sa fréquence. Durées indicatives : le terrain commande.</p>
       ${actives.length ? `<div style="overflow-x:auto"><table><tr><th>Points</th><th>Tâche</th><th>Quand</th><th>Durée</th><th>Prio.</th><th>Dernière fois</th><th></th></tr>
         ${actives.map(o => `<tr data-rt="${o.t.id}"><td><b>${o.points}</b><br>${tag(o.etat)}</td>
-          <td><b>${esc(o.t.titre)}</b> <span class="muted small">· ${CATS_ROUTE[o.t.categorie] || ""}${o.t.source === "intervenante" ? " · ajoutée par l'intervenante" : o.t.source === "ia" ? " · IA" : ""}</span>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</td>
+          <td><b>${esc(o.t.titre)}</b> <span class="muted small">· ${CATS_ROUTE[o.t.categorie] || ""}${o.t.source === "intervenante" ? " · ajoutée par l'intervenant" : o.t.source === "ia" ? " · IA" : ""}</span>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</td>
           <td class="small">${esc(quandTache(o.t))}</td><td>${o.t.duree_min ? o.t.duree_min + " min" : "—"}</td><td>${o.t.priorite}/5</td>
           <td class="small">${o.t.derniere_fois ? jour(o.t.derniere_fois) : "jamais"}${o.t.derniere_partielle && (!o.t.derniere_fois || o.t.derniere_partielle > o.t.derniere_fois) ? `<br><span class="muted">en partie le ${jour(o.t.derniere_partielle)}</span>` : ""}</td>
           <td><span class="row" style="gap:2px"><button class="btn flat" data-rmod>Modifier</button><button class="btn flat stop" data-rret>Retirer</button></span></td></tr>`).join("")}</table></div>` : `<p class="muted">Aucune tâche : crée la feuille de route depuis l'analyse IA (bouton « 🤖 Analyse IA »), ou ajoute des tâches ici.</p>`}
@@ -1298,7 +1298,7 @@ async function dosFil(c, corps, re) {
   const fil = com.map(x => ({ ...x, k: "com" })).concat(notes.map(x => ({ ...x, k: "note" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
   corps.innerHTML = `<form id="fcom" class="card" style="display:flex;flex-direction:column;gap:8px">
       <label class="f">Nouveau commentaire<textarea name="texte" required maxlength="4000" placeholder="Un fait précis et daté : « clé rendue par sa fille le 3/11 », « préfère qu'on passe le matin »…"></textarea></label>
-      <label class="chk"><input type="checkbox" name="partage">Partager avec les intervenantes qui ont ce client</label>
+      <label class="chk"><input type="checkbox" name="partage">Partager avec les intervenants qui ont ce client</label>
       <p class="muted small">Reste factuel : le client peut demander à lire ce qui est écrit sur lui (RGPD). Santé : seulement le strict utile au travail.</p>
       <div><button class="btn primary" type="submit">Ajouter</button></div></form>
     <section class="card" style="margin-top:12px">${fil.length ? fil.map(x => `<div class="ligne"><span style="min-width:0">
@@ -1323,14 +1323,14 @@ async function dosPhotos(c, corps, re) {
   corps.innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:8px">
       <div class="deux"><label class="f">Catégorie<select id="pcat">${Object.entries(CATS).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
         <label class="f">Légende (facultatif)<input type="text" id="pleg" maxlength="500" placeholder="Ex. évier fendu sous le robinet"></label></div>
-      <label class="chk"><input type="checkbox" id="ppart" checked>Visible par les intervenantes qui ont ce client</label>
+      <label class="chk"><input type="checkbox" id="ppart" checked>Visible par les intervenants qui ont ce client</label>
       <div class="row"><button class="btn primary" id="pchoix">📷 Ajouter des photos</button>
         <span class="muted small">Rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Photos) en quelques minutes. Tu peux aussi les glisser directement dans ce dossier. Le travail ou le dégât, jamais les personnes, papiers ou objets de valeur.</span></div>
       <input type="file" id="pfic" accept="image/*" multiple hidden></div>
     <div class="photos">${photos.map(p => `<figure class="photo" data-ph="${p.id}"><button class="vignette" data-ouvrir title="Ouvrir la photo complète"><img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || CATS[p.categorie])}" loading="lazy"></button>
         <figcaption><b>${CATS[p.categorie] || "Photo"}</b>${p.legende ? " · " + esc(p.legende) : ""}<br>
           <span class="muted small">${jour(p.prise_le)} ${hm(p.prise_le)} · ${p.auteur === moi.id ? "toi" : esc(nomInterv(p.auteur))}${p.drive_id ? " · ✓ dans le Drive" : " · rangement en cours"}${p.partage ? "" : " · masquée"}</span>
-          <span class="row" style="margin-top:4px;gap:2px">${p.vue_le ? "" : `<button class="btn" data-plu>Lu ✓</button>`}<button class="btn flat" data-ppart>${p.partage ? "Masquer" : "Montrer"} aux intervenantes</button><button class="btn flat stop" data-psup>Supprimer</button></span></figcaption></figure>`).join("")
+          <span class="row" style="margin-top:4px;gap:2px">${p.vue_le ? "" : `<button class="btn" data-plu>Lu ✓</button>`}<button class="btn flat" data-ppart>${p.partage ? "Masquer" : "Montrer"} aux intervenants</button><button class="btn flat stop" data-psup>Supprimer</button></span></figcaption></figure>`).join("")
       || `<p class="muted">Aucune photo pour l'instant.</p>`}</div>`;
   const champ = corps.querySelector("#pfic");
   corps.querySelector("#pchoix").onclick = () => { champ.value = ""; champ.click(); };
@@ -1380,7 +1380,7 @@ async function envoyerPhoto(f, d) {
 async function dosJuridique(c, corps, re) {
   const liste = await q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("date_evt", { ascending: false, nullsFirst: false }).order("cree_le", { ascending: false }));
   const dans7 = ymd(plusJours(new Date(), 7));
-  corps.innerHTML = `<p class="muted small" style="margin-bottom:8px">🔒 Visible par toi seul, jamais par les intervenantes. Les pièces sont rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Juridique).</p>
+  corps.innerHTML = `<p class="muted small" style="margin-bottom:8px">🔒 Visible par toi seul, jamais par les intervenants. Les pièces sont rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Juridique).</p>
     <form id="fj" class="card" style="display:flex;flex-direction:column;gap:8px">
       <div class="deux"><label class="f">Type<select name="type">${Object.entries(TYPES_J).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
         <label class="f">Titre<input type="text" name="titre" required maxlength="200" placeholder="Ex. contrat signé, réclamation vitre cassée…"></label></div>
@@ -1433,9 +1433,9 @@ function formClient(c) {
       <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
         <label class="f">Activité<select name="activite">${["Ménage", "Jardinage", "Bricolage"].map(a => `<option ${c.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
       <label class="f">État<select name="etat">${["prospect", "avance_attente", "actif", "pause", "termine"].map(a => `<option ${c.etat === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
-      <label class="f">Accès (digicode, étage…) — vu par l'intervenante<textarea name="acces">${esc(c.acces || "")}</textarea></label>
-      <label class="f">Clé — vu par l'intervenante<textarea name="cle">${esc(c.cle || "")}</textarea></label>
-      <label class="f">Consignes — vu par l'intervenante<textarea name="consignes">${esc(c.consignes || "")}</textarea></label>
+      <label class="f">Accès (digicode, étage…) — vu par l'intervenant<textarea name="acces">${esc(c.acces || "")}</textarea></label>
+      <label class="f">Clé — vu par l'intervenant<textarea name="cle">${esc(c.cle || "")}</textarea></label>
+      <label class="f">Consignes — vu par l'intervenant<textarea name="consignes">${esc(c.consignes || "")}</textarea></label>
       <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Fermer</button></div></form>`;
 }
 function brancherFormClient(el, c, apres) {
@@ -1457,15 +1457,15 @@ async function vuePapiers() {
     <td><input type="text" name="libelle" value="${esc(p.libelle)}"><input type="text" name="aide" value="${esc(p.aide || "")}" placeholder="Aide affichée (facultatif)" style="margin-top:4px;font-size:13px">
       <input type="text" name="mots" value="${esc(p.mots || "")}" placeholder="Mots pour le reconnaître dans le Drive : rib, iban…" title="Mots ou expressions séparés par des virgules, cherchés dans le nom du fichier puis dans le texte lu" style="margin-top:4px;font-size:13px">
       <label class="small muted row" style="margin-top:4px">Valable <input type="number" name="validite_mois" min="1" max="120" value="${p.validite_mois || ""}" placeholder="—" style="width:70px"> mois (vide = sans limite)</label></td>
-    <td><select name="pour">${[["tous", "Toutes"], ["sous-traitant", "Auto-entrepreneuses"], ["salarie", "Salariées"]].map(([k, t]) => `<option value="${k}" ${p.pour === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
-    <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "Si elle a une voiture"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><select name="pour">${[["tous", "Tous"], ["sous-traitant", "Auto-entrepreneurs"], ["salarie", "Salariés"]].map(([k, t]) => `<option value="${k}" ${p.pour === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "S'il a une voiture"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
     <td><label class="chk"><input type="checkbox" name="obligatoire" ${p.obligatoire ? "checked" : ""}>obligatoire</label><label class="chk"><input type="checkbox" name="actif" ${p.actif ? "checked" : ""}>demandé</label></td>
     <td>${p.modele ? `<span class="row"><button class="btn" data-mvoir>Voir</button><button class="btn" data-mdep>Remplacer</button><button class="btn flat stop" data-mret>Retirer</button></span>`
       : `<button class="btn" data-mdep>📎 Ajouter</button>`}</td>
     <td><span class="row"><button class="btn flat" data-haut title="Monter">↑</button><button class="btn flat" data-bas title="Descendre">↓</button><button class="btn primary" data-enr>Enregistrer</button></span></td></tr>`;
   const el = contenu(`<h1>Papiers demandés</h1>
-    <p class="muted small" style="margin:6px 0 12px">Ce que l'appli demande à chaque intervenante selon son statut. Décocher « demandé » retire le papier de la liste sans effacer ceux déjà reçus.
-      Un <b>modèle</b> (PDF ou Word : contrat, droit à l'image…) se télécharge depuis l'appli : elle l'imprime, le signe et renvoie la photo.</p>
+    <p class="muted small" style="margin:6px 0 12px">Ce que l'appli demande à chaque intervenant selon son statut. Décocher « demandé » retire le papier de la liste sans effacer ceux déjà reçus.
+      Un <b>modèle</b> (PDF ou Word : contrat, droit à l'image…) se télécharge depuis l'appli : il l'imprime, le signe et renvoie la photo.</p>
     <section class="card"><table><tr><th>Papier</th><th>Pour</th><th>Quand</th><th>Options</th><th>Modèle</th><th></th></tr>${pieces.map(ligne).join("")}</table>
     <button class="btn" id="aj" style="margin-top:10px">➕ Ajouter un papier</button>
     <input type="file" id="fm" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" hidden></section>`);
@@ -1481,7 +1481,7 @@ async function vuePapiers() {
     if (error) return souci(error);
     await maj(sb.from("pieces_demandees").update({ modele: chemin }).eq("id", p.id));
     if (ancien) await sb.storage.from("modeles").remove([ancien]);
-    toast("Modèle en ligne : elles peuvent le télécharger"); afficher("papiers");
+    toast("Modèle en ligne : ils peuvent le télécharger"); afficher("papiers");
   };
   const lire = tr => { const v = n => tr.querySelector(`[name=${n}]`); return { libelle: v("libelle").value.trim(), aide: v("aide").value.trim() || null, pour: v("pour").value,
     mots: v("mots").value.trim() || null, validite_mois: Number(v("validite_mois").value) || null,

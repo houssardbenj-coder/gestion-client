@@ -1537,7 +1537,7 @@ async function envoyerPapier(piece, brut) {
 
 /* ---------- Moi ---------- */
 async function vueMoi() {
-  const statut = { "sous-traitant": "Sous-traitante (auto-entrepreneuse)", salarie: "Salariée" }[moi.statut] || "Statut à préciser par OIKOS";
+  const statut = { "sous-traitant": "Sous-traitant (auto-entrepreneur)", salarie: "Salarié" }[moi.statut] || "Statut à préciser par OIKOS";
   contenu(`<h1>${esc((moi.prenom || "") + " " + (moi.nom || ""))}</h1><p class="muted" style="margin-bottom:14px">${statut}</p>
     <dl class="info card"><dt>E-mail</dt><dd>${esc(moi.email || "")}</dd><dt>Téléphone</dt><dd>${esc(moi.telephone || "—")}</dd>
       <dt>Adresse</dt><dd>${esc(moi.adresse || "—")}</dd><dt>Activités</dt><dd>${esc((moi.activites || []).join(", ") || "—")}</dd>
