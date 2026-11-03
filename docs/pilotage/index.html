@@ -1463,14 +1463,14 @@ async function accepterAnalyse(c, a, re) {
 /* Qui intervient chez ce client, et tous ceux qui y sont passés */
 async function dosPresta(c, corps, re) {
   const lignes = await q(sb.from("attributions").select("*").eq("client_id", c.id));
-  const dateFr = d => new Date(d + "T12:00").toLocaleDateString("fr-FR");
+  const dateFr = d => new Date(d + "T12:00").toLocaleDateString("fr-FR");   // début facultatif : l'Excel ne le donne pas
   const avecCompte = cacheProfils.filter(p => p.role !== "gerant");
   const connus = [...new Set([...avecCompte.map(nomPers), ...cacheAttrib.filter(a => a.nom_libre).map(a => a.nom_libre)])].sort();
-  const actuels = lignes.filter(prestaEnCours).sort((a, b) => a.debut < b.debut ? 1 : -1), anciens = lignes.filter(a => !prestaEnCours(a)).sort((a, b) => a.fin < b.fin ? 1 : -1);
+  const actuels = lignes.filter(prestaEnCours).sort((a, b) => (a.debut || "") < (b.debut || "") ? 1 : -1), anciens = lignes.filter(a => !prestaEnCours(a)).sort((a, b) => a.fin < b.fin ? 1 : -1);
   const titre = a => `<b>${esc(nomPresta(a))}</b>${a.activite ? " · " + esc(a.activite) : ""}`;
   const recharger = async () => { await chargerBase(); afficher(); re(); };
   corps.innerHTML = `<section class="card"><h2 style="margin-top:0">En ce moment</h2>
-      ${actuels.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} <span class="muted small">depuis le ${dateFr(a.debut)}</span>${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><button class="btn stop" data-arret="${a.id}">Fin de mission</button></div>`).join("") || `<p class="muted small">Aucun prestataire.</p>`}
+      ${actuels.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} ${a.debut ? `<span class="muted small">depuis le ${dateFr(a.debut)}</span>` : ""}${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><button class="btn stop" data-arret="${a.id}">Fin de mission</button></div>`).join("") || `<p class="muted small">Aucun prestataire.</p>`}
       <h3>Ajouter un prestataire</h3>
       <form id="pr-aj" style="display:flex;flex-direction:column;gap:10px">
         <div class="deux"><label class="f">Qui<input type="text" name="qui" list="pr-noms" autocomplete="off" required><datalist id="pr-noms">${connus.map(n => `<option value="${esc(n)}">`).join("")}</datalist></label>
@@ -1479,7 +1479,7 @@ async function dosPresta(c, corps, re) {
         <p class="muted small" style="margin:0">Si cette personne a un compte dans l'appli, elle verra ce client dans la sienne. Sinon, son nom est seulement noté ici.</p>
         <div class="row"><button class="btn primary" type="submit">Ajouter</button></div></form></section>
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Historique</h2>
-      ${anciens.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} <span class="muted small">du ${dateFr(a.debut)} au ${dateFr(a.fin)}</span>${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><button class="btn flat" data-efface="${a.id}">Effacer</button></div>`).join("") || `<p class="muted small">Personne n'est encore parti.</p>`}</section>`;
+      ${anciens.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} <span class="muted small">${a.debut ? "du " + dateFr(a.debut) + " au" : "jusqu'au"} ${dateFr(a.fin)}</span>${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><button class="btn flat" data-efface="${a.id}">Effacer</button></div>`).join("") || `<p class="muted small">Personne n'est encore parti.</p>`}</section>`;
   corps.querySelector("#pr-aj").onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), qui = String(f.get("qui")).trim(); if (!qui) return;
@@ -1493,7 +1493,7 @@ async function dosPresta(c, corps, re) {
     if (b.dataset.efface) { if (confirm("Effacer cette ligne de l'historique ? À réserver à une erreur de saisie.")) { await maj(sb.from("attributions").delete().eq("id", b.dataset.efface)); recharger(); } return; }
     const a = lignes.find(x => x.id === b.dataset.arret); if (!a) return;
     fenetre(`<h2 style="margin:0">${esc(nomPresta(a))} s'arrête chez ${esc(c.nom)}</h2>
-      <form id="pr-fin" style="display:flex;flex-direction:column;gap:10px;margin-top:10px"><label class="f">Dernier jour<input type="date" name="fin" value="${ymd(new Date())}" min="${esc(a.debut)}" required></label>
+      <form id="pr-fin" style="display:flex;flex-direction:column;gap:10px;margin-top:10px"><label class="f">Dernier jour<input type="date" name="fin" value="${ymd(new Date())}" ${a.debut ? `min="${esc(a.debut)}"` : ""} required></label>
       <label class="f">Note (pourquoi, remplacé par qui…)<input type="text" name="note" value="${esc(a.note || "")}" maxlength="1000"></label>
       <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
       el.querySelector("#pr-fin").onsubmit = async ev => { ev.preventDefault(); const f = new FormData(ev.target);
