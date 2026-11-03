@@ -270,10 +270,14 @@ const ACTIVITES_CLIENT = ["Cours", "Ménage", "Jardinage", "Bricolage"];
 const activitesClient = c => (c.activites || []).length ? c.activites : c.etat === "prospect" ? [] : [c.activite].filter(Boolean);
 const activitePrincipale = l => l.find(a => a !== "Cours") || l[0] || "Ménage";
 const elevesClient = c => (c.eleves || []).join(", ");
-/* Trois sections : les cases cochées décident. Cours = Benjamin enseignement, un service = OIKOS, les deux = dans les deux. Un prospect reste à part. */
+/* Trois sections : l'entreprise du client décide (celle de l'Excel, ou les cases de sa fiche), car OIKOS donne aussi des cours.
+   Sans entreprise connue : Cours = Benjamin enseignement, un service = OIKOS. Un client des deux est dans les deux, un prospect reste à part. */
 const ENTREPRISES = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"]];
-const dansEntreprise = (c, k) => { if (k === "PROSPECT") return c.etat === "prospect"; if (c.etat === "prospect") return false;
-  const a = activitesClient(c); return k === "BE" ? a.includes("Cours") : !a.length || a.some(x => x !== "Cours"); };
+const NOMS_ENTREPRISE = { OIKOS: "OIKOS", BE: "Benjamin enseignement" };
+const entreprisesDe = c => { const e = c.entite, a = activitesClient(c);
+  return ["OIKOS", "BE"].filter(k => e ? (k === "BE" ? /enseignement/i.test(e) : /OIKOS/.test(e)) : k === "BE" ? a.includes("Cours") : !a.length || a.some(x => x !== "Cours")); };
+const dansEntreprise = (c, k) => k === "PROSPECT" ? c.etat === "prospect" : c.etat !== "prospect" && entreprisesDe(c).includes(k);
+const valeurEntreprise = l => l.length > 1 ? "Benjamin enseignement + OIKOS" : l.length ? NOMS_ENTREPRISE[l[0]] : null;
 let entreprise = "OIKOS";
 const clientsEnCours = () => cacheClients.filter(c => c.etat !== "termine");
 function boutonsEntreprise() {
@@ -1233,13 +1237,13 @@ async function ouvrirStockage(chemin) {
 }
 function ficheClient(id, ong = "ensemble") {
   const c = cacheClients.find(k => k.id === id);
-  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activites: entreprise === "BE" ? ["Cours"] : entreprise === "OIKOS" ? ["Ménage"] : [], etat: entreprise === "PROSPECT" ? "prospect" : "actif" })}`, (el, fermer) =>
+  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activites: entreprise === "BE" ? ["Cours"] : entreprise === "OIKOS" ? ["Ménage"] : [], entite: NOMS_ENTREPRISE[entreprise] || null, etat: entreprise === "PROSPECT" ? "prospect" : "actif" })}`, (el, fermer) =>
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">📁 Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
-    <div class="row" id="fiche-choix" style="margin:8px 0">${casesActivites(c)}
+    <div class="row" id="fiche-choix" style="margin:8px 0">${casesActivites(c)}${casesEntreprise(c)}
       ${c.etat === "prospect" ? `<button class="btn go" type="button" id="devenu-client">✓ Devenu client</button>` : ""}</div>
     <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
     <div id="dos-corps"></div>`, el => {
@@ -1253,9 +1257,16 @@ function ficheClient(id, ong = "ensemble") {
     };
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
     el.querySelector("#fiche-choix").onchange = async e => {
-      const acts = [...el.querySelectorAll("#fiche-choix [name=act]:checked")].map(x => x.value);
-      if (!acts.length && c.etat !== "prospect") { e.target.checked = true; return toast("Garde au moins une activité"); }
-      const d = { activites: acts, activite: activitePrincipale(acts) };
+      const coches = n => [...el.querySelectorAll(`#fiche-choix [name=${n}]:checked`)].map(x => x.value);
+      let d;
+      if (e.target.name === "ent") {
+        if (!coches("ent").length) { e.target.checked = true; return toast("Garde au moins une entreprise"); }
+        d = { entite: valeurEntreprise(coches("ent")) };
+      } else {
+        const acts = coches("act");
+        if (!acts.length && c.etat !== "prospect") { e.target.checked = true; return toast("Garde au moins une activité"); }
+        d = { activites: acts, activite: activitePrincipale(acts) };
+      }
       await maj(sb.from("clients").update(d).eq("id", c.id));
       Object.assign(c, d); toast("Enregistré"); afficher();
     };
@@ -1693,13 +1704,14 @@ async function dosJuridique(c, corps, re) {
 }
 /* Formulaire de la fiche (nouveau client, ou onglet « Fiche » du dossier) */
 const casesActivites = c => `<span class="row" aria-label="Activités">${ACTIVITES_CLIENT.map(a => `<label class="chk"><input type="checkbox" name="act" value="${a}" ${activitesClient(c).includes(a) ? "checked" : ""}>${a}</label>`).join("")}</span>`;
+const casesEntreprise = c => `<span class="row" aria-label="Entreprise" style="margin-left:14px">${["OIKOS", "BE"].map(k => `<label class="chk"><input type="checkbox" name="ent" value="${k}" ${entreprisesDe(c).includes(k) ? "checked" : ""}>${NOMS_ENTREPRISE[k]}</label>`).join("")}</span>`;
 function formClient(c) {
   const ch = (k, t, type = "text") => `<label class="f">${t}<input type="${type}" name="${k}" value="${esc(c[k] || "")}"></label>`;
   return `<form id="fc" style="display:flex;flex-direction:column;gap:10px">
       <div class="deux">${ch("nom", "Nom")}${ch("telephone", "Téléphone", "tel")}</div>
       <div class="deux">${ch("email", "E-mail", "email")}${ch("adresse", "Adresse")}</div>
       <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
-        ${c.id ? "" : `<div class="f"><span>Activités</span>${casesActivites(c)}</div>`}</div>
+        ${c.id ? "" : `<div class="f"><span>Activités</span>${casesActivites(c)}</div><div class="f"><span>Entreprise</span>${casesEntreprise(c)}</div>`}</div>
       <label class="f">Élèves, séparés par des virgules${c.source_pense ? " (repris de Pense intelligent : à corriger là-bas)" : ""} — vu par l'intervenant<input type="text" name="eleves" value="${esc(elevesClient(c))}"></label>
       <label class="f">État<select name="etat">${["prospect", "avance_attente", "actif", "pause", "termine"].map(a => `<option ${c.etat === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
       <label class="f">Accès (digicode, étage…) — vu par l'intervenant<textarea name="acces">${esc(c.acces || "")}</textarea></label>
@@ -1713,9 +1725,10 @@ function brancherFormClient(el, c, apres) {
     for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
     d.zone = d.zone ? Number(d.zone) : null;
     d.eleves = (d.eleves || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
-    delete d.act;
-    if (!c) { d.activites = new FormData(e.target).getAll("act");
+    delete d.act; delete d.ent;
+    if (!c) { const fd = new FormData(e.target); d.activites = fd.getAll("act"); d.entite = valeurEntreprise(fd.getAll("ent"));
       if (!d.activites.length && d.etat !== "prospect") return toast("Coche au moins une activité");
+      if (!d.entite && d.etat !== "prospect") return toast("Coche au moins une entreprise");
       d.activite = activitePrincipale(d.activites); }
     if (!d.nom) return toast("Le nom est obligatoire");
     if (c && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
