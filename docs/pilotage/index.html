@@ -219,6 +219,7 @@ function choisirCompteIA(cible, nom) {
       <a class="btn" href="oikos-compte2:${ANALYSE_IA_2}#${cible}" data-fermer>Compte Benjamin Houssard</a>
       <button class="btn flat" type="button" data-fermer>Annuler</button></div>`);
 }
+const APPLI_PRESTA = "https://houssardbenj-coder.github.io/gestion-client/intervenante/";
 const SUPABASE_USERS ="https://supabase.com/dashboard/project/nzxphozupnmqyikitwhv/auth/users";   // le compte Supabase est dans le profil Chrome houssard.benj : sur PC, passe aussi par le lien oikos-compte2:
 const sb = window.supabase.createClient(SB_URL, SB_CLE, { auth: { persistSession: true, storageKey: "oikos-gerant-session" } });
 
@@ -1100,8 +1101,10 @@ async function archiveTaches() {
 async function vueIntervenantes() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante");
-  const [docs, pieces, comptes] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true)),
-    sb.from("comptes_a_creer").select("*").in("etat", ["a_faire", "erreur"]).order("cree_le").then(r => r.data || [])]);
+  const [docs, pieces, comptes, codes] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true)),
+    sb.from("comptes_a_creer").select("*").in("etat", ["a_faire", "erreur"]).order("cree_le").then(r => r.data || []),
+    sb.from("codes_provisoires").select("*").then(r => r.data || [])]);
+  const enAttente = gens.filter(p => p.actif && p.mdp_provisoire && codes.some(c => c.profil_id === p.id));
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Intervenants</h1>
       <span class="row"><button class="btn primary" id="nv-presta">➕ Nouveau presta</button>
       ${matchMedia("(pointer: coarse)").matches
@@ -1110,6 +1113,8 @@ async function vueIntervenantes() {
     ${comptes.length ? `<section class="card" style="margin:10px 0">${comptes.map(c => `<div class="ligne"><span style="min-width:0"><b>${esc([c.prenom, c.nom].filter(Boolean).join(" ") || c.email)}</b> <span class="muted small">${esc(c.email)}</span>
         ${c.etat === "erreur" ? `<br><span class="err small">${esc(c.message || "Erreur")}</span>` : ""}</span>
       <span class="row">${c.etat === "erreur" ? `<button class="btn" data-reessai="${c.id}">Réessayer</button><button class="btn flat" data-abandon="${c.id}">Retirer</button>` : `<span class="tag">invitation dans 5 min</span>`}</span></div>`).join("")}</section>` : ""}
+    ${enAttente.length ? `<section class="card" style="margin:10px 0">${enAttente.map(p => `<div class="ligne"><span style="min-width:0"><b>${esc(nomPers(p))}</b> <span class="muted small">compte pas encore activé</span></span>
+      <button class="btn" data-sms="${p.id}">📱 Envoyer par SMS</button></div>`).join("")}</section>` : ""}
     <div class="grille" style="margin-top:12px">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}<br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
@@ -1118,6 +1123,8 @@ async function vueIntervenantes() {
   el.onclick = async e => {
     const b = e.target.closest("[data-p]"); if (b) return ficheIntervenante(b.dataset.p);
     if (e.target.closest("#nv-presta")) return nouveauPresta();
+    const s = e.target.closest("[data-sms]");
+    if (s) return envoyerSms(gens.find(p => p.id === s.dataset.sms), codes.find(c => c.profil_id === s.dataset.sms).code);
     const r = e.target.closest("[data-reessai]");
     if (r) { await maj(sb.from("comptes_a_creer").update({ etat: "a_faire", message: null }).eq("id", r.dataset.reessai)); return afficher(); }
     const x = e.target.closest("[data-abandon]");
@@ -1133,12 +1140,27 @@ async function basculerGel(p, apres) {
   toast(p.gele ? "Dégelé : il retrouve toute son appli" : "Gelé");
   await chargerBase(); apres();
 }
+const numeroSms = t => { const n = String(t || "").replace(/[^\d+]/g, "").replace(/^00/, "+"); return /^0\d{9}$/.test(n) ? "+33" + n.slice(1) : /^\+\d{8,15}$/.test(n) ? n : ""; };
+/* Comme pour les messages clients : le SMS s'ouvre tout prêt dans Mobile connecté, il ne reste qu'à cliquer sur Envoyer */
+async function envoyerSms(p, code) {
+  let num = numeroSms(p.telephone);
+  if (!num) {
+    const tape = prompt(`Numéro de portable de ${nomPers(p)} ?`); if (tape === null) return;
+    num = numeroSms(tape); if (!num) return toast("Numéro non reconnu : écris-le comme 06 12 34 56 78");
+    await maj(sb.from("profils").update({ telephone: tape.trim() }).eq("id", p.id)); p.telephone = tape.trim();
+  }
+  const texte = `Bonjour${p.prenom ? " " + p.prenom : ""}, c'est Benjamin d'OIKOS. Ton espace intervenant est prêt. Pour créer ton compte, ouvre ce lien : ${APPLI_PRESTA}\nE-mail : ${p.email}\nCode d'accès : ${code}\nTu choisiras ensuite ton mot de passe. Ajoute la page à ton écran d'accueil pour l'avoir comme une appli.`;
+  try { await navigator.clipboard.writeText(texte); } catch (e) {}
+  location.href = `sms:${num}?body=${encodeURIComponent(texte)}`;
+  toast("SMS ouvert dans Mobile connecté : clique sur Envoyer (texte aussi copié)");
+}
 function nouveauPresta() {
   fenetre(`<h2 style="margin:0">Nouveau presta</h2>
     <form id="np" style="display:grid;gap:10px;margin-top:10px">
       <label class="f">Prénom<input type="text" name="prenom" required maxlength="60" autocomplete="off"></label>
       <label class="f">Nom<input type="text" name="nom" required maxlength="60" autocomplete="off"></label>
       <label class="f">E-mail<input name="email" type="email" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <label class="f">Portable (pour le SMS)<input type="tel" name="telephone" placeholder="06 12 34 56 78" autocomplete="off"></label>
       <label class="f">Statut<select name="statut">${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
       <label class="chk"><input type="checkbox" name="ae">OIKOS crée son auto-entreprise</label>
       <p class="err" id="np-err"></p>
@@ -1149,10 +1171,12 @@ function nouveauPresta() {
       const f = ev.target, net = t => t.trim().replace(/\s+/g, " "), email = f.email.value.trim().toLowerCase(), prenom = net(f.prenom.value), nom = net(f.nom.value), err = el.querySelector("#np-err");
       if (!prenom || !nom) { err.textContent = "Il manque le prénom ou le nom."; return; }
       if (/[\\/:*?"<>|]/.test(prenom + nom)) { err.textContent = "Le nom sert aussi pour son dossier : retire les caractères \\ / : * ? \" < > |."; return; }
+      const telephone = f.telephone.value.trim();
+      if (telephone && !numeroSms(telephone)) { err.textContent = "Numéro de portable non reconnu : écris-le comme 06 12 34 56 78."; return; }
       if (cacheProfils.some(p => (p.email || "").toLowerCase() === email)) { err.textContent = "Cet e-mail a déjà un compte : ouvre sa fiche dans la liste."; return; }
       if (cacheProfils.some(p => norm(nomPers(p)) === norm(prenom + " " + nom)) && !confirm(`Un compte existe déjà au nom de ${prenom} ${nom}. En créer un second ?`)) return;
       f.querySelector("[type=submit]").disabled = true;
-      const { error } = await sb.from("comptes_a_creer").insert({ email, prenom, nom, statut: f.statut.value, ae_a_creer: f.statut.value === "sous-traitant" && f.ae.checked });
+      const { error } = await sb.from("comptes_a_creer").insert({ email, prenom, nom, telephone: telephone || null, statut: f.statut.value, ae_a_creer: f.statut.value === "sous-traitant" && f.ae.checked });
       if (error) { f.querySelector("[type=submit]").disabled = false; err.textContent = error.code === "23505" ? "Une invitation est déjà en attente pour cet e-mail." : error.message; return; }
       toast("C'est noté : compte et invitation dans 5 minutes"); fermer(); afficher();
     };
