@@ -1068,11 +1068,13 @@ async function piloteBase(jeton,chemin,methode,corps){
 }
 const piloteMots=s=>fold(s).replace(/[^a-z0-9]+/g," ").trim().split(" ").sort().join(" ");
 const piloteTel=t=>String(t||"").replace(/\D/g,"").slice(-9);
+let piloteSans=[];
 function prospectsDuTelephone(){
-  const out=[],vus=new Set();
+  const out=[],vus=new Set();piloteSans=[];
   const ajoute=(sorte,x,acts,eleves)=>{
     const prenom=String(x.firstName||"").trim(),nom=String(x.lastName||"").trim(),tel=x.phone||"",mel=x.email||"",adr=x.address||"";
-    if((!prenom&&!nom)||(!tel&&!mel&&!adr))return;
+    if(!prenom&&!nom)return;
+    if(!tel&&!mel&&!adr){piloteSans.push(prenom+" "+nom);return}
     const m=piloteMots(prenom+" "+nom);if(vus.has(m))return;vus.add(m);
     out.push({nom:(nom.toUpperCase()+" "+prenom).trim(),telephone:tel||null,email:mel||null,adresse:adr||null,activite:acts.find(a=>a!=="Cours")||acts[0]||"Ménage",activites:acts,eleves,etat:"prospect",source_pense:"pi:"+sorte+":"+x.id});
   };
@@ -1102,16 +1104,16 @@ async function envoyerProspects(manuel){
       if(Object.keys(d).length)await piloteBase(a.access_token,"clients?id=eq."+k.id,"PATCH",d);
     }
     if(neufs.length)await piloteBase(a.access_token,"clients","POST",neufs);
-    s.sig=sig;s.n=liste.length;s.at=Date.now();piloteNote(s);
+    s.sig=sig;s.n=liste.length;s.at=Date.now();s.noms=liste.map(x=>x.nom);s.sans=piloteSans.slice();s.expire=false;piloteNote(s);
     if(manuel){$("#status").textContent=liste.length+" prospect"+(liste.length>1?"s":"")+" à jour dans OIKOS Pilotage.";render()}
   }catch(e){
     if(e.refus){s.expire=true;piloteNote(s)}
-    if(manuel){$("#status").textContent=e.refus?"Connexion à OIKOS Pilotage expirée : relie-le de nouveau.":"Envoi vers OIKOS Pilotage impossible pour l'instant.";render()}
+    if(manuel){$("#status").textContent=e.refus?"Connexion à OIKOS Pilotage expirée : relie-le de nouveau.":"Envoi vers OIKOS Pilotage impossible ("+(e.message||"réseau")+").";render()}
   }finally{piloteEnCours=false}
 }
 function piloteHTML(){
   const s=piloteLu(),relie=s&&!s.expire;
-  return `<div class="adv">${relie?`<button class="btn" data-pilote="1">Envoyer mes prospects à OIKOS Pilotage</button><button class="iconbtn" data-pilote-off="1">Délier</button>`:`<button class="btn" data-pilote="1">Relier à OIKOS Pilotage</button>`}<span class="pnote" style="padding:0">${relie?(s.at?`Envoi automatique. ${s.n} prospect${s.n>1?"s":""}, dernier envoi le ${esc(new Date(s.at).toLocaleString("fr-FR"))}.`:"Envoi automatique des personnes qui ne sont que sur ce téléphone."):"Envoie tout seul les personnes qui ne sont que sur ce téléphone vers la section Prospects."}</span></div>`;
+  return `<div class="adv">${relie?`<button class="btn" data-pilote="1">Envoyer mes prospects à OIKOS Pilotage</button><button class="iconbtn" data-pilote-off="1">Délier</button>`:`<button class="btn" data-pilote="1">Relier à OIKOS Pilotage</button>`}<span class="pnote" style="padding:0">${relie?(s.at?`Envoi automatique. ${s.n} prospect${s.n>1?"s":""}, dernier envoi le ${esc(new Date(s.at).toLocaleString("fr-FR"))}.`:"Envoi automatique des personnes qui ne sont que sur ce téléphone.")+(relie&&s.noms&&s.noms.length?`<br>Envoyés : ${esc(s.noms.join(", "))}.`:"")+(relie&&s.sans&&s.sans.length?`<br>Sans téléphone, e-mail ni adresse, donc pas envoyés : ${esc(s.sans.join(", "))}.`:""):"Envoie tout seul les personnes qui ne sont que sur ce téléphone vers la section Prospects."}</span></div>`;
 }
 function openPilote(){
   const root=$("#sheet-root");
