@@ -1071,9 +1071,10 @@ async function ficheProposition(t, apres) {
     <button class="btn" type="button" id="pr-non" style="color:var(--stop)">Je ne peux pas</button>`}
     <button class="btn flat" type="button" data-fermer>Fermer</button>`, (el, fermer) => {
     const repondre = async (reponse, message) => {
-      const { error } = await sb.from("taches").update({ commentaire: reponse.slice(0, 2000), fait_le: new Date().toISOString() }).eq("id", t.id);
+      // page restée ouverte : une proposition déjà fermée ne prend plus de réponse
+      const { data, error } = await sb.from("taches").update({ commentaire: reponse.slice(0, 2000), fait_le: new Date().toISOString() }).eq("id", t.id).is("fait_le", null).select("id");
       if (error) return souci(error);
-      toast(message); fermer();
+      toast(data.length ? message : "Trop tard : cette proposition est fermée, la mission est déjà prise ou annulée."); fermer();
     };
     if (el.querySelector("#pr-oui")) {
       el.querySelector("#pr-oui").onclick = () => repondre("Je prends", "Réponse envoyée ! Le premier qui accepte a la mission ; l'ordre de mission arrivera une fois le devis signé.");

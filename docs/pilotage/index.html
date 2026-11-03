@@ -1560,11 +1560,14 @@ const enAttenteDevis = d => ETATS_ATTENTE.includes(d.etat);
    La proposition est une tâche du presta, sans accès au client ; sa réponse est dans le commentaire de la tâche. */
 const estProposition = t => /^Proposition : /.test(t.texte || "");
 const reponseProp = t => !t.fait_le ? "attente" : /^Je prends/.test(t.commentaire || "") ? "ok" : /^Je ne peux pas/.test(t.commentaire || "") ? "refus" : "close";
+/* L'heure d'acceptation est posée par la base, pas par le téléphone : le plus tôt a la mission, le pont ferme les autres en 5 minutes */
+const premierOui = ta => ta.filter(t => estProposition(t) && reponseProp(t) === "ok").sort((a, b) => a.fait_le < b.fait_le ? -1 : 1)[0];
+const missionAnnulee = t => /^Mission : /.test(t.texte || "") && /^Mission annulée/.test(t.commentaire || "");
 const accordPresta = (d, ta) => ((d.mission || {}).presta_accord || []).length > 0 || ta.some(t => estProposition(t) && reponseProp(t) === "ok");
 function etatDemande(d, ta) {
   const props = ta.filter(estProposition), accord = accordPresta(d, ta);
   if (d.etat === "estimee") return accord ? ["✓ Presta d'accord : devis à envoyer", "warn"] : props.some(t => reponseProp(t) === "attente") ? ["⏳ Réponse du presta", "warn"] : props.length ? ["✗ Pas de presta : à reproposer", "warn"] : ["Estimée : à proposer au presta", "warn"];
-  if (d.etat === "devis_cree") return devisSigne(d) ? ["✍️ Signé : ordre de mission à envoyer", ""] : accord ? ["✓ Presta d'accord · ⏳ Signature du client", "warn"] : ["⏳ Signature du client", "warn"];
+  if (d.etat === "devis_cree") return devisSigne(d) ? (accord ? ["✍️ Signé : ordre de mission à envoyer", ""] : props.some(t => reponseProp(t) === "attente") ? ["✍️ Signé · ⏳ Réponse du presta", "warn"] : ["✍️ Signé : presta à choisir", "warn"]) : accord ? ["✓ Presta d'accord · ⏳ Signature du client", "warn"] : ["⏳ Signature du client", "warn"];
   return ETATS_DEMANDE[d.etat] || [d.etat, "off"];
 }
 const signeLe = d => (d.mission || {}).devis_signe_le;
@@ -1624,21 +1627,22 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     q(sb.from("taches").select("*").in("demande_id", ids))]) : [[], []];
   const urls = await urlsSignees(photos.map(p => p.apercu));
   zone.innerHTML = liste.map(d => { const c = cacheClients.find(k => k.id === d.client_id) || {};
-    const ph = photos.filter(p => p.demande_id === d.id), ta = taches.filter(x => x.demande_id === d.id), attente = enAttenteDevis(d), [t, k] = etatDemande(d, ta), accord = accordPresta(d, ta), props = ta.filter(estProposition);
+    const ph = photos.filter(p => p.demande_id === d.id), ta = taches.filter(x => x.demande_id === d.id), attente = enAttenteDevis(d), [t, k] = etatDemande(d, ta), accord = accordPresta(d, ta), props = ta.filter(estProposition), premier = premierOui(ta);
+    const suivi = accord ? "✅ " + [premier && nomInterv(premier.intervenante_id), ...((d.mission || {}).presta_accord || [])].filter(Boolean).join(", ") : attente ? props.filter(x => ["attente", "refus"].includes(reponseProp(x))).map(x => ({ attente: "⏳", refus: "❌" }[reponseProp(x)] + " " + nomInterv(x.intervenante_id))).join(" · ") : "";
     const iaEnTete = d.etat === "a_estimer" || (d.etat === "estimee" && accord);
     const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "🧾 Faire le devis" : d.estimation ? "✏️ Reprendre le projet" : "🤖 Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">⏳ Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
-    const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && !accord && !props.some(x => reponseProp(x) === "attente") && !devisSigne(d) ? `<button class="btn primary" data-dm-proposer>📲 ${props.length ? "Proposer à un autre presta" : "Transmettre au presta"}</button>` : "";
+    const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && !accord ? `<button class="btn primary" data-dm-proposer>${props.some(x => reponseProp(x) === "attente") ? "➕ Ajouter un presta" : props.length ? "📲 Proposer à un autre presta" : "📲 Transmettre au presta"}</button>` : "";
     const voirFeuille = ((d.estimation || {}).taches || []).length ? `<button class="btn" data-dm-feuille>👁 Voir la feuille de route</button>` : "";
     const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>📋 Envoyer l'ordre de mission</button>` : "") + (d.etat === "devis_cree" && accord && !devisSigne(d) ? (d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">🧾 Envoyer le devis</a>` : "") + `<button class="btn" disabled title="Il s'activera dès que le client aura signé le devis">📋 Ordre de mission : après signature</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 ${d.type_prestation === "one_shot" ? "Valider la mission" : "Prestation terminée"}</button>` : "");
     return `<details class="card dm" data-dm="${d.id}" ${dmOuvertes.has(d.id) ? "open" : ""}>
-      <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}${d.echeance ? " · 📅 " + d.echeance.split("-").reverse().join("/") : ""}${accord ? " · ✅ " + esc(ta.filter(x => estProposition(x) && reponseProp(x) === "ok").map(x => nomInterv(x.intervenante_id)).concat((d.mission || {}).presta_accord || []).join(", ")) : ""}</span></span>
+      <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}${d.echeance ? " · 📅 " + d.echeance.split("-").reverse().join("/") : ""}${suivi ? " · " + esc(suivi) : ""}</span></span>
         ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
       <div class="dm-plus">
         <p class="muted small">Demande du ${jourAn(d.cree_le)}${signeLe(d) ? " · devis signé le " + jourAn(signeLe(d)) : ""}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}${(d.mission.devis_anciens || []).length ? " · remplace " + d.mission.devis_anciens.map(x => esc(x.numero)).join(", ") : ""}</p>
         ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
         ${resumeEstimation(d)}
         ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
-        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: "⏳", ok: "✅", refus: "❌", close: "▫️" }[reponseProp(x)] : x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${estProposition(x) && x.commentaire ? " · " + esc(x.commentaire) : ""}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}${attente && estProposition(x) && ["attente", "ok"].includes(reponseProp(x)) ? ` <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-annuler="${x.id}">Annuler</button>` : ""}</div>`).join("")}</div>` : ""}
+        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: "⏳", ok: "✅", refus: "❌", close: "▫️" }[reponseProp(x)] : missionAnnulee(x) ? "▫️" : x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${(estProposition(x) || missionAnnulee(x)) && x.commentaire ? " · " + esc(x.commentaire) : ""}${estProposition(x) && reponseProp(x) === "ok" && premier && x.id !== premier.id ? ` <span class="tag warn">arrivé après ${esc(nomInterv(premier.intervenante_id))}</span>` : ""}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}${attente && estProposition(x) && ["attente", "ok"].includes(reponseProp(x)) ? ` <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-annuler="${x.id}">Annuler</button>` : ""}</div>`).join("")}</div>` : ""}
         ${attente ? ((d.mission || {}).presta_accord || []).map(n => `<div class="small">✅ ${esc(n)} : d'accord, sans compte <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-accord="${esc(n)}">Annuler</button></div>`).join("") : ""}
         ${(d.mission.sans_compte || []).length ? `<p class="small">Sans compte dans l'appli : ${(d.mission.sans_compte).map(esc).join(", ")}</p>` : ""}
         <div class="row">
@@ -1649,6 +1653,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
           ${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission</a>` : d.ordre_a_faire ? `<span class="tag warn">⏳ Ordre de mission (5 min)</span>` : ""}
           ${d.dossier_url ? `<a class="btn" href="${esc(d.dossier_url)}" target="_blank" rel="noopener">📁 Sous-dossier</a>` : ""}
           ${attente ? `<button class="btn" data-dm-photos>📷 Ajouter des photos</button><button class="btn" data-dm-presta>📲 Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button>${(d.etat === "estimee" || d.etat === "devis_cree") && !devisSigne(d) ? `<button class="btn flat" data-dm-accepter>Le client a accepté sans signer : envoyer l'ordre</button>` : ""}<button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
+          ${d.etat === "en_cours" ? `<button class="btn flat stop" data-dm-annuler-ordre>↩️ Annuler l'ordre de mission</button>` : ""}
         </div>
       </div></details>`; }).join("") || (vide ? `<p class="muted">${esc(vide)}</p>` : "");
   zone.querySelectorAll("details[data-dm]").forEach(x => { x.ontoggle = () => { if (x.open) dmOuvertes.add(x.dataset.dm); else dmOuvertes.delete(x.dataset.dm); }; });
@@ -1671,6 +1676,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     if (b.hasAttribute("data-dm-proposer")) return proposerPresta(d, c, re);
     if (b.hasAttribute("data-dm-feuille")) return voirFeuilleRoute(d, c);
     if (b.hasAttribute("data-dm-accepter")) return accepterDemande(d, c, re);
+    if (b.hasAttribute("data-dm-annuler-ordre")) return annulerOrdre(d, c, re);
     if (b.hasAttribute("data-dm-fin")) return terminerDemande(d, c, taches.filter(t => t.demande_id === d.id), re);
     if (b.hasAttribute("data-dm-refus")) { if (!confirm("Le client refuse « " + d.titre + " » ? La demande reste consultable et peut être reprise.")) return;
       if ((d.mission.attributions || []).length) await maj(sb.from("attributions").update({ fin: ymd(new Date()) }).in("id", d.mission.attributions));
@@ -1847,10 +1853,12 @@ async function voirFeuilleRoute(d, c) {
 async function proposerPresta(d, c, re) {
   const deja = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id));
   const sollicites = deja.filter(t => estProposition(t) && reponseProp(t) !== "close").map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
-  const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c), connaissent = await prestaConnaissant(c);
-  fenetre(`<h2 style="margin:0">Transmettre au presta · ${esc(d.titre)}</h2>
+  const retires = (d.mission || {}).retires || [], habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a) && !retires.includes(a.intervenante_id)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c), connaissent = await prestaConnaissant(c);
+  const sollicitesTxt = deja.filter(t => estProposition(t) && ["attente", "refus"].includes(reponseProp(t))).map(t => ({ attente: "⏳", refus: "❌" }[reponseProp(t)] + " " + nomInterv(t.intervenante_id))).join(" · ");
+  fenetre(`<h2 style="margin:0">${deja.some(t => estProposition(t) && reponseProp(t) === "attente") ? "Ajouter un presta" : "Transmettre au presta"} · ${esc(d.titre)}</h2>
+    ${sollicitesTxt ? `<p class="small" style="margin:6px 0 0">Déjà sollicités : ${esc(sollicitesTxt)}</p>` : ""}
     <form id="fpr" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Il reçoit la feuille de route dans son appli et répond « Je prends » ou « Je ne peux pas ». Sans le nom ni l'adresse du client, sauf s'il y est déjà allé : seulement l'arrondissement ou la commune. Le devis se fait ensuite.")}</legend>
+      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Coche-en autant que tu veux : le premier « Je prends », à l'heure enregistrée par la base, a la mission, et les autres propositions se ferment. Chacun reçoit la feuille de route dans son appli, sans le nom ni l'adresse du client, sauf s'il y est déjà allé : seulement l'arrondissement ou la commune. Le devis se fait ensuite.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
       <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure) ${aide("Il voit le total estimé sur sa feuille de route, jamais le prix du client.")}</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
@@ -1884,7 +1892,8 @@ async function accepterDemande(d, c, re) {
   const mots = n => norm(n).split(" ").sort().join(" "), aCompte = n => gens.some(p => mots(nomPers(p)) === mots(n));
   // quelqu'un a accepté : c'est lui seul ; sinon, les prestataires habituels du client sont proposés
   const accordsSansCompte = (d.mission || {}).presta_accord || [], quelquUn = accords.length || accordsSansCompte.length;
-  const dejaLa = p => quelquUn ? accords.includes(p.id) : deja.some(a => a.intervenante_id === p.id || (a.nom_libre && mots(a.nom_libre) === mots(nomPers(p))));
+  const retires = (d.mission || {}).retires || [];   // ceux dont l'ordre a été annulé ne sont plus cochés d'office
+  const dejaLa = p => quelquUn ? accords.includes(p.id) : !retires.includes(p.id) && deja.some(a => a.intervenante_id === p.id || (a.nom_libre && mots(a.nom_libre) === mots(nomPers(p))));
   const infos = [c.etat === "prospect" ? "Le prospect devient client." : c.etat === "termine" ? "Cet ancien client revient : son profil est repris." : "Le client ne bouge pas de sa liste.",
     "La prestation reste dans « Prestations en cours » jusqu'à ce que tu la finalises." + (d.type_prestation === "regulier" ? " Les tâches passent aussi dans sa feuille de route." : ""),
     d.devis_url ? "" : "Aucun devis créé ici : ce n'est pas bloquant si tu l'as fait à la main.",
@@ -1893,7 +1902,7 @@ async function accepterDemande(d, c, re) {
     <form id="fac" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
       <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">Qui s'en charge ? ${aide("Une tâche et le dossier partent dans son appli.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
-      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc((quelquUn ? accordsSansCompte : deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre)).join(", "))}"></label>
+      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc((quelquUn ? accordsSansCompte : deja.filter(a => a.nom_libre && !aCompte(a.nom_libre) && !retires.includes(a.nom_libre)).map(a => a.nom_libre)).join(", "))}"></label>
       <label class="f">Deadline (facultatif)<input type="date" name="echeance" value="${esc(d.echeance || "")}"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure)</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
         <label class="f">Un mot pour lui (facultatif)<input type="text" name="ordre" maxlength="500"></label></div>
@@ -1916,6 +1925,12 @@ async function accepterDemande(d, c, re) {
           .map(x => ({ ...x, client_id: c.id, activite: d.activite, debut: aujourdhui, note: ("Mission : " + d.titre).slice(0, 1000) }));
         let attributions = [];
         if (aCreer.length) { const r = await sb.from("attributions").insert(aCreer).select("id"); if (r.error) throw r.error; attributions = r.data.map(x => x.id); }
+        // ceux qui n'ont pas répondu : proposition fermée, le dossier disparaît de leur appli
+        const ouvertes = await q(sb.from("taches").select("id").eq("demande_id", d.id).is("fait_le", null).like("texte", "Proposition*"));
+        if (ouvertes.length) {
+          await maj(sb.from("taches").update({ fait_le: maintenant, vue_le: maintenant, commentaire: "Mission déjà prise par un autre presta" }).in("id", ouvertes.map(t => t.id)));
+          await maj(sb.from("tache_documents").delete().in("tache_id", ouvertes.map(t => t.id)));
+        }
         await maj(sb.from("taches").update({ fait_le: maintenant }).eq("demande_id", d.id).is("fait_le", null));   // les photos demandées avant le devis ne comptent plus dans la mission
         if (qui.length) await maj(sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: c.id, demande_id: d.id, texte: ("Mission : " + d.titre).slice(0, 500), echeance, commentaire: ordre || null, dossier_nom: d.titre.slice(0, 200) }))));
         await maj(sb.from("client_photos").update({ partage: true }).eq("demande_id", d.id));
@@ -1923,9 +1938,58 @@ async function accepterDemande(d, c, re) {
           await ajouterARoute(c, (estimation.taches || []).filter(t => t && t.titre));
           if (+estimation.temps_semaine_min > 0) await maj(sb.from("clients").update({ temps_semaine_min: Math.round(+estimation.temps_semaine_min) }).eq("id", c.id));
         }
-        await maj(sb.from("demandes_devis").update({ etat: "en_cours", accepte_le: maintenant, echeance, ordre_mission: ordre || ordreParDefaut(d, c), ordre_a_faire: true, client_a_archiver: nouveau && d.type_prestation === "one_shot",
-          mission: { ...(d.mission || {}), feuille: fiche, presta_taux: f.get("taux"), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions) } }).eq("id", d.id));
+        await maj(sb.from("demandes_devis").update({ etat: "en_cours", accepte_le: maintenant, echeance, ordre_mission: ordre || ordreParDefaut(d, c), ordre_a_faire: true, client_a_archiver: d.client_a_archiver || (nouveau && d.type_prestation === "one_shot"),
+          mission: { ...(d.mission || {}), feuille: fiche, presta_taux: f.get("taux"), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions), ...(nouveau ? { client_avant: { etat: c.etat, archive_auto: c.archive_auto } } : {}) } }).eq("id", d.id));
         await chargerBase(); fermer(); toast("Ordre de mission envoyé : la prestation est dans « Prestations en cours »"); re();
+      } catch (x) { bouton.disabled = false; souci(x); }
+    };
+  });
+}
+/* Retour en arrière : défait ce que l'envoi a créé. La demande retrouve sa place d'avant, devis signé compris, et un autre presta peut être sollicité.
+   Il perd l'accès au client et ses passages à venir, sauf s'il suivait déjà ce client ; le pont le prévient par e-mail. */
+async function annulerOrdre(d, c, re) {
+  const m = d.mission || {}, ids = m.attributions || [], qui = m.intervenants || [], sansCompte = m.sans_compte || [];
+  const [creees, taches] = await Promise.all([ids.length ? q(sb.from("attributions").select("*").in("id", ids)) : [], q(sb.from("taches").select("id,texte,commentaire,fait_le").eq("demande_id", d.id))]);
+  const perdent = creees.map(a => a.intervenante_id).filter(Boolean);
+  const [passes, aVenir] = await Promise.all([
+    qui.length ? q(sb.from("pointages").select("intervenante_id").eq("client_id", c.id).in("intervenante_id", qui).gte("arrivee", d.accepte_le || d.cree_le)) : [],
+    perdent.length ? q(sb.from("creneaux").select("id").eq("client_id", c.id).in("intervenante_id", perdent).eq("annule", false).gte("debut", new Date().toISOString())) : []]);
+  fenetre(`<h2 style="margin:0">Annuler l'ordre de mission · ${esc(d.titre)} ${aide("La demande revient dans « En attente de devis », devis et signature conservés : tu peux la proposer à un autre presta. " + (qui.length ? "Il reçoit un e-mail, le dossier et le PDF disparaissent de son appli." : ""))}</h2>
+    <form id="fao" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+      <p class="small" style="margin:0">Retiré à : <b>${[...qui.map(nomInterv), ...sansCompte].map(esc).join(", ") || "personne"}</b></p>
+      ${passes.length ? `<p class="small" style="margin:0"><span class="tag warn">⚠ ${passes.length} passage(s) déjà déclaré(s) : ils restent dans son reporting</span></p>` : ""}
+      ${aVenir.length ? `<p class="small" style="margin:0"><span class="tag warn">⚠ ${aVenir.length} passage(s) à venir retiré(s) de son planning</span></p>` : ""}
+      ${sansCompte.length ? `<p class="small" style="margin:0"><span class="tag warn">⚠ Sans compte : à prévenir toi-même</span></p>` : ""}
+      ${qui.length ? `<label class="f">Un mot pour lui (facultatif)<input type="text" name="mot" maxlength="500"></label>` : ""}
+      <div class="row"><button class="btn stop" type="submit">↩️ Annuler l'ordre</button><button class="btn flat" type="button" data-fermer>Garder la mission</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fao").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), mot = String(f.get("mot") || "").trim(), maintenant = new Date().toISOString(), hier = ymd(plusJours(new Date(), -1));
+      bouton.disabled = true;
+      try {
+        const missions = taches.filter(t => /^Mission : /.test(t.texte || "") && !missionAnnulee(t)), acceptees = taches.filter(t => estProposition(t) && reponseProp(t) === "ok"), toutes = taches.map(t => t.id);
+        if (missions.length) await maj(sb.from("taches").update({ fait_le: maintenant, vue_le: maintenant, commentaire: ("Mission annulée par OIKOS" + (mot ? " : " + mot : "")).slice(0, 2000) }).in("id", missions.map(t => t.id)));
+        if (acceptees.length) {
+          await maj(sb.from("taches").update({ vue_le: maintenant, commentaire: "Proposition annulée par OIKOS" }).in("id", acceptees.map(t => t.id)));
+          await maj(sb.from("tache_documents").delete().in("tache_id", acceptees.map(t => t.id)));
+        }
+        if (toutes.length) {   // son ordre de mission disparaît ; ce qu'il a lui-même déposé dans le dossier reste
+          await sb.storage.from("taches").remove(toutes.map(id => id + "/ordre-de-mission.pdf"));
+          await maj(sb.from("tache_documents").delete().in("tache_id", toutes).like("chemin", "%/ordre-de-mission.pdf"));
+        }
+        // a_le_client compte le jour de fin : pour couper l'accès tout de suite, la ligne s'efface ou finit hier. Il garde une trace s'il est déjà venu.
+        for (const a of creees) {
+          if (a.intervenante_id && passes.some(p => p.intervenante_id === a.intervenante_id)) await maj(sb.from("attributions").update({ fin: hier, debut: a.debut > hier ? hier : a.debut, note: ("Ordre de mission annulé : " + d.titre).slice(0, 1000) }).eq("id", a.id));
+          else await maj(sb.from("attributions").delete().eq("id", a.id));
+        }
+        if (aVenir.length) await maj(sb.from("creneaux").update({ annule: true }).in("id", aVenir.map(x => x.id)));
+        const occupe = cacheDemandes.some(x => x.id !== d.id && x.client_id === c.id && x.etat === "en_cours") || cacheAttrib.some(a => a.client_id === c.id && prestaEnCours(a) && !ids.includes(a.id));
+        const remettre = m.client_avant && !occupe;   // le prospect ou l'ancien client redevient ce qu'il était ; il repassera client au prochain ordre
+        if (remettre) await maj(sb.from("clients").update(m.client_avant).eq("id", c.id));
+        const { feuille, intervenants, sans_compte, attributions, presta_accord, client_avant, ...reste } = m;
+        await maj(sb.from("demandes_devis").update({ etat: d.devis_url ? "devis_cree" : "estimee", accepte_le: null, ordre_url: null, ordre_a_faire: false, client_a_archiver: remettre ? false : d.client_a_archiver,
+          mission: { ...reste, retires: [...new Set([...(m.retires || []), ...qui, ...sansCompte])], ...(client_avant && !remettre ? { client_avant } : {}) } }).eq("id", d.id));
+        dmOuvertes.add(d.id); if (sectionDevis === "PRESTA") sectionDevis = "ATTENTE";
+        await chargerBase(); fermer(); toast("Ordre annulé : la demande est revenue dans « En attente de devis »"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
   });
