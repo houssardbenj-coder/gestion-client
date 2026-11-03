@@ -63,6 +63,7 @@ nav.onglets button[aria-current="page"]{background:var(--accent-soft);color:var(
 .tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent-soft)}
 .tag.warn{background:var(--warn-soft);color:var(--warn)}
 .tag.off{background:var(--sunk);color:var(--muted)}
+.pastille{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--go);margin-left:6px;vertical-align:middle}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 input[type=text],input[type=email],input[type=tel],input[type=password],input[type=number],select,textarea{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);width:100%}
 textarea{min-height:80px;resize:vertical}
@@ -1110,7 +1111,7 @@ async function vueIntervenantes() {
         ${c.etat === "erreur" ? `<br><span class="err small">${esc(c.message || "Erreur")}</span>` : ""}</span>
       <span class="row">${c.etat === "erreur" ? `<button class="btn" data-reessai="${c.id}">Réessayer</button><button class="btn flat" data-abandon="${c.id}">Retirer</button>` : `<span class="tag">invitation dans 5 min</span>`}</span></div>`).join("")}</section>` : ""}
     <div class="grille" style="margin-top:12px">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
-      <b>${esc(nomPers(p))}</b><br><span class="muted small">${esc(p.email || "")}</span><br>
+      <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}<br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
       <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>`);
@@ -1122,6 +1123,15 @@ async function vueIntervenantes() {
     const x = e.target.closest("[data-abandon]");
     if (x) { await maj(sb.from("comptes_a_creer").delete().eq("id", x.dataset.abandon)); afficher(); }
   };
+}
+/* Vert dès qu'il a remplacé le code d'accès par son mot de passe */
+const pastilleCompte = p => p.actif && !p.mdp_provisoire ? `<span class="pastille" role="img" aria-label="Compte créé" title="Compte créé"></span>` : "";
+/* Gelé : il consulte son appli mais n'y touche plus, sauf ses informations et ses papiers. La base refuse le reste (SQL 30). */
+async function basculerGel(p, apres) {
+  if (!p.gele && !confirm(`Geler ${nomPers(p)} ? Il pourra regarder son appli, mais seulement modifier ses informations et envoyer ses papiers.`)) return;
+  await maj(sb.from("profils").update({ gele: !p.gele }).eq("id", p.id));
+  toast(p.gele ? "Dégelé : il retrouve toute son appli" : "Gelé");
+  await chargerBase(); apres();
 }
 function nouveauPresta() {
   fenetre(`<h2 style="margin:0">Nouveau presta</h2>
@@ -1173,7 +1183,7 @@ async function ficheIntervenante(id) {
   const total = pts.filter(x => x.depart).reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
   const liste = piecesPour(p, pieces);
   const champ = (k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
-  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}</h1><button class="btn flat" data-fermer>Fermer ✕</button></div>
+  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}</h1><button class="btn flat" data-fermer>Fermer ✕</button></div>
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
