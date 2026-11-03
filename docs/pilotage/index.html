@@ -276,7 +276,7 @@ const nomPresta = a => a.intervenante_id ? nomInterv(a.intervenante_id) : a.nom_
 const prestaEnCours = a => !a.fin || a.fin > ymd(new Date());
 const etiquettePresta = a => nomPresta(a) + (a.activite ? " (" + a.activite + ")" : "");
 const prestatairesActuels = c => cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(etiquettePresta).join(", ");
-/* Trois sections : l'entreprise du client décide (celle de l'Excel, ou les cases de sa fiche), car OIKOS donne aussi des cours.
+/* Trois sections : l'entreprise du client décide (le compte VosFactures de sa dernière facture, ou les cases de sa fiche), car OIKOS donne aussi des cours.
    Sans entreprise connue : Cours = Benjamin enseignement, un service = OIKOS. Un client des deux est dans les deux, un prospect reste à part. */
 const ENTREPRISES = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"]];
 const NOMS_ENTREPRISE = { OIKOS: "OIKOS", BE: "Benjamin enseignement" };
@@ -1130,7 +1130,7 @@ async function vueClients() {
   const liste = cacheClients.filter(c => dansEntreprise(c, entreprise)), anciens = liste.filter(c => c.etat === "termine").length;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1>
       <span class="row"><button class="btn primary" id="imp">📥 Importer une extraction</button><button class="btn" id="nv">➕ Nouveau client</button></span></div>
-    <p class="muted small" style="margin:6px 0 0">Les clients de Pense intelligent arrivent ici tout seuls, les inactifs dans les anciens. Ceux qui sont seulement sur ton téléphone, sans facture ni compte VosFactures, arrivent dans Prospects. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    <p class="muted small" style="margin:6px 0 0">Classement automatique d'après VosFactures : l'entreprise est celle de la dernière facture ; en cours = facture ou prestation depuis moins de 6 mois, ou nouveau contact pas encore facturé ; les autres vont dans les anciens. Ceux qui sont seulement sur ton téléphone, sans facture ni compte VosFactures, arrivent dans Prospects. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
     ${boutonsEntreprise()}
     ${tampon.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Zone tampon : ${tampon.length} ligne(s) à traiter</h2>
       <table><tr><th>Extraction</th><th>Rapprochement</th><th></th></tr>${tampon.map(t => { const c = cacheClients.find(k => k.id === t.client_id);
@@ -1138,7 +1138,7 @@ async function vueClients() {
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
     <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
-      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
   const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value;
     const etatOk = r => !t || (t === "termine") === (r.dataset.etat === "termine");   // une recherche regarde aussi les anciens
     el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a))); };
@@ -1267,7 +1267,7 @@ function ficheClient(id, ong = "ensemble") {
       let d;
       if (e.target.name === "ent") {
         if (!coches("ent").length) { e.target.checked = true; return toast("Garde au moins une entreprise"); }
-        d = { entite: valeurEntreprise(coches("ent")) };
+        d = { entite: valeurEntreprise(coches("ent")), entite_manuelle: true };
       } else {
         const acts = coches("act");
         if (!acts.length && c.etat !== "prospect") { e.target.checked = true; return toast("Garde au moins une activité"); }
@@ -1774,7 +1774,7 @@ function brancherFormClient(el, c, apres) {
     d.zone = d.zone ? Number(d.zone) : null;
     d.eleves = (d.eleves || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
     delete d.act; delete d.ent;
-    if (!c) { const fd = new FormData(e.target); d.activites = fd.getAll("act"); d.entite = valeurEntreprise(fd.getAll("ent"));
+    if (!c) { const fd = new FormData(e.target); d.activites = fd.getAll("act"); d.entite = valeurEntreprise(fd.getAll("ent")); d.entite_manuelle = !!d.entite;
       if (!d.activites.length && d.etat !== "prospect") return toast("Coche au moins une activité");
       if (!d.entite && d.etat !== "prospect") return toast("Coche au moins une entreprise");
       d.activite = activitePrincipale(d.activites); }
