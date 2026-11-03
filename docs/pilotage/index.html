@@ -1115,12 +1115,15 @@ async function vueIntervenantes() {
       <span class="row">${c.etat === "erreur" ? `<button class="btn" data-reessai="${c.id}">Réessayer</button><button class="btn flat" data-abandon="${c.id}">Retirer</button>` : `<span class="tag">invitation dans 5 min</span>`}</span></div>`).join("")}</section>` : ""}
     ${enAttente.length ? `<section class="card" style="margin:10px 0">${enAttente.map(p => `<div class="ligne"><span style="min-width:0"><b>${esc(nomPers(p))}</b> <span class="muted small">compte pas encore activé</span></span>
       <button class="btn" data-sms="${p.id}">📱 Envoyer par SMS</button></div>`).join("")}</section>` : ""}
-    <div class="grille" style="margin-top:12px">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
+    <div class="grille" style="margin-top:12px">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<div style="display:grid;gap:6px;align-content:start"><button class="card cliquable" style="text-align:left" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}<br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
+      ${p.actif && p.gele ? `<span class="tag warn">🔒 gelé</span>` : ""}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
-      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>`);
+      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>
+      ${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? "🔓 Dégeler" : "🔒 Geler"}</button>` : ""}</div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>`);
   el.onclick = async e => {
+    const g = e.target.closest("[data-gel]"); if (g) return basculerGel(cacheProfils.find(x => x.id === g.dataset.gel), afficher);
     const b = e.target.closest("[data-p]"); if (b) return ficheIntervenante(b.dataset.p);
     if (e.target.closest("#nv-presta")) return nouveauPresta();
     const s = e.target.closest("[data-sms]");
@@ -1207,7 +1210,8 @@ async function ficheIntervenante(id) {
   const total = pts.filter(x => x.depart).reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
   const liste = piecesPour(p, pieces);
   const champ = (k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
-  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}</h1><button class="btn flat" data-fermer>Fermer ✕</button></div>
+  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn">🔒 gelé</span>` : ""}</h1>
+      <span class="row">${p.actif ? `<button class="btn ${p.gele ? "go" : ""}" id="gel" title="Gelé : il consulte son appli, mais ne peut que modifier ses informations et envoyer ses papiers">${p.gele ? "🔓 Dégeler" : "🔒 Geler"}</button>` : ""}<button class="btn flat" data-fermer>Fermer ✕</button></span></div>
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
@@ -1242,6 +1246,7 @@ async function ficheIntervenante(id) {
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
       <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id)))}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
     const recharger = () => { fermer(); ficheIntervenante(id); };
+    if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
       await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked }).eq("id", id));
       toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
@@ -1820,7 +1825,7 @@ function photosDemande(d, c, re) {
 /* Avant le devis, un intervenant prend les photos sur place : une tâche avec dossier dans son appli ; le pont copie ses photos dans le sous-dossier de la demande.
    Il reçoit l'accès au client ; cet accès s'arrête si la demande est refusée, ou à la fin d'un one shot. Ni prix ni estimation ne lui parviennent. */
 function demanderPhotos(d, c, re) {
-  const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif);
+  const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !p.gele);
   if (!gens.length) return toast("Aucun intervenant avec un compte dans l'appli");
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
   fenetre(`<h2 style="margin:0">Demander des photos · ${esc(d.titre)} ${aide("Il reçoit une tâche dans son appli, avec l'accès à ce client. Il y ajoute ses photos, qui arrivent dans cette demande en quelques minutes.")}</h2>
@@ -1935,7 +1940,7 @@ async function voirFeuilleRoute(d, c) {
 /* 1re étape : la feuille de route part au presta, qui répond « Je prends » ou « Je ne peux pas » dans son appli. Il n'a pas encore accès au client. */
 async function proposerPresta(d, c, re) {
   const deja = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id));
-  const sollicites = deja.filter(t => estProposition(t) && reponseProp(t) !== "close").map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
+  const sollicites = deja.filter(t => estProposition(t) && reponseProp(t) !== "close").map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !p.gele && !sollicites.includes(p.id));
   const retires = (d.mission || {}).retires || [], habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a) && !retires.includes(a.intervenante_id)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c), connaissent = await prestaConnaissant(c);
   const sollicitesTxt = deja.filter(t => estProposition(t) && ["attente", "refus"].includes(reponseProp(t))).map(t => ({ attente: "⏳", refus: "❌" }[reponseProp(t)] + " " + nomInterv(t.intervenante_id))).join(" · ");
   fenetre(`<h2 style="margin:0">${deja.some(t => estProposition(t) && reponseProp(t) === "attente") ? "Ajouter un presta" : "Transmettre au presta"} · ${esc(d.titre)}</h2>
@@ -1969,7 +1974,7 @@ async function proposerPresta(d, c, re) {
 }
 async function accepterDemande(d, c, re) {
   const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").sort((a, b) => a.fait_le < b.fait_le ? -1 : 1).slice(0, 1).map(t => t.intervenante_id), fiche = await fdrDonnees(d, c, true);
-  const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif), nouveau = ["prospect", "termine"].includes(c.etat);
+  const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !p.gele), nouveau = ["prospect", "termine"].includes(c.etat);
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
   // un prestataire noté à la main (ex. d'après l'Excel) qui a maintenant un compte : on le reconnaît par son nom
   const mots = n => norm(n).split(" ").sort().join(" "), aCompte = n => gens.some(p => mots(nomPers(p)) === mots(n));
