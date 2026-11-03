@@ -730,7 +730,8 @@ async function vueJour() {
       ${c.adresse ? `<a class="lien muted" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener">📍 ${esc(c.adresse)}</a>` : ""}
       <div class="grid2">${c.adresse ? `<a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Y aller</a>` : `<span></span>`}
       <button class="btn" data-fiche="${x.client_id}"><span class="ic">👤</span>Fiche</button></div>
-      <button class="btn primary" data-route="${x.client_id}" data-min="${Math.round(minutesEntre(x.debut, x.fin))}"><span class="ic">📋</span>Feuille de route</button></div>`; };
+      <div class="grid2"><button class="btn primary" data-route="${x.client_id}" data-min="${Math.round(minutesEntre(x.debut, x.fin))}"><span class="ic">📋</span>Feuille de route</button>
+      <button class="btn" data-ajout-route="${x.client_id}"><span class="ic">➕</span>Ajouter une tâche</button></div></div>`; };
   contenu(`<h1>Bonjour ${esc(moi.prenom || "")}</h1><p class="muted" style="margin-bottom:14px">${jourTxt(new Date())}</p>
     <button class="btn primary big" id="declarer" style="width:100%"><span class="ic">✍️</span>Déclarer mes heures</button>
     <div id="bloc-taches"></div>
@@ -1039,8 +1040,12 @@ function ficheDeLaProposition(docs, id) {
 }
 const villeDe = a => { const m = String(a || "").match(/\d{5}\s+(.+)$/); return m ? m[1].trim() : ""; };
 async function vueMissions() {
-  const { data, error } = await sb.from("taches").select("*").eq("intervenante_id", moi.id).like("texte", "Proposition*").order("cree_le", { ascending: false }).limit(40);
-  if (error) throw error;
+  const [lecture, lectureMissions] = await Promise.all([
+    sb.from("taches").select("*").eq("intervenante_id", moi.id).like("texte", "Proposition*").order("cree_le", { ascending: false }).limit(40),
+    sb.from("taches").select("*").eq("intervenante_id", moi.id).like("texte", "Mission : *").is("fait_le", null).order("cree_le", { ascending: false }).limit(40)]);
+  if (lecture.error) throw lecture.error;
+  if (lectureMissions.error) throw lectureMissions.error;
+  const { data } = lecture, enCours = lectureMissions.data.filter(t => t.demande_id && t.client_id);
   // annulée, déjà prise, expirée ou refusée : la mention s'en va 2 jours après
   const liste = data.filter(t => estProposition(t) && !(t.echeance && !t.fait_le && t.echeance < auj10()) && !(t.fait_le && !/^Je prends/.test(t.commentaire || "") && Date.now() - new Date(t.fait_le) > 2 * 864e5));
   const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
@@ -1049,13 +1054,28 @@ async function vueMissions() {
     return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>📍 ${esc(ville || "Ville à voir")}${t.echeance ? " · 📅 avant le " + t.echeance.split("-").reverse().join("/") : ""}</small>${acceptee ? `<br><small><b style="font-size:13px;color:#2C6B29">✅ Acceptée</b> : l'ordre de mission arrive quand le client a signé</small>` : ""}</span>
       <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
   const fermee = t => t.fait_le && !/^Je prends/.test(t.commentaire || ""), mention = t => /annul/i.test(t.commentaire || "") ? "Annulée" : /prise/i.test(t.commentaire || "") ? "Déjà prise" : /expir/i.test(t.commentaire || "") ? "Expirée" : "Refusée";
-  const ouvertes = liste.filter(t => !t.fait_le), acceptees = liste.filter(t => t.fait_le && !fermee(t)), closes = liste.filter(fermee);
+  const ouvertes = liste.filter(t => !t.fait_le), acceptees = liste.filter(t => t.fait_le && !fermee(t) && !enCours.some(m => m.demande_id === t.demande_id)), closes = liste.filter(fermee);
+  /* L'ordre de mission est envoyé : tout ce qu'il faut pour contacter le client et y aller */
+  const carteMission = t => { const c = clients.find(k => k.id === t.client_id) || {}, tel = c.telephone;
+    return `<div class="card" style="margin-bottom:10px"><b class="client-nom">${esc(t.texte.replace(/^Mission : /, ""))}</b>
+      <span><b>${esc(c.nom || "Client")}</b>${t.echeance ? ` <span class="muted small">· 📅 avant le ${t.echeance.split("-").reverse().join("/")}</span>` : ""}</span>
+      ${c.adresse ? `<a class="lien" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener">📍 ${esc(c.adresse)}</a>` : ""}
+      ${tel ? `<div class="grid3"><a class="btn" href="${lienTel(tel)}"><span class="ic">📞</span>Appeler</a><a class="btn" href="${lienSMS(tel, "")}"><span class="ic">💬</span>SMS</a><a class="btn" href="${lienWhatsApp(tel)}" target="_blank" rel="noopener"><span class="ic">🟢</span>WhatsApp</a></div>` : ""}
+      ${c.acces || c.cle || c.consignes ? `<dl class="info">${c.acces ? `<dt>Accès</dt><dd>${esc(c.acces)}</dd>` : ""}${c.cle ? `<dt>Clé</dt><dd>${esc(c.cle)}</dd>` : ""}${c.consignes ? `<dt>Consignes</dt><dd>${esc(c.consignes)}</dd>` : ""}</dl>` : ""}
+      ${t.commentaire ? `<p class="fdr-mot" style="margin:0">💬 ${esc(t.commentaire)}</p>` : ""}
+      <div class="grid2"><button class="btn primary" data-route="${t.client_id}"><span class="ic">📋</span>Feuille de route</button><button class="btn" data-ajout-route="${t.client_id}"><span class="ic">➕</span>Ajouter une tâche</button></div>
+      <div class="grid2"><button class="btn" data-mission="${t.id}"><span class="ic">📄</span>Ordre de mission</button><button class="btn" data-fiche-client="${t.client_id}"><span class="ic">👤</span>Fiche client</button></div></div>`; };
   const el = document.getElementById("contenu");
-  el.innerHTML = `<h1>Mes propositions</h1>${blocPush()}
+  el.innerHTML = `<h1>Missions</h1>${blocPush()}
+    ${enCours.length ? `<h2 style="margin:14px 0 8px">Mes missions (${enCours.length})</h2>${enCours.map(carteMission).join("")}` : ""}
     <h2 style="margin:14px 0 8px">À répondre${ouvertes.length ? " (" + ouvertes.length + ")" : ""}</h2>${ouvertes.map(ligne).join("") || `<p class="muted">Aucune proposition pour l'instant.</p>`}
     ${acceptees.length ? `<h2 style="margin:18px 0 8px">Acceptées</h2>${acceptees.map(ligne).join("")}` : ""}
     ${closes.length ? `<h2 style="margin:18px 0 8px">Terminées</h2>${closes.map(t => `<div class="mission-close"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b><span>${mention(t)}</span></div>`).join("")}` : ""}`;
-  el.onclick = e => { const b = e.target.closest("[data-id]"); if (b) ficheProposition(liste.find(t => t.id === b.dataset.id), () => accueil("missions")); };
+  el.onclick = e => {
+    const rt = e.target.closest("[data-route]"); if (rt) return feuilleRoute(rt.dataset.route, 0);
+    const m = e.target.closest("[data-mission]"); if (m) return ficheTache(enCours.find(t => t.id === m.dataset.mission), () => accueil("missions"));
+    const b = e.target.closest("[data-id]"); if (b) ficheProposition(liste.find(t => t.id === b.dataset.id), () => accueil("missions"));
+  };
 }
 async function ficheProposition(t, apres) {
   if (t.fait_le && !/^Je /.test(t.commentaire || "")) return toast(t.commentaire || "Proposition terminée");
@@ -1266,7 +1286,8 @@ function ficheClient(id) {
   feuille(`<h2 style="margin:0">${esc(c.nom)}</h2>
     ${c.adresse ? `<div class="grid2"><a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🧭</span>Google Maps</a>
       <a class="btn" href="${lienWaze(c.adresse)}" target="_blank" rel="noopener"><span class="ic">🚗</span>Waze</a></div>` : ""}
-    <button class="btn primary" id="ouvrir-route"><span class="ic">📋</span>Feuille de route</button>
+    <div class="grid2"><button class="btn primary" id="ouvrir-route"><span class="ic">📋</span>Feuille de route</button>
+      <button class="btn" id="ajout-route"><span class="ic">➕</span>Ajouter une tâche</button></div>
     ${tel ? `<div class="grid3"><a class="btn" href="${lienTel(tel)}"><span class="ic">📞</span>Appeler</a>
       <a class="btn" href="${lienSMS(tel, "")}"><span class="ic">💬</span>SMS</a>
       <a class="btn" href="${lienWhatsApp(tel)}" target="_blank" rel="noopener"><span class="ic">🟢</span>WhatsApp</a></div>` : ""}
@@ -1287,6 +1308,7 @@ function ficheClient(id) {
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
     brancherNotes(el, id, null);
     el.querySelector("#ouvrir-route").onclick = () => { fermer(); feuilleRoute(id, 0); };
+    el.querySelector("#ajout-route").onclick = () => { fermer(); ajouterTacheRoute(id); };
     infosOikos(el.querySelector("#infos-oikos"), id);
     const zone = el.querySelector("#photos-client");
     photosClient(zone, id);
@@ -1346,12 +1368,6 @@ async function feuilleRoute(clientId, minPassage) {
       ${actives.filter(o => o.auProgramme).length ? `<h2 style="margin:4px 0 0">Au programme</h2><div class="stack">${actives.filter(o => o.auProgramme).map(ligne).join("")}</div>` : `<p class="muted">Rien d'urgent : tout est à jour.</p>`}
       ${actives.some(o => !o.auProgramme) ? `<h2 style="margin:4px 0 0">Si tu as le temps</h2><div class="stack">${actives.filter(o => !o.auProgramme).map(ligne).join("")}</div>` : ""}
       ${reste.length ? `<details><summary class="muted small">${reste.length} autre(s) tâche(s) à jour, hors saison ou en pause</summary><div class="stack" style="margin-top:8px">${reste.map(o => `<div class="card"><b>${esc(o.t.titre)}</b><span class="muted small">${o.etat}</span></div>`).join("")}</div></details>` : ""}
-      <form class="stack card" id="frt"><b>➕ Ajouter une tâche</b>
-        <label class="f">Quoi ?<input name="titre" required maxlength="200" placeholder="Ex. tailler le laurier côté rue"></label>
-        <div class="grid2"><label class="f">Quand<select name="frequence_jours">${FREQS.map(([k, x]) => `<option value="${k}">${x}</option>`).join("")}</select></label>
-          <label class="f">Durée (min)<input name="duree_min" type="number" min="0" step="15" placeholder="30"></label></div>
-        <label class="f">Type<select name="categorie">${Object.entries(CATS_ROUTE).map(([k, x]) => `<option value="${k}" ${k === (c.activite === "Ménage" ? "menage" : "autre") ? "selected" : ""}>${x}</option>`).join("")}</select></label>
-        <button class="btn" type="submit">Ajouter à la feuille de route</button></form>
       <button class="btn flat" data-fermer>Fermer</button>`;
   };
   const brancher = el => {
@@ -1369,17 +1385,38 @@ async function feuilleRoute(clientId, minPassage) {
       if (error) return souci(error);
       toast(etat === "fait" ? "✓ Coché" : "Noté"); redessiner(el);
     };
-    el.querySelector("#frt").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target);
-      const { error } = await sb.from("route_taches").insert({ client_id: clientId, titre: String(f.get("titre")).trim(), categorie: f.get("categorie"),
-        frequence_jours: Number(f.get("frequence_jours")) || null, duree_min: Number(f.get("duree_min")) || null, priorite: 3 });
-      if (error) return souci(error);
-      toast("Tâche ajoutée"); redessiner(el);
-    };
   };
   const redessiner = async el => { const h = await afficher(); if (h) { el.innerHTML = h; brancher(el); } };
   const html = await afficher(); if (!html) return;
   fermer = feuille(html, el => brancher(el));
+}
+/* Une tâche en plus : le presta la propose, elle n'entre dans la feuille de route qu'après la décision d'OIKOS */
+const ETATS_DEMANDE_TACHE = { en_attente: "⏳ En attente d'OIKOS", ajoutee: "✅ Ajoutée à la feuille de route", devis: "📝 Devis en préparation", refusee: "❌ Non retenue" };
+document.addEventListener("click", e => { const b = e.target.closest("[data-ajout-route]"); if (b) ajouterTacheRoute(b.dataset.ajoutRoute); });
+async function ajouterTacheRoute(clientId) {
+  const c = clients.find(k => k.id === clientId) || {};
+  const { data, error } = await sb.from("route_taches").select("id,titre,validation,cree_le").eq("client_id", clientId).eq("cree_par", moi.id).not("validation", "is", null).order("cree_le", { ascending: false }).limit(20);
+  if (error) return souci(error);
+  feuille(`<h2 style="margin:0">➕ Ajouter une tâche</h2>
+    <p class="muted small">${esc(c.nom || "Client")} · OIKOS reçoit ta demande et décide de la suite.</p>
+    <form class="stack" id="frt">
+      <label class="f">Quoi ?<input name="titre" required maxlength="200" placeholder="Ex. tailler le laurier côté rue"></label>
+      <label class="f">Précision (facultatif)<textarea name="detail" maxlength="2000" placeholder="Ex. il dépasse sur le trottoir"></textarea></label>
+      <div class="grid2"><label class="f">Quand<select name="frequence_jours">${FREQS.map(([k, x]) => `<option value="${k}">${x}</option>`).join("")}</select></label>
+        <label class="f">Durée (min)<input name="duree_min" type="number" min="0" step="15" placeholder="30"></label></div>
+      <label class="f">Type<select name="categorie">${Object.entries(CATS_ROUTE).map(([k, x]) => `<option value="${k}" ${k === (c.activite === "Ménage" ? "menage" : "autre") ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+      <button class="btn primary" type="submit">Envoyer à OIKOS</button></form>
+    ${data.length ? `<h2 style="margin:6px 0 0">Mes demandes</h2><div class="stack">${data.map(t => `<div class="card" style="gap:4px"><b>${esc(t.titre)}</b><span class="muted small">${ETATS_DEMANDE_TACHE[t.validation] || ""}</span></div>`).join("")}</div>` : ""}
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    el.querySelector("#frt").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), titre = String(f.get("titre")).trim();
+      if (!titre) return toast("Indique la tâche");
+      const r = await sb.from("route_taches").insert({ client_id: clientId, titre, detail: String(f.get("detail")).trim() || null, categorie: f.get("categorie"),
+        frequence_jours: Number(f.get("frequence_jours")) || null, duree_min: Number(f.get("duree_min")) || null, priorite: 3 });
+      if (r.error) return souci(r.error);
+      fermer(); toast("Demande envoyée à OIKOS"); ajouterTacheRoute(clientId);
+    };
+  });
 }
 
 /* ---------- Dossier client : ce qu'OIKOS partage, et les photos ---------- */
