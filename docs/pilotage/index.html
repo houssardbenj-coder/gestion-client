@@ -1661,8 +1661,9 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     if (b.hasAttribute("data-dm-photos")) return photosDemande(d, c, re);
     if (b.hasAttribute("data-dm-presta")) return demanderPhotos(d, c, re);
     if (b.dataset.dmAnnuler) { const t = ta0(b.dataset.dmAnnuler);
-      if (!confirm("Annuler cette proposition" + (t ? " pour " + nomInterv(t.intervenante_id) : "") + " ? Elle se ferme dans son appli, et tu pourras la proposer à quelqu'un d'autre.")) return;
+      if (!confirm("Annuler cette proposition" + (t ? " pour " + nomInterv(t.intervenante_id) : "") + " ? Le dossier disparaît de son appli, seule une mention « Annulée » reste, et tu pourras la proposer à quelqu'un d'autre.")) return;
       await maj(sb.from("taches").update({ fait_le: new Date().toISOString(), commentaire: "Proposition annulée par OIKOS" }).eq("id", b.dataset.dmAnnuler));
+      await maj(sb.from("tache_documents").delete().eq("tache_id", b.dataset.dmAnnuler));   // le dossier disparaît : il ne garde que la mention
       await chargerBase(); toast("Proposition annulée"); return re(); }
     if (b.dataset.dmAccord) { if (!confirm("Annuler l'accord de " + b.dataset.dmAccord + " ?")) return;
       await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_accord: (d.mission.presta_accord || []).filter(n => n !== b.dataset.dmAccord) } }).eq("id", d.id));

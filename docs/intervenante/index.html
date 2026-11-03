@@ -334,6 +334,11 @@ a.lien.muted{color:var(--muted)}
 .mission-ligne .paie{display:block;font-size:18px;font-weight:800;color:#2C6B29}
 .mission-ligne small{color:var(--muted);font-size:13px}
 .mission-ligne .suite{grid-column:1 / -1;color:var(--accent);font-size:13px;font-weight:700}
+.mission-close{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--sunk);border-radius:12px;padding:10px 12px;margin-bottom:8px;color:var(--muted)}
+.mission-close b{color:var(--muted);font-weight:700}
+.mission-close span{white-space:nowrap;font-size:13px;font-weight:800;color:var(--stop)}
+.rappel-mission{background:var(--warn-soft);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:15px}
+.rappel-mission .row{margin-top:8px}
 </style>
 </head>
 <body>
@@ -699,6 +704,7 @@ async function accueil(o) {
     if (c.error) throw c.error;
     clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
+    if (onglet === "agenda" || onglet === "jour") rappelsMission().catch(() => {});
     if (animer) entree(sens);
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
@@ -1006,6 +1012,20 @@ document.addEventListener("click", async e => {
   } catch (x) { toast(x.message || "Notifications impossibles pour l'instant"); }
 });
 if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "missions") accueil("missions"); });
+/* Mission acceptée ou confiée : le rappel reste dans l'emploi du temps tant qu'aucun passage n'est posé chez ce client */
+async function rappelsMission() {
+  const { data, error } = await sb.from("taches").select("id,texte,client_id,demande_id,fait_le,commentaire,echeance,cree_le").eq("intervenante_id", moi.id).or("texte.like.Mission*,texte.like.Proposition*").order("cree_le", { ascending: false }).limit(40);
+  const zone = document.getElementById("contenu"); if (error || !zone) return;
+  const missions = data.filter(t => /^Mission : /.test(t.texte) && t.demande_id), acceptees = data.filter(t => /^Proposition : /.test(t.texte) && /^Je prends/.test(t.commentaire || "") && !missions.some(m => m.demande_id === t.demande_id));
+  const aPlacer = missions.filter(t => !t.fait_le && t.client_id);
+  let poses = [];
+  if (aPlacer.length) { const r = await sb.from("creneaux").select("client_id,debut").eq("intervenante_id", moi.id).eq("annule", false).in("client_id", aPlacer.map(t => t.client_id)); poses = r.data || []; }
+  const html = aPlacer.filter(t => !poses.some(c => c.client_id === t.client_id && c.debut >= t.cree_le)).map(t => `<div class="rappel-mission">📅 <b>${esc(t.texte.replace(/^Mission : /, ""))}</b> : à placer dans ton emploi du temps, et prends contact avec le client${t.echeance ? " (à terminer avant le " + t.echeance.split("-").reverse().join("/") + ")" : ""}.
+      <div class="row"><button class="btn" data-fiche-client="${t.client_id}">👤 Contacter le client</button></div></div>`)
+    .concat(acceptees.map(t => `<div class="rappel-mission">✅ <b>${esc(t.texte.replace(/^Proposition : /, ""))}</b> : mission acceptée. Garde du temps${t.echeance ? " avant le " + t.echeance.split("-").reverse().join("/") : ""} : l'ordre de mission et le contact du client arrivent quand le client a signé.</div>`)).join("");
+  if (html && document.getElementById("contenu") === zone) zone.insertAdjacentHTML("afterbegin", html);
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-fiche-client]"); if (b) ficheClient(b.dataset.ficheClient); });
 async function majAlerteMissions() {
   if (pushEtat() === "granted") abonnerPush().catch(() => {});   // reste à jour sans rien demander
   const { data } = await sb.from("taches").select("id,texte,demande_id,fait_le,echeance").eq("intervenante_id", moi.id).is("fait_le", null).like("texte", "Proposition*");
@@ -1024,17 +1044,20 @@ async function vueMissions() {
   const liste = data.filter(t => estProposition(t) && !(t.echeance && !t.fait_le && t.echeance < auj10()));
   const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
   if (lus.error) throw lus.error;
-  const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = f.secteur || villeDe(f.adresse);
-    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>📍 ${esc(ville || "Ville à voir")}${t.echeance ? " · 📅 avant le " + t.echeance.split("-").reverse().join("/") : ""}</small>${t.fait_le ? `<br><small>${esc(t.commentaire || "Terminé")}</small>` : ""}</span>
+  const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = f.secteur || villeDe(f.adresse), acceptee = /^Je prends/.test(t.commentaire || "");
+    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>📍 ${esc(ville || "Ville à voir")}${t.echeance ? " · 📅 avant le " + t.echeance.split("-").reverse().join("/") : ""}</small>${acceptee ? `<br><small><b style="font-size:13px;color:#2C6B29">✅ Acceptée</b> : l'ordre de mission arrive quand le client a signé</small>` : ""}</span>
       <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
-  const ouvertes = liste.filter(t => !t.fait_le), repondues = liste.filter(t => t.fait_le);
+  const fermee = t => t.fait_le && !/^Je prends/.test(t.commentaire || ""), mention = t => /annul/i.test(t.commentaire || "") ? "Annulée" : /prise/i.test(t.commentaire || "") ? "Déjà prise" : /expir/i.test(t.commentaire || "") ? "Expirée" : "Refusée";
+  const ouvertes = liste.filter(t => !t.fait_le), acceptees = liste.filter(t => t.fait_le && !fermee(t)), closes = liste.filter(fermee);
   const el = document.getElementById("contenu");
   el.innerHTML = `<h1>Mes propositions</h1>${blocPush()}
     <h2 style="margin:14px 0 8px">À répondre${ouvertes.length ? " (" + ouvertes.length + ")" : ""}</h2>${ouvertes.map(ligne).join("") || `<p class="muted">Aucune proposition pour l'instant.</p>`}
-    ${repondues.length ? `<h2 style="margin:18px 0 8px">Déjà répondu</h2>${repondues.map(ligne).join("")}` : ""}`;
+    ${acceptees.length ? `<h2 style="margin:18px 0 8px">Acceptées</h2>${acceptees.map(ligne).join("")}` : ""}
+    ${closes.length ? `<h2 style="margin:18px 0 8px">Terminées</h2>${closes.map(t => `<div class="mission-close"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b><span>${mention(t)}</span></div>`).join("")}` : ""}`;
   el.onclick = e => { const b = e.target.closest("[data-id]"); if (b) ficheProposition(liste.find(t => t.id === b.dataset.id), () => accueil("missions")); };
 }
 async function ficheProposition(t, apres) {
+  if (t.fait_le && !/^Je /.test(t.commentaire || "")) return toast(t.commentaire || "Proposition terminée");
   const { data, error } = await sb.from("tache_documents").select("nom,legende").eq("tache_id", t.id);
   if (error) return souci(error);
   const rang = d => parseInt(String(d.nom).replace(/\D/g, ""), 10) || 0, texte = data.filter(d => /^Feuille de route/.test(d.nom)).sort((a, b) => rang(a) - rang(b)).map(d => d.legende || "").join("");
