@@ -889,8 +889,10 @@ async function chargerTaches() {
   nbDocs = d.data.reduce((o, x) => (o[x.tache_id] = (o[x.tache_id] || 0) + 1, o), {});
   return t.data;
 }
+/* Une mission proposée par OIKOS : il lit la feuille de route et répond ; il n'a accès au client qu'avec l'ordre de mission */
+const estProposition = t => t.demande_id && /^Proposition : /.test(t.texte || "");
 const ligneTache = t => `<div class="ligne" data-tache="${t.id}">
-    <button class="coche" data-coche aria-pressed="${!!t.fait_le}" aria-label="${t.fait_le ? "Remettre à faire" : "Marquer comme fait"}">${t.fait_le ? "✓" : ""}</button>
+    ${estProposition(t) ? `<span class="coche" aria-hidden="true" style="display:grid;place-items:center">${t.fait_le ? "✓" : "📲"}</span>` : `<button class="coche" data-coche aria-pressed="${!!t.fait_le}" aria-label="${t.fait_le ? "Remettre à faire" : "Marquer comme fait"}">${t.fait_le ? "✓" : ""}</button>`}
     <button data-ouvre style="min-width:0"><span style="${t.fait_le ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(t.texte)}</span>
       ${t.commentaire ? `<span class="muted small" style="display:block">💬 ${esc(t.commentaire)}</span>` : ""}
       <span class="row" style="gap:4px;margin-top:3px">${t.dossier_nom ? `<span class="tag">📁 ${esc(t.dossier_nom)}${nbDocs[t.id] ? " · " + nbDocs[t.id] : ""}</span>` : ""}${t.cree_par !== moi.id ? `<span class="tag">de OIKOS</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}${taBadge(t)}</span></button></div>`;
@@ -904,8 +906,31 @@ function brancherTaches(zone, taches, apres) {
       if (error) return souci(error);
       toast(t.fait_le ? "Remis à faire" : "Fait ✓ OIKOS le voit"); return apres();
     }
-    if (e.target.closest("[data-ouvre]")) ficheTache(t, apres);
+    if (e.target.closest("[data-ouvre]")) estProposition(t) ? ficheProposition(t, apres) : ficheTache(t, apres);
   });
+}
+async function ficheProposition(t, apres) {
+  const { data, error } = await sb.from("tache_documents").select("nom,legende").eq("tache_id", t.id);
+  if (error) return souci(error);
+  const rang = d => parseInt(String(d.nom).replace(/\D/g, ""), 10) || 0, texte = data.filter(d => /^Feuille de route/.test(d.nom)).sort((a, b) => rang(a) - rang(b)).map(d => d.legende || "").join("");
+  feuille(`<h2 style="margin:0">Mission proposée</h2>
+    <p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p>
+    <div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>
+    ${t.fait_le ? `<p class="muted small">Ta réponse : ${esc(t.commentaire || "fait")}</p>` : `<p class="muted small">Les coordonnées et les consignes du client arriveront avec l'ordre de mission, une fois le devis signé.</p>
+    <button class="btn primary big" type="button" id="pr-oui">✓ Je prends</button>
+    <label class="f">Si tu ne peux pas, dis pourquoi (facultatif)<textarea id="pr-motif" maxlength="1500"></textarea></label>
+    <button class="btn" type="button" id="pr-non" style="color:var(--stop)">Je ne peux pas</button>`}
+    <button class="btn flat" type="button" data-fermer>Fermer</button>`, (el, fermer) => {
+    const repondre = async (reponse, message) => {
+      const { error } = await sb.from("taches").update({ commentaire: reponse.slice(0, 2000), fait_le: new Date().toISOString() }).eq("id", t.id);
+      if (error) return souci(error);
+      toast(message); fermer();
+    };
+    if (el.querySelector("#pr-oui")) {
+      el.querySelector("#pr-oui").onclick = () => repondre("Je prends", "Merci ! OIKOS le voit ; l'ordre de mission arrivera une fois le devis signé.");
+      el.querySelector("#pr-non").onclick = () => { const m = el.querySelector("#pr-motif").value.trim(); repondre("Je ne peux pas" + (m ? " : " + m : ""), "C'est noté, OIKOS le voit."); };
+    }
+  }, apres);
 }
 /* Fiche d'une tâche : la sienne se modifie entièrement ; celle d'OIKOS, seulement le commentaire. Le dossier est en dessous. */
 function ficheTache(t, apres) {

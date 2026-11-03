@@ -357,6 +357,8 @@ async function vueAVoir() {
   const el = contenu(`<h1>À voir</h1>
     ${tampon.length ? `<button class="card cliquable" data-o="clients" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
       <b>📥 ${tampon.length} client${tampon.length > 1 ? "s" : ""} à traiter dans la zone tampon ›</b> <span class="muted small">(nouveaux clients VosFactures ou extraction)</span></button>` : ""}
+    ${taches.some(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || "")) ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
+      <b>📲 ${taches.filter(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || "")).length} réponse(s) de presta à une proposition ›</b></button>` : ""}
     ${signes.length ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
       <b>✍️ ${signes.length} devis signé${signes.length > 1 ? "s" : ""} : ordre de mission à transmettre ›</b></button>` : ""}
     ${attenteDevis.length ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
@@ -1524,6 +1526,17 @@ async function accepterAnalyse(c, a, re) {
    L'analyse, l'estimation du gain et le devis se font dans la page « Analyse et devis » ; ce qui en revient passe par le Pont photos (5 minutes). */
 const ETATS_ATTENTE = ["a_estimer", "estimee", "devis_cree"];
 const enAttenteDevis = d => ETATS_ATTENTE.includes(d.etat);
+/* Le parcours : le presta dit oui, puis le devis part, puis le client signe, puis l'ordre de mission définitif.
+   La proposition est une tâche du presta, sans accès au client ; sa réponse est dans le commentaire de la tâche. */
+const estProposition = t => /^Proposition : /.test(t.texte || "");
+const reponseProp = t => !t.fait_le ? "attente" : /^Je prends/.test(t.commentaire || "") ? "ok" : /^Je ne peux pas/.test(t.commentaire || "") ? "refus" : "close";
+const accordPresta = (d, ta) => ((d.mission || {}).presta_accord || []).length > 0 || ta.some(t => estProposition(t) && reponseProp(t) === "ok");
+function etatDemande(d, ta) {
+  const props = ta.filter(estProposition), accord = accordPresta(d, ta);
+  if (d.etat === "estimee") return accord ? ["✓ Presta d'accord : devis à envoyer", "warn"] : props.some(t => reponseProp(t) === "attente") ? ["⏳ Réponse du presta", "warn"] : props.length ? ["✗ Presta indisponible", "warn"] : ["Estimée : à proposer au presta", "warn"];
+  if (d.etat === "devis_cree") return devisSigne(d) ? ["✍️ Signé : ordre de mission à envoyer", ""] : ["⏳ Signature du client", "warn"];
+  return ETATS_DEMANDE[d.etat] || [d.etat, "off"];
+}
 const signeLe = d => (d.mission || {}).devis_signe_le;
 const devisSigne = d => d.etat === "devis_cree" && !!signeLe(d);   // signé par le client : l'ordre de mission attend ton clic
 const ETATS_DEMANDE = { a_estimer: ["À estimer", "warn"], estimee: ["Estimée", "warn"], devis_cree: ["Réponse attendue", "warn"], en_cours: ["En cours", ""], finalisee: ["Terminée", "off"], refusee: ["Refusée", "off"] };
@@ -1580,11 +1593,13 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     q(sb.from("client_photos").select("*").in("demande_id", ids).is("supprime_le", null).order("prise_le")),
     q(sb.from("taches").select("*").in("demande_id", ids))]) : [[], []];
   const urls = await urlsSignees(photos.map(p => p.apercu));
-  zone.innerHTML = liste.map(d => { const c = cacheClients.find(k => k.id === d.client_id) || {}, [t, k] = devisSigne(d) ? ["✍️ Devis signé", ""] : ETATS_DEMANDE[d.etat] || [d.etat, "off"];
-    const ph = photos.filter(p => p.demande_id === d.id), ta = taches.filter(x => x.demande_id === d.id), attente = enAttenteDevis(d);
-    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.estimation ? "✏️ Reprendre le projet" : "🤖 Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", d.etat === "devis_cree" ? "btn" : "btn primary") : `<span class="tag warn">⏳ Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
-    const accepter = d.etat === "estimee" || d.etat === "devis_cree" ? `<button class="btn go" data-dm-accepter>${devisSigne(d) ? "📋 Transmettre la mission" : "✓ Le client accepte"}</button>` : "";
-    const principal = d.etat === "devis_cree" ? accepter : ia + accepter + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 Prestation terminée</button>` : "");
+  zone.innerHTML = liste.map(d => { const c = cacheClients.find(k => k.id === d.client_id) || {};
+    const ph = photos.filter(p => p.demande_id === d.id), ta = taches.filter(x => x.demande_id === d.id), attente = enAttenteDevis(d), [t, k] = etatDemande(d, ta), accord = accordPresta(d, ta), props = ta.filter(estProposition);
+    const iaEnTete = d.etat === "a_estimer" || (d.etat === "estimee" && accord);
+    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "🧾 Faire le devis" : d.estimation ? "✏️ Reprendre le projet" : "🤖 Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">⏳ Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
+    const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && !accord && !props.some(x => reponseProp(x) === "attente") && !devisSigne(d) ? `<button class="btn primary" data-dm-proposer>📲 ${props.length ? "Proposer à un autre presta" : "Transmettre au presta"}</button>` : "";
+    const voirFeuille = ((d.estimation || {}).taches || []).length ? `<button class="btn" data-dm-feuille>👁 Voir la feuille de route</button>` : "";
+    const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>📋 Envoyer l'ordre de mission</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 Prestation terminée</button>` : "");
     return `<details class="card dm" data-dm="${d.id}" ${dmOuvertes.has(d.id) ? "open" : ""}>
       <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}</span></span>
         ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
@@ -1593,15 +1608,16 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
         ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
         ${resumeEstimation(d)}
         ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
-        ${ta.length ? `<div>${ta.map(x => `<div class="small">${x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}</div>`).join("")}</div>` : ""}
+        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: "⏳", ok: "✅", refus: "❌", close: "▫️" }[reponseProp(x)] : x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${estProposition(x) && x.commentaire ? " · " + esc(x.commentaire) : ""}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}</div>`).join("")}</div>` : ""}
         ${(d.mission.sans_compte || []).length ? `<p class="small">Sans compte dans l'appli : ${(d.mission.sans_compte).map(esc).join(", ")}</p>` : ""}
         <div class="row">
-          ${d.etat === "devis_cree" ? ia : ""}
+          ${voirFeuille}
+          ${attente && !iaEnTete ? ia : ""}
           ${d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">🧾 Devis VosFactures</a>` : ""}
           ${d.devis_pdf_url ? `<a class="btn" href="${esc(d.devis_pdf_url)}" target="_blank" rel="noopener">📄 PDF du devis</a>` : ""}
           ${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission</a>` : d.ordre_a_faire ? `<span class="tag warn">⏳ Ordre de mission (5 min)</span>` : ""}
           ${d.dossier_url ? `<a class="btn" href="${esc(d.dossier_url)}" target="_blank" rel="noopener">📁 Sous-dossier</a>` : ""}
-          ${attente ? `<button class="btn" data-dm-photos>📷 Ajouter des photos</button><button class="btn" data-dm-presta>📲 Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button><button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
+          ${attente ? `<button class="btn" data-dm-photos>📷 Ajouter des photos</button><button class="btn" data-dm-presta>📲 Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button>${(d.etat === "estimee" || d.etat === "devis_cree") && !devisSigne(d) ? `<button class="btn flat" data-dm-accepter>Accord du client sans signature en ligne</button>` : ""}<button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
         </div>
       </div></details>`; }).join("") || (vide ? `<p class="muted">${esc(vide)}</p>` : "");
   zone.querySelectorAll("details[data-dm]").forEach(x => { x.ontoggle = () => { if (x.open) dmOuvertes.add(x.dataset.dm); else dmOuvertes.delete(x.dataset.dm); }; });
@@ -1613,6 +1629,8 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     if (b.hasAttribute("data-dm-mod")) return modifierDemande(d, c, re);
     if (b.hasAttribute("data-dm-photos")) return photosDemande(d, c, re);
     if (b.hasAttribute("data-dm-presta")) return demanderPhotos(d, c, re);
+    if (b.hasAttribute("data-dm-proposer")) return proposerPresta(d, c, re);
+    if (b.hasAttribute("data-dm-feuille")) return voirFeuilleRoute(d, c);
     if (b.hasAttribute("data-dm-accepter")) return accepterDemande(d, c, re);
     if (b.hasAttribute("data-dm-fin")) return terminerDemande(d, c, taches.filter(t => t.demande_id === d.id), re);
     if (b.hasAttribute("data-dm-refus")) { if (!confirm("Le client refuse « " + d.titre + " » ? La demande reste consultable et peut être reprise.")) return;
@@ -1701,34 +1719,72 @@ function demanderPhotos(d, c, re) {
   });
 }
 /* Ce que l'intervenant reçoit : le travail, jamais les prix, les coûts ni le gain */
-function ordreParDefaut(d, c) {
+/* Avant l'accord du presta : le travail et l'adresse, sans téléphone ni consignes du client */
+function ordreParDefaut(d, c, proposition) {
   const e = d.estimation || {}, taches = (e.taches || []).filter(t => t && t.titre), articles = (e.articles || []).filter(a => a && a.nom), materiel = (e.materiel || []).filter(Boolean);
   const duree = m => m ? " (" + String(Math.round(m / 60 * 100) / 100).replace(".", ",") + " h)" : "";
-  return [`Client : ${c.nom}`, c.adresse ? `Adresse : ${c.adresse}` : "", c.telephone ? `Téléphone : ${c.telephone}` : "", `Prestation : ${d.titre} (${TYPES_PRESTA[d.type_prestation]})`,
+  return [`Client : ${c.nom}`, c.adresse ? `Adresse : ${c.adresse}` : "", c.telephone && !proposition ? `Téléphone : ${c.telephone}` : "", `Prestation : ${d.titre} (${TYPES_PRESTA[d.type_prestation]})`,
     d.besoin ? `\nDemande du client :\n${d.besoin}` : "",
     taches.length ? `\nFeuille de route :\n${taches.map(t => "- " + t.titre + duree(t.duree_min) + (d.type_prestation === "regulier" ? " · " + (+t.frequence_jours ? quandTache(t) : "une fois") : "") + (t.detail ? " : " + t.detail : "")).join("\n")}` : "",
     articles.length || materiel.length ? `\nMatériel à prévoir :\n${articles.map(a => "- " + a.nom + (+a.quantite > 1 ? " × " + a.quantite : "")).concat(materiel.map(x => "- " + x)).join("\n")}` : "",
-    c.consignes ? `\nConsignes du client :\n${c.consignes}` : ""].filter(Boolean).join("\n").slice(0, 6000);
+    c.consignes && !proposition ? `\nConsignes du client :\n${c.consignes}` : ""].filter(Boolean).join("\n").slice(0, 6000);
 }
-function accepterDemande(d, c, re) {
+function voirFeuilleRoute(d, c) {
+  fenetre(`<h2 style="margin:0">Feuille de route · ${esc(d.titre)}</h2>
+    <p class="muted small" style="margin:6px 0">Sans prix ni gain. Le téléphone et les consignes du client n'arrivent au presta qu'avec l'ordre de mission.</p>
+    <div class="card" style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(ordreParDefaut(d, c))}</div>
+    <div class="row" style="margin-top:10px">${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission en PDF</a>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`, () => {});
+}
+/* 1re étape : la feuille de route part au presta, qui répond « Je prends » ou « Je ne peux pas » dans son appli. Il n'a pas encore accès au client. */
+async function proposerPresta(d, c, re) {
+  const deja = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id));
+  const sollicites = deja.filter(estProposition).map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
+  const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id);
+  fenetre(`<h2 style="margin:0">Transmettre au presta · ${esc(d.titre)}</h2>
+    <form id="fpr" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Il reçoit la feuille de route dans son appli et répond « Je prends » ou « Je ne peux pas ». Le devis se fait ensuite.")}</legend>
+        ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
+      <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
+      <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Feuille de route (sans prix, modifiable)</summary>
+        <textarea name="feuille" aria-label="Feuille de route" maxlength="6000" style="min-height:220px;margin-top:6px">${esc(ordreParDefaut(d, c, true))}</textarea></details>
+      <div class="row"><button class="btn primary" type="submit">📲 Transmettre</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fpr").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), texte = String(f.get("feuille")).trim();
+      if (!qui.length && !accord.length) return toast("Choisis au moins une personne");
+      if (!texte) return toast("La feuille de route est vide");
+      bouton.disabled = true;
+      try {
+        if (qui.length) {
+          const r = await sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: null, demande_id: d.id, texte: ("Proposition : " + d.titre).slice(0, 500) }))).select("id"); if (r.error) throw r.error;
+          const morceaux = texte.match(/[\s\S]{1,2000}/g), maintenant = new Date().toISOString();
+          await maj(sb.from("tache_documents").insert(r.data.flatMap(t => morceaux.map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
+        }
+        if (accord.length) await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
+        await chargerBase(); fermer(); toast(qui.length ? "Transmis : la réponse arrivera ici et dans À voir" : "Noté : tu peux faire le devis"); re();
+      } catch (x) { bouton.disabled = false; souci(x); }
+    };
+  });
+}
+async function accepterDemande(d, c, re) {
+  const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").map(t => t.intervenante_id);
   const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif), nouveau = ["prospect", "termine"].includes(c.etat);
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
   // un prestataire noté à la main (ex. d'après l'Excel) qui a maintenant un compte : on le reconnaît par son nom
   const mots = n => norm(n).split(" ").sort().join(" "), aCompte = n => gens.some(p => mots(nomPers(p)) === mots(n));
-  const dejaLa = p => deja.some(a => a.intervenante_id === p.id || (a.nom_libre && mots(a.nom_libre) === mots(nomPers(p))));
+  const dejaLa = p => accords.includes(p.id) || deja.some(a => a.intervenante_id === p.id || (a.nom_libre && mots(a.nom_libre) === mots(nomPers(p))));
   const infos = [c.etat === "prospect" ? "Le prospect devient client." : c.etat === "termine" ? "Cet ancien client revient : son profil est repris." : "Le client ne bouge pas de sa liste.",
     "La prestation reste dans « Prestations en cours » jusqu'à ce que tu la finalises." + (d.type_prestation === "regulier" ? " Les tâches passent aussi dans sa feuille de route." : ""),
     d.devis_url ? "" : "Aucun devis créé ici : ce n'est pas bloquant si tu l'as fait à la main.",
     (d.estimation || {}).le ? "Projet enregistré le " + new Date(d.estimation.le).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) + " : si tu viens de le modifier, attends 5 minutes qu'il arrive ici, sinon l'ordre de mission reprendra les anciennes lignes." : ""].filter(Boolean).join("\n");
-  fenetre(`<h2 style="margin:0">${devisSigne(d) ? "Devis signé" : "Le client accepte"} · ${esc(d.titre)} ${aide(infos)}</h2>
+  fenetre(`<h2 style="margin:0">Ordre de mission définitif · ${esc(d.titre)} ${aide(infos)}</h2>
     <form id="fac" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
       <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">Qui s'en charge ? ${aide("Une tâche et le dossier partent dans son appli.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
-      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc(deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre).join(", "))}"></label>
+      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc([...new Set(deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre).concat((d.mission || {}).presta_accord || []))].join(", "))}"></label>
       <label class="f">À faire pour le (facultatif)<input type="date" name="echeance"></label>
       <details><summary class="small" style="cursor:pointer;font-weight:700">📋 Ordre de mission (sans prix ni gain, modifiable)</summary>
         <textarea name="ordre" aria-label="Ordre de mission" maxlength="6000" style="min-height:220px;margin-top:6px">${esc(ordreParDefaut(d, c))}</textarea></details>
-      <div class="row"><button class="btn primary" type="submit">✓ Transmettre la mission</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+      <div class="row"><button class="btn primary" type="submit">📋 Envoyer l'ordre de mission</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
     el.querySelector("#fac").onsubmit = async e => {
       e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]");
       const qui = f.getAll("qui"), sansCompte = String(f.get("sans_compte")).split(",").map(x => x.trim()).filter(Boolean), ordre = String(f.get("ordre")).trim();
@@ -1754,7 +1810,7 @@ function accepterDemande(d, c, re) {
         }
         await maj(sb.from("demandes_devis").update({ etat: "en_cours", accepte_le: maintenant, echeance, ordre_mission: ordre, ordre_a_faire: true, client_a_archiver: nouveau && d.type_prestation === "one_shot",
           mission: { ...(d.mission || {}), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions) } }).eq("id", d.id));
-        await chargerBase(); fermer(); toast("Mission transmise : la prestation est dans « Prestations en cours »"); re();
+        await chargerBase(); fermer(); toast("Ordre de mission envoyé : la prestation est dans « Prestations en cours »"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
   });
