@@ -218,7 +218,7 @@ function choisirCompteIA(cible, nom) {
       <a class="btn" href="oikos-compte2:${ANALYSE_IA_2}#${cible}" data-fermer>Compte Benjamin Houssard</a>
       <button class="btn flat" type="button" data-fermer>Annuler</button></div>`);
 }
-const SUPABASE_USERS ="https://supabase.com/dashboard/project/nzxphozupnmqyikitwhv/auth/users";
+const SUPABASE_USERS ="https://supabase.com/dashboard/project/nzxphozupnmqyikitwhv/auth/users";   // le compte Supabase est dans le profil Chrome houssard.benj : sur PC, passe aussi par le lien oikos-compte2:
 const sb = window.supabase.createClient(SB_URL, SB_CLE, { auth: { persistSession: true, storageKey: "oikos-gerant-session" } });
 
 /* ===================== Outils ===================== */
@@ -1101,7 +1101,9 @@ async function vueIntervenantes() {
   const gens = cacheProfils.filter(p => p.role === "intervenante");
   const [docs, pieces] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true))]);
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Intervenants</h1>
-      <a class="btn" href="${SUPABASE_USERS}" target="_blank" rel="noopener">➕ Créer un compte (Supabase)</a></div>
+      ${matchMedia("(pointer: coarse)").matches
+        ? `<a class="btn" href="${SUPABASE_USERS}" target="_blank" rel="noopener">➕ Créer un compte (Supabase)</a>`
+        : `<a class="btn" href="oikos-compte2:${SUPABASE_USERS}" title="S'ouvre dans le profil Chrome houssard.benj">➕ Créer un compte (Supabase)</a>`}</div>
     <p class="muted small" style="margin:6px 0 12px">Nouvelle personne : crée son compte dans Supabase (e-mail + code d'accès, « Auto Confirm User »), puis règle-la ici.</p>
     <div class="grille">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b><br><span class="muted small">${esc(p.email || "")}</span><br>
