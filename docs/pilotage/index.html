@@ -1099,17 +1099,54 @@ async function archiveTaches() {
 async function vueIntervenantes() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante");
-  const [docs, pieces] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true))]);
+  const [docs, pieces, comptes] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true)),
+    sb.from("comptes_a_creer").select("*").in("etat", ["a_faire", "erreur"]).order("cree_le").then(r => r.data || [])]);
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Intervenants</h1>
+      <span class="row"><button class="btn primary" id="nv-presta">➕ Nouveau presta</button>
       ${matchMedia("(pointer: coarse)").matches
-        ? `<a class="btn" href="${SUPABASE_USERS}" target="_blank" rel="noopener">➕ Créer un compte (Supabase)</a>`
-        : `<a class="btn" href="oikos-compte2:${SUPABASE_USERS}" title="S'ouvre dans le profil Chrome houssard.benj">➕ Créer un compte (Supabase)</a>`}</div>
-    <p class="muted small" style="margin:6px 0 12px">Nouvelle personne : crée son compte dans Supabase (e-mail + code d'accès, « Auto Confirm User »), puis règle-la ici.</p>
-    <div class="grille">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
+        ? `<a class="btn flat" href="${SUPABASE_USERS}" target="_blank" rel="noopener">Supabase</a>`
+        : `<a class="btn flat" href="oikos-compte2:${SUPABASE_USERS}" title="S'ouvre dans le profil Chrome houssard.benj">Supabase</a>`}</span></div>
+    ${comptes.length ? `<section class="card" style="margin:10px 0">${comptes.map(c => `<div class="ligne"><span style="min-width:0"><b>${esc([c.prenom, c.nom].filter(Boolean).join(" ") || c.email)}</b> <span class="muted small">${esc(c.email)}</span>
+        ${c.etat === "erreur" ? `<br><span class="err small">${esc(c.message || "Erreur")}</span>` : ""}</span>
+      <span class="row">${c.etat === "erreur" ? `<button class="btn" data-reessai="${c.id}">Réessayer</button><button class="btn flat" data-abandon="${c.id}">Retirer</button>` : `<span class="tag">invitation dans 5 min</span>`}</span></div>`).join("")}</section>` : ""}
+    <div class="grille" style="margin-top:12px">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<button class="card cliquable" style="text-align:left" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b><br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
+      ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
       <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>`);
-  el.onclick = e => { const b = e.target.closest("[data-p]"); if (b) ficheIntervenante(b.dataset.p); };
+  el.onclick = async e => {
+    const b = e.target.closest("[data-p]"); if (b) return ficheIntervenante(b.dataset.p);
+    if (e.target.closest("#nv-presta")) return nouveauPresta();
+    const r = e.target.closest("[data-reessai]");
+    if (r) { await maj(sb.from("comptes_a_creer").update({ etat: "a_faire", message: null }).eq("id", r.dataset.reessai)); return afficher(); }
+    const x = e.target.closest("[data-abandon]");
+    if (x) { await maj(sb.from("comptes_a_creer").delete().eq("id", x.dataset.abandon)); afficher(); }
+  };
+}
+function nouveauPresta() {
+  fenetre(`<h2 style="margin:0">Nouveau presta</h2>
+    <form id="np" style="display:grid;gap:10px;margin-top:10px">
+      <label class="f">Prénom<input type="text" name="prenom" required maxlength="60" autocomplete="off"></label>
+      <label class="f">Nom<input type="text" name="nom" required maxlength="60" autocomplete="off"></label>
+      <label class="f">E-mail<input name="email" type="email" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <label class="f">Statut<select name="statut">${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+      <label class="chk"><input type="checkbox" name="ae">OIKOS crée son auto-entreprise</label>
+      <p class="err" id="np-err"></p>
+      <div class="row"><button class="btn primary" type="submit">Créer et inviter</button><button class="btn flat" type="button" data-fermer>Annuler</button></div>
+    </form>`, (el, fermer) => {
+    el.querySelector("#np").onsubmit = async ev => {
+      ev.preventDefault();
+      const f = ev.target, net = t => t.trim().replace(/\s+/g, " "), email = f.email.value.trim().toLowerCase(), prenom = net(f.prenom.value), nom = net(f.nom.value), err = el.querySelector("#np-err");
+      if (!prenom || !nom) { err.textContent = "Il manque le prénom ou le nom."; return; }
+      if (/[\\/:*?"<>|]/.test(prenom + nom)) { err.textContent = "Le nom sert aussi pour son dossier : retire les caractères \\ / : * ? \" < > |."; return; }
+      if (cacheProfils.some(p => (p.email || "").toLowerCase() === email)) { err.textContent = "Cet e-mail a déjà un compte : ouvre sa fiche dans la liste."; return; }
+      if (cacheProfils.some(p => norm(nomPers(p)) === norm(prenom + " " + nom)) && !confirm(`Un compte existe déjà au nom de ${prenom} ${nom}. En créer un second ?`)) return;
+      f.querySelector("[type=submit]").disabled = true;
+      const { error } = await sb.from("comptes_a_creer").insert({ email, prenom, nom, statut: f.statut.value, ae_a_creer: f.statut.value === "sous-traitant" && f.ae.checked });
+      if (error) { f.querySelector("[type=submit]").disabled = false; err.textContent = error.code === "23505" ? "Une invitation est déjà en attente pour cet e-mail." : error.message; return; }
+      toast("C'est noté : compte et invitation dans 5 minutes"); fermer(); afficher();
+    };
+  });
 }
 function piecesPour(p, pieces) {
   return pieces.filter(x => x.actif && (x.pour === "tous" || x.pour === p.statut)
@@ -1143,7 +1180,8 @@ async function ficheIntervenante(id) {
         <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
         <label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
         <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici.</p>
-        <button class="btn primary" id="enr" style="margin-top:10px">Enregistrer</button>
+        <div class="row" style="margin-top:10px"><button class="btn primary" id="enr">Enregistrer</button>
+          <button class="btn flat" id="nv-code" title="Lui envoie par mail un nouveau code : il devra rechoisir son mot de passe">✉️ Nouveau code d'accès</button></div>
         <h3>Liens</h3>
         <div class="row">${p.feuille_heures ? `<a class="btn" href="${esc(p.feuille_heures)}" target="_blank" rel="noopener">📊 Feuille d'heures</a>` : `<span class="muted small">Feuille d'heures : créée par le pont Google</span>`}
         ${p.dossier_drive ? `<a class="btn" href="https://drive.google.com/drive/folders/${esc(p.dossier_drive)}" target="_blank" rel="noopener">📁 Dossier Drive</a>` : ""}</div>
@@ -1173,6 +1211,11 @@ async function ficheIntervenante(id) {
     el.querySelector("#enr").onclick = async () => {
       await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked }).eq("id", id));
       toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
+    el.querySelector("#nv-code").onclick = async () => {
+      if (!p.mdp_provisoire && !confirm(`${nomPers(p)} a déjà choisi son mot de passe. Il ne marchera plus : il devra en rechoisir un avec le nouveau code. Continuer ?`)) return;
+      const { error } = await sb.from("comptes_a_creer").insert({ email: p.email, prenom: p.prenom, nom: p.nom, renvoi: true, profil_id: p.id });
+      if (error) return souci(error);
+      toast("Nouveau code envoyé par mail dans 5 minutes"); };
     el.querySelector("#conf").onclick = async () => {
       const c = el.querySelector("#nc").value; if (!c) return;
       await maj(sb.from("attributions").upsert({ client_id: c, intervenante_id: id, debut: aujourd, fin: null }, { onConflict: "client_id,intervenante_id,debut" }));
