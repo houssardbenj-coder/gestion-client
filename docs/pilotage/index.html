@@ -1563,7 +1563,7 @@ const reponseProp = t => !t.fait_le ? "attente" : /^Je prends/.test(t.commentair
 const accordPresta = (d, ta) => ((d.mission || {}).presta_accord || []).length > 0 || ta.some(t => estProposition(t) && reponseProp(t) === "ok");
 function etatDemande(d, ta) {
   const props = ta.filter(estProposition), accord = accordPresta(d, ta);
-  if (d.etat === "estimee") return accord ? ["✓ Presta d'accord : devis à envoyer", "warn"] : props.some(t => reponseProp(t) === "attente") ? ["⏳ Réponse du presta", "warn"] : props.length ? ["✗ Presta indisponible", "warn"] : ["Estimée : à proposer au presta", "warn"];
+  if (d.etat === "estimee") return accord ? ["✓ Presta d'accord : devis à envoyer", "warn"] : props.some(t => reponseProp(t) === "attente") ? ["⏳ Réponse du presta", "warn"] : props.length ? ["✗ Pas de presta : à reproposer", "warn"] : ["Estimée : à proposer au presta", "warn"];
   if (d.etat === "devis_cree") return devisSigne(d) ? ["✍️ Signé : ordre de mission à envoyer", ""] : ["⏳ Signature du client", "warn"];
   return ETATS_DEMANDE[d.etat] || [d.etat, "off"];
 }
@@ -1818,7 +1818,7 @@ async function voirFeuilleRoute(d, c) {
 /* 1re étape : la feuille de route part au presta, qui répond « Je prends » ou « Je ne peux pas » dans son appli. Il n'a pas encore accès au client. */
 async function proposerPresta(d, c, re) {
   const deja = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id));
-  const sollicites = deja.filter(estProposition).map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
+  const sollicites = deja.filter(t => estProposition(t) && reponseProp(t) !== "close").map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
   const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c);
   fenetre(`<h2 style="margin:0">Transmettre au presta · ${esc(d.titre)}</h2>
     <form id="fpr" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
@@ -1826,7 +1826,7 @@ async function proposerPresta(d, c, re) {
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
       <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure) ${aide("Il voit le total estimé sur sa feuille de route, jamais le prix du client.")}</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
-        <label class="f"><span>Deadline (facultatif) ${aide("Il la voit en haut de sa feuille de route.")}</span><input type="date" name="echeance" value="${esc(d.echeance || "")}"></label></div>
+        <label class="f"><span>Deadline (facultatif) ${aide("Il la voit en haut de sa feuille de route. Passé cette date, la proposition disparaît de son appli. Si tu en sollicites plusieurs, le premier qui accepte a la mission.")}</span><input type="date" name="echeance" value="${esc(d.echeance || "")}"></label></div>
       <label class="f">Un mot pour lui (facultatif)<input type="text" name="note" maxlength="500"></label>
       <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Aperçu de ce qu'il va recevoir</summary><div id="fpr-apercu" style="margin-top:8px"></div></details>
       <div class="row"><button class="btn primary" type="submit">📲 Transmettre</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
@@ -1838,7 +1838,7 @@ async function proposerPresta(d, c, re) {
       bouton.disabled = true;
       try {
         if (qui.length) {
-          const r = await sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: null, demande_id: d.id, texte: ("Proposition : " + d.titre).slice(0, 500) }))).select("id"); if (r.error) throw r.error;
+          const r = await sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: null, demande_id: d.id, echeance: f.get("echeance") || null, texte: ("Proposition : " + d.titre).slice(0, 500) }))).select("id"); if (r.error) throw r.error;
           const morceaux = texte.match(/[\s\S]{1,2000}/g), maintenant = new Date().toISOString();
           await maj(sb.from("tache_documents").insert(r.data.flatMap(t => morceaux.map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
         }
@@ -1849,7 +1849,7 @@ async function proposerPresta(d, c, re) {
   });
 }
 async function accepterDemande(d, c, re) {
-  const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").map(t => t.intervenante_id), fiche = await fdrDonnees(d, c, true);
+  const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").sort((a, b) => a.fait_le < b.fait_le ? -1 : 1).slice(0, 1).map(t => t.intervenante_id), fiche = await fdrDonnees(d, c, true);
   const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif), nouveau = ["prospect", "termine"].includes(c.etat);
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
   // un prestataire noté à la main (ex. d'après l'Excel) qui a maintenant un compte : on le reconnaît par son nom

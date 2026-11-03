@@ -917,7 +917,7 @@ async function chargerTaches() {
     sb.from("tache_documents").select("tache_id")]);
   if (t.error) throw t.error; if (d.error) throw d.error;
   nbDocs = d.data.reduce((o, x) => (o[x.tache_id] = (o[x.tache_id] || 0) + 1, o), {});
-  return t.data;
+  return t.data.filter(x => !(estProposition(x) && !x.fait_le && x.echeance && x.echeance < auj10()));   // deadline passée : la proposition est retirée
 }
 /* Une mission proposée par OIKOS : il lit la feuille de route et répond ; il n'a accès au client qu'avec l'ordre de mission */
 const estProposition = t => t.demande_id && /^Proposition : /.test(t.texte || "");
@@ -969,7 +969,7 @@ async function ficheProposition(t, apres) {
   let fiche = null; try { fiche = JSON.parse(texte); } catch (x) {}
   feuille(`<h2 style="margin:0">Mission proposée</h2>
     ${fiche ? fdrHtml(fiche) : `<p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p><div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>`}
-    ${t.fait_le ? `<p class="muted small">Ta réponse : ${esc(t.commentaire || "fait")}</p>` : `<p class="muted small">L'ordre de mission arrive une fois le devis signé par le client.</p>
+    ${t.fait_le ? `<p class="muted small">${/^Je /.test(t.commentaire || "") ? "Ta réponse : " : ""}${esc(t.commentaire || "Terminé")}</p>` : `<p class="muted small">Si d'autres presta ont reçu cette proposition, le premier qui accepte a la mission. L'ordre de mission arrive une fois le devis signé par le client.</p>
     <button class="btn primary big" type="button" id="pr-oui">✓ Je prends</button>
     <label class="f">Si tu ne peux pas, dis pourquoi (facultatif)<textarea id="pr-motif" maxlength="1500"></textarea></label>
     <button class="btn" type="button" id="pr-non" style="color:var(--stop)">Je ne peux pas</button>`}
@@ -980,7 +980,7 @@ async function ficheProposition(t, apres) {
       toast(message); fermer();
     };
     if (el.querySelector("#pr-oui")) {
-      el.querySelector("#pr-oui").onclick = () => repondre("Je prends", "Merci ! OIKOS le voit ; l'ordre de mission arrivera une fois le devis signé.");
+      el.querySelector("#pr-oui").onclick = () => repondre("Je prends", "Réponse envoyée ! Le premier qui accepte a la mission ; l'ordre de mission arrivera une fois le devis signé.");
       el.querySelector("#pr-non").onclick = () => { const m = el.querySelector("#pr-motif").value.trim(); repondre("Je ne peux pas" + (m ? " : " + m : ""), "C'est noté, OIKOS le voit."); };
     }
   }, apres);
