@@ -396,6 +396,7 @@ async function sortir() { try { await sb.auth.signOut({ scope: "local" }); } cat
 
 /* ===================== État ===================== */
 let moi = null, clients = [], onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
+if (new URLSearchParams(location.search).get("onglet") === "missions") onglet = "missions";
 let cache = {};   // créneaux, pointages du mois… rechargés à chaque affichage
 const nomClient = id => (clients.find(c => c.id === id) || {}).nom || "Client";
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
@@ -751,6 +752,7 @@ async function vueJour() {
   chargerTaches().then(taches => {   // sa liste À faire, sans ralentir l'écran
     const b = document.getElementById("bloc-taches"); if (!b) return;
     const afaire = taches.filter(t => !t.fait_le), montrees = afaire.slice(0, 5), nbProp = taches.filter(propositionOuverte).length;
+    if (blocPush()) document.getElementById("contenu").insertAdjacentHTML("afterbegin", blocPush());
     if (nbProp) { document.getElementById("contenu").insertAdjacentHTML("afterbegin", `<button class="alerte-mission" id="alerte-mission">📲 ${nbProp > 1 ? nbProp + " nouvelles missions proposées" : "Nouvelle mission proposée"}<small>Touche pour voir la paie, les heures et le dossier ›</small></button>`); document.getElementById("alerte-mission").onclick = () => accueil("missions"); }
     b.innerHTML = `<div class="row" style="justify-content:space-between;margin:22px 0 10px"><h2 style="margin:0">À faire${afaire.length ? " (" + afaire.length + ")" : ""}</h2>
         <button class="btn flat" id="ajout-tache" style="min-height:36px">➕ Ajouter</button></div>
@@ -976,7 +978,36 @@ function fdrHtml(f) {
 }
 /* Ses propositions : la paie, les heures et la ville d'un coup d'œil ; le dossier complet en touchant la ligne */
 const propositionOuverte = t => estProposition(t) && !t.fait_le && !(t.echeance && t.echeance < auj10());
+/* Notifications du téléphone : le presta accepte une fois, son téléphone s'enregistre ; ensuite tout est silencieux */
+const pushPossible = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const surIphoneNonInstalle = () => /iphone|ipad/i.test(navigator.userAgent) && !(navigator.standalone || matchMedia("(display-mode: standalone)").matches);
+const pushEtat = () => surIphoneNonInstalle() ? "iphone" : !pushPossible() ? "impossible" : Notification.permission;
+async function abonnerPush() {
+  const c = await sb.from("push_cle").select("cle_publique").eq("id", 1).maybeSingle();
+  if (c.error || !c.data) throw new Error("Les notifications ne sont pas encore prêtes : réessaie dans quelques minutes.");
+  const t = c.data.cle_publique.replace(/-/g, "+").replace(/_/g, "/"), cle = Uint8Array.from(atob(t + "=".repeat((4 - t.length % 4) % 4)), x => x.charCodeAt(0));
+  const r = await navigator.serviceWorker.ready;
+  const a = await r.pushManager.getSubscription() || await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cle });
+  const { error } = await sb.from("push_abonnements").upsert({ endpoint: a.endpoint, intervenante_id: moi.id });
+  if (error) throw error;
+}
+function blocPush() {
+  const e = pushEtat();
+  if (e === "granted" || e === "impossible") return "";
+  if (e === "iphone") return `<div class="fdr-mot" style="margin-bottom:14px">🔔 <b>Pour recevoir les missions en notification</b> : touche Partager puis « Sur l'écran d'accueil », et ouvre l'appli depuis cette icône.</div>`;
+  if (e === "denied") return `<div class="fdr-mot" style="margin-bottom:14px">🔕 <b>Notifications bloquées</b> : autorise-les pour cette appli dans les réglages de ton téléphone, sinon tu ne seras pas prévenu des missions.</div>`;
+  return `<button class="alerte-mission" style="background:var(--accent)" data-activer-push>🔔 Activer les notifications<small>Pour être prévenu dès qu'une mission arrive</small></button>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-activer-push]"); if (!b) return;
+  try {
+    if (await Notification.requestPermission() !== "granted") { toast("Notifications refusées"); return accueil(); }
+    await abonnerPush(); toast("Notifications activées ✓"); accueil();
+  } catch (x) { toast(x.message || "Notifications impossibles pour l'instant"); }
+});
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "missions") accueil("missions"); });
 async function majAlerteMissions() {
+  if (pushEtat() === "granted") abonnerPush().catch(() => {});   // reste à jour sans rien demander
   const { data } = await sb.from("taches").select("id,texte,demande_id,fait_le,echeance").eq("intervenante_id", moi.id).is("fait_le", null).like("texte", "Proposition*");
   const n = (data || []).filter(propositionOuverte).length, b = document.querySelector('[data-onglet="missions"]');
   if (b) { const v = b.querySelector(".nav-badge"); if (v) v.remove(); if (n) b.insertAdjacentHTML("beforeend", `<span class="nav-badge">${n}</span>`); }
@@ -998,7 +1029,7 @@ async function vueMissions() {
       <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
   const ouvertes = liste.filter(t => !t.fait_le), repondues = liste.filter(t => t.fait_le);
   const el = document.getElementById("contenu");
-  el.innerHTML = `<h1>Mes propositions</h1>
+  el.innerHTML = `<h1>Mes propositions</h1>${blocPush()}
     <h2 style="margin:14px 0 8px">À répondre${ouvertes.length ? " (" + ouvertes.length + ")" : ""}</h2>${ouvertes.map(ligne).join("") || `<p class="muted">Aucune proposition pour l'instant.</p>`}
     ${repondues.length ? `<h2 style="margin:18px 0 8px">Déjà répondu</h2>${repondues.map(ligne).join("")}` : ""}`;
   el.onclick = e => { const b = e.target.closest("[data-id]"); if (b) ficheProposition(liste.find(t => t.id === b.dataset.id), () => accueil("missions")); };

@@ -1,6 +1,6 @@
 /* Garde seulement le code de l'appli (jamais les données) pour qu'elle s'ouvre vite.
    Toujours le réseau d'abord : une nouvelle version arrive dès qu'il y a Internet. */
-const VERSION = "oikos-int-22";
+const VERSION = "oikos-int-23";
 const FICHIERS = ["./", "index.html", "manifest.webmanifest", "icone-192.png", "icone-512.png", "logo-oikos.png", "logo-clair.png"];
 
 self.addEventListener("install", e => {
@@ -18,4 +18,17 @@ self.addEventListener("fetch", e => {
     }
     return r;
   }).catch(() => caches.match(e.request)));
+});
+
+/* Notification du téléphone : sans contenu (rien de privé ne transite), le texte est ici */
+self.addEventListener("push", e => {
+  e.waitUntil(self.registration.showNotification("OIKOS : nouvelle mission", { body: "Une mission t'attend. Touche pour voir la paie, les heures et le dossier.", icon: "icone-192.png", badge: "icone-192.png", tag: "oikos-mission", renotify: true, vibrate: [200, 100, 200] }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(l => {
+    const ouvert = l[0];
+    if (ouvert) { ouvert.postMessage("missions"); return ouvert.focus(); }
+    return self.clients.openWindow("./?onglet=missions");
+  }));
 });
