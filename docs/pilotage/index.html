@@ -1589,7 +1589,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
       <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}</span></span>
         ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
       <div class="dm-plus">
-        <p class="muted small">Demande du ${jourAn(d.cree_le)}${signeLe(d) ? " · devis signé le " + jourAn(signeLe(d)) : ""}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}</p>
+        <p class="muted small">Demande du ${jourAn(d.cree_le)}${signeLe(d) ? " · devis signé le " + jourAn(signeLe(d)) : ""}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}${(d.mission.devis_anciens || []).length ? " · remplace " + d.mission.devis_anciens.map(x => esc(x.numero)).join(", ") : ""}</p>
         ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
         ${resumeEstimation(d)}
         ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
@@ -1753,7 +1753,7 @@ function accepterDemande(d, c, re) {
           if (+estimation.temps_semaine_min > 0) await maj(sb.from("clients").update({ temps_semaine_min: Math.round(+estimation.temps_semaine_min) }).eq("id", c.id));
         }
         await maj(sb.from("demandes_devis").update({ etat: "en_cours", accepte_le: maintenant, echeance, ordre_mission: ordre, ordre_a_faire: true, client_a_archiver: nouveau && d.type_prestation === "one_shot",
-          mission: { ...(signeLe(d) ? { devis_signe_le: signeLe(d) } : {}), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions) } }).eq("id", d.id));
+          mission: { ...(d.mission || {}), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions) } }).eq("id", d.id));
         await chargerBase(); fermer(); toast("Mission transmise : la prestation est dans « Prestations en cours »"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
