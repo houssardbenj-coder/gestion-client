@@ -1,4 +1,4 @@
 {
- "version": 20,
- "notes": "OIKOS Pilotage : la liste des prospects envoyés s'affiche dans les réglages"
+ "version": 21,
+ "notes": "Réglages visibles même sans routine, dont « Relier à OIKOS Pilotage »"
 }
