@@ -962,7 +962,7 @@ function fdrHtml(f) {
   const groupes = [5, 4, 3, 2, 1].map(n => [n, (f.taches || []).filter(t => (+t.p || 3) === n)]).filter(([, l]) => l.length);
   const carte = encodeURIComponent(f.adresse || "");
   return `<div class="fdr">
-    <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${esc(f.client)}${f.activite ? " · " + esc(f.activite) : ""}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
+    <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${[f.client, f.activite].filter(Boolean).map(esc).join(" · ")}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : f.secteur ? `<br><span>📍 ${esc(f.secteur)}</span>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
     <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
       <div class="fdr-chiffre paie"><b>💶 ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
     ${f.echeance ? `<div class="fdr-delai">📅 À terminer avant le ${new Date(f.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
@@ -973,7 +973,7 @@ function fdrHtml(f) {
     <div><h4>Le travail, dans l'ordre</h4><div class="plis-fdr" style="display:flex;flex-direction:column;gap:12px">${groupes.map(([n, l]) => `<div class="fdr-groupe" style="--c:${FDR_NIVEAUX[n][1]}"><div class="fdr-titre"><i></i>${FDR_NIVEAUX[n][0]} · ${l.length}</div>
       ${l.map(t => `<div class="fdr-tache"><div><b>${esc(t.t)}</b><em>${fdrDuree(t.min)}${t.q ? " · " + esc(t.q) : ""}</em></div>${t.d ? `<p>${esc(t.d)}</p>` : ""}${t.plus ? `<details><summary>Détail</summary>${esc(t.plus)}</details>` : ""}</div>`).join("")}</div>`).join("")}</div></div>
     ${f.consignes ? `<div class="fdr-mot"><b>Consignes du client</b><br>${esc(f.consignes)}</div>` : ""}
-    <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. Le téléphone et les consignes du client arrivent avec l'ordre de mission."}</p>
+    <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. " + (f.adresse ? "Le téléphone et les consignes du client arrivent avec l'ordre de mission." : "Le nom, l'adresse exacte et les consignes du client arrivent avec l'ordre de mission.")}</p>
   </div>`;
 }
 /* Ses propositions : la paie, les heures et la ville d'un coup d'œil ; le dossier complet en touchant la ligne */
@@ -1024,7 +1024,7 @@ async function vueMissions() {
   const liste = data.filter(t => estProposition(t) && !(t.echeance && !t.fait_le && t.echeance < auj10()));
   const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
   if (lus.error) throw lus.error;
-  const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = villeDe(f.adresse);
+  const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = f.secteur || villeDe(f.adresse);
     return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>📍 ${esc(ville || "Ville à voir")}${t.echeance ? " · 📅 avant le " + t.echeance.split("-").reverse().join("/") : ""}</small>${t.fait_le ? `<br><small>${esc(t.commentaire || "Terminé")}</small>` : ""}</span>
       <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
   const ouvertes = liste.filter(t => !t.fait_le), repondues = liste.filter(t => t.fait_le);

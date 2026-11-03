@@ -1768,7 +1768,7 @@ function fdrHtml(f) {
   const groupes = [5, 4, 3, 2, 1].map(n => [n, (f.taches || []).filter(t => (+t.p || 3) === n)]).filter(([, l]) => l.length);
   const carte = encodeURIComponent(f.adresse || "");
   return `<div class="fdr">
-    <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${esc(f.client)}${f.activite ? " · " + esc(f.activite) : ""}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
+    <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${[f.client, f.activite].filter(Boolean).map(esc).join(" · ")}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : f.secteur ? `<br><span>📍 ${esc(f.secteur)}</span>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
     <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
       <div class="fdr-chiffre paie"><b>💶 ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
     ${f.echeance ? `<div class="fdr-delai">📅 À terminer avant le ${new Date(f.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
@@ -1779,7 +1779,7 @@ function fdrHtml(f) {
     <div><h4>Le travail, dans l'ordre</h4><div class="plis-fdr" style="display:flex;flex-direction:column;gap:12px">${groupes.map(([n, l]) => `<div class="fdr-groupe" style="--c:${FDR_NIVEAUX[n][1]}"><div class="fdr-titre"><i></i>${FDR_NIVEAUX[n][0]} · ${l.length}</div>
       ${l.map(t => `<div class="fdr-tache"><div><b>${esc(t.t)}</b><em>${fdrDuree(t.min)}${t.q ? " · " + esc(t.q) : ""}</em></div>${t.d ? `<p>${esc(t.d)}</p>` : ""}${t.plus ? `<details><summary>Détail</summary>${esc(t.plus)}</details>` : ""}</div>`).join("")}</div>`).join("")}</div></div>
     ${f.consignes ? `<div class="fdr-mot"><b>Consignes du client</b><br>${esc(f.consignes)}</div>` : ""}
-    <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. Le téléphone et les consignes du client arrivent avec l'ordre de mission."}</p>
+    <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. " + (f.adresse ? "Le téléphone et les consignes du client arrivent avec l'ordre de mission." : "Le nom, l'adresse exacte et les consignes du client arrivent avec l'ordre de mission.")}</p>
   </div>`;
 }
 /* Une phrase pour la lecture rapide ; le reste se déroule */
@@ -1811,9 +1811,26 @@ async function fdrDonnees(d, c, definitif) {
     photos: choisies.filter(x => urls[x.apercu]).map(x => ({ url: urls[x.apercu], legende: x.legende || "" })), ramener, fourni,
     taches: taches.slice().sort((a, b) => (+b.priorite || 3) - (+a.priorite || 3)).map(t => { const court = fdrCourt(t.detail); return { t: t.titre, d: court, plus: String(t.detail || "").trim() !== court ? String(t.detail).trim() : "", min: +t.duree_min || 0, p: +t.priorite || 3, q: reg ? (+t.frequence_jours ? quandTache(t) : "une fois") : "" }; }) };
 }
+/* Avant l'accord, un presta qui ne connaît pas ce client ne voit ni son nom ni son adresse : seulement l'arrondissement ou la commune */
+function fdrSecteur(adresse) {
+  const m = String(adresse || "").match(/\b(\d{5})\s+([^,\d]+?)\s*(?:,|$)/); if (!m) return "";
+  const n = +m[1].slice(3), ville = m[2].replace(/\s+cedex.*$/i, "").trim();
+  return /^(marseille|lyon|paris)$/i.test(ville) && /^(130|690|750)/.test(m[1]) && n > 0 ? ville.charAt(0).toUpperCase() + ville.slice(1).toLowerCase() + " " + n + (n === 1 ? "er" : "e") : ville;
+}
+function fdrAnonyme(f, c) {
+  const mots = norm(c.nom || "").split(/[^a-z0-9]+/).filter(x => x.length >= 3);
+  const net = x => { let r = String(x || ""); mots.forEach(m => { r = r.replace(new RegExp(m.split("").map(l => ({ a: "[aàâä]", e: "[eéèêë]", i: "[iîï]", o: "[oôö]", u: "[uùûü]", c: "[cç]" })[l] || l).join(""), "gi"), "le client"); }); return r; };
+  return { ...f, titre: net(f.titre), client: "", adresse: "", telephone: "", consignes: "", secteur: fdrSecteur(f.adresse) || "Secteur précisé avec l'ordre de mission", photos: (f.photos || []).map(x => ({ url: x.url, legende: "" })),
+    ramener: (f.ramener || []).map(net), fourni: (f.fourni || []).map(net), taches: (f.taches || []).map(t => ({ ...t, t: net(t.t), d: net(t.d), plus: net(t.plus) })) };
+}
+/* Déjà confié à ce client ou déjà venu : il le connaît, on peut lui dire chez qui */
+async function prestaConnaissant(c) {
+  const [a, p] = await Promise.all([q(sb.from("attributions").select("intervenante_id").eq("client_id", c.id)), q(sb.from("pointages").select("intervenante_id").eq("client_id", c.id).limit(500))]);
+  return new Set(a.concat(p).map(x => x.intervenante_id).filter(Boolean));
+}
 async function voirFeuilleRoute(d, c) {
-  const f = fdrPaie(await fdrDonnees(d, c), fdrTaux(d));
-  fenetre(`<h2 style="margin:0 0 4px">👁 Feuille de route</h2><p class="muted small" style="margin:0 0 10px">Ce que voit le presta, sans le prix du client.</p>
+  const f = fdrAnonyme(fdrPaie(await fdrDonnees(d, c), fdrTaux(d)), c);
+  fenetre(`<h2 style="margin:0 0 4px">👁 Feuille de route</h2><p class="muted small" style="margin:0 0 10px">Ce que voit un presta qui ne connaît pas ce client : ni nom, ni adresse, ni prix du client. S'il y est déjà allé, il voit aussi le nom et l'adresse.</p>
     ${fdrHtml(f)}
     <div class="row" style="margin-top:12px">${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission en PDF</a>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`, () => {});
 }
@@ -1821,10 +1838,10 @@ async function voirFeuilleRoute(d, c) {
 async function proposerPresta(d, c, re) {
   const deja = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id));
   const sollicites = deja.filter(t => estProposition(t) && reponseProp(t) !== "close").map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
-  const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c);
+  const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c), connaissent = await prestaConnaissant(c);
   fenetre(`<h2 style="margin:0">Transmettre au presta · ${esc(d.titre)}</h2>
     <form id="fpr" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Il reçoit la feuille de route dans son appli et répond « Je prends » ou « Je ne peux pas ». Le devis se fait ensuite.")}</legend>
+      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Il reçoit la feuille de route dans son appli et répond « Je prends » ou « Je ne peux pas ». Sans le nom ni l'adresse du client, sauf s'il y est déjà allé : seulement l'arrondissement ou la commune. Le devis se fait ensuite.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
       <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure) ${aide("Il voit le total estimé sur sa feuille de route, jamais le prix du client.")}</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
@@ -1832,17 +1849,17 @@ async function proposerPresta(d, c, re) {
       <label class="f">Un mot pour lui (facultatif)<input type="text" name="note" maxlength="500"></label>
       <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Aperçu de ce qu'il va recevoir</summary><div id="fpr-apercu" style="margin-top:8px"></div></details>
       <div class="row"><button class="btn primary" type="submit">📲 Transmettre</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    const form = el.querySelector("#fpr"), majApercu = () => { fiche.note = form.elements.note.value.trim(); fiche.echeance = form.elements.echeance.value; fdrPaie(fiche, form.elements.taux.value); el.querySelector("#fpr-apercu").innerHTML = fdrHtml(fiche); };
+    const form = el.querySelector("#fpr"), majApercu = () => { fiche.note = form.elements.note.value.trim(); fiche.echeance = form.elements.echeance.value; fdrPaie(fiche, form.elements.taux.value); el.querySelector("#fpr-apercu").innerHTML = fdrHtml(fdrAnonyme(fiche, c)); };
     form.oninput = majApercu; majApercu();
     form.onsubmit = async e => {
-      e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), texte = JSON.stringify(fiche);
+      e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), anonyme = fdrAnonyme(fiche, c);
       if (!qui.length && !accord.length) return toast("Choisis au moins une personne");
       bouton.disabled = true;
       try {
         if (qui.length) {
-          const r = await sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: null, demande_id: d.id, echeance: f.get("echeance") || null, texte: ("Proposition : " + d.titre).slice(0, 500) }))).select("id"); if (r.error) throw r.error;
-          const morceaux = texte.match(/[\s\S]{1,2000}/g), maintenant = new Date().toISOString();
-          await maj(sb.from("tache_documents").insert(r.data.flatMap(t => morceaux.map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
+          const r = await sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: null, demande_id: d.id, echeance: f.get("echeance") || null, texte: ("Proposition : " + (connaissent.has(id) ? fiche.titre : anonyme.titre)).slice(0, 500) }))).select("id,intervenante_id"); if (r.error) throw r.error;
+          const maintenant = new Date().toISOString();
+          await maj(sb.from("tache_documents").insert(r.data.flatMap(t => JSON.stringify(connaissent.has(t.intervenante_id) ? fiche : anonyme).match(/[\s\S]{1,2000}/g).map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
         }
         await maj(sb.from("demandes_devis").update({ echeance: f.get("echeance") || null, mission: { ...(d.mission || {}), presta_taux: f.get("taux"), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
         await chargerBase(); fermer(); toast(qui.length ? "Transmis : la réponse arrivera ici et dans À voir" : "Noté : tu peux faire le devis"); re();
