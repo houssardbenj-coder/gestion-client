@@ -76,6 +76,35 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .err{color:var(--stop);font-weight:700}
 .diff del{color:var(--stop)} .diff ins{color:var(--go);text-decoration:none}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;z-index:30;max-width:92vw}
+/* La feuille de route : à lire d'un coup d'œil, la couleur dit ce qui passe d'abord */
+.fdr{display:flex;flex-direction:column;gap:14px;min-width:0;text-align:left}
+.fdr-tete{background:var(--accent);color:var(--accent-ink);border-radius:14px;padding:14px 16px}
+.fdr-tete b{display:block;font-family:var(--titre);font-size:21px;font-weight:600;line-height:1.2}
+.fdr-tete a,.fdr-tete span{color:inherit;font-size:14px}
+.fdr-chiffres{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fdr-chiffre{background:var(--accent-soft);border-radius:12px;padding:10px 12px}
+.fdr-chiffre b{display:block;font-size:21px;line-height:1.2}
+.fdr-chiffre span{font-size:12px;color:var(--muted)}
+.fdr-chiffre.paie{background:#DFF0DC}
+.fdr-chiffre.paie b{color:#2C6B29}
+.fdr-mot{background:var(--warn-soft);border-radius:12px;padding:10px 12px;font-size:14px;white-space:pre-wrap}
+.fdr-photos{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.fdr-photos img{height:110px;width:146px;object-fit:cover;border-radius:10px;background:var(--sunk);display:block}
+.fdr h4{margin:0 0 6px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.fdr-puces{display:flex;flex-wrap:wrap;gap:6px}
+.fdr-puces span{padding:5px 10px;border-radius:999px;font-size:14px;background:var(--sunk)}
+.fdr-puces.ramener span{background:var(--warn-soft);font-weight:700}
+.fdr-groupe{display:flex;flex-direction:column;gap:6px}
+.fdr-titre{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+.fdr-titre i{width:12px;height:12px;border-radius:50%;background:var(--c);flex:none}
+.fdr-tache{border-left:5px solid var(--c);background:var(--surface);border-radius:8px;padding:8px 10px;box-shadow:0 0 0 1px var(--line)}
+.fdr-tache>div{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.fdr-tache b{font-size:15px}
+.fdr-tache em{font-style:normal;font-size:13px;color:var(--muted);white-space:nowrap}
+.fdr-tache p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.fdr-tache details{font-size:13px;margin-top:2px}
+.fdr-tache summary{cursor:pointer;color:var(--accent);font-weight:700}
+.fdr-note{font-size:12px;color:var(--muted);margin:0}
 .voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px}
 .fenetre{background:var(--bg);border-radius:16px;padding:18px;width:100%;max-width:820px;display:flex;flex-direction:column;gap:12px}
 .connexion{max-width:380px;margin:12vh auto;display:flex;flex-direction:column;gap:12px}
@@ -1729,29 +1758,80 @@ function ordreParDefaut(d, c, proposition) {
     articles.length || materiel.length ? `\nMatériel à prévoir :\n${articles.map(a => "- " + a.nom + (+a.quantite > 1 ? " × " + a.quantite : "")).concat(materiel.map(x => "- " + x)).join("\n")}` : "",
     c.consignes && !proposition ? `\nConsignes du client :\n${c.consignes}` : ""].filter(Boolean).join("\n").slice(0, 6000);
 }
-function voirFeuilleRoute(d, c) {
-  fenetre(`<h2 style="margin:0">Feuille de route · ${esc(d.titre)}</h2>
-    <p class="muted small" style="margin:6px 0">Sans prix ni gain. Le téléphone et les consignes du client n'arrivent au presta qu'avec l'ordre de mission.</p>
-    <div class="card" style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(ordreParDefaut(d, c))}</div>
-    <div class="row" style="margin-top:10px">${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission en PDF</a>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`, () => {});
+/* La feuille de route d'une mission : la même pour le gérant et le presta. Jamais le prix du client. */
+const FDR_NIVEAUX = { 5: ["Essentiel", "#df3b2f"], 4: ["Important", "#ee8a12"], 3: ["À faire", "#e6bb00"], 2: ["Si le temps le permet", "#2fa84f"], 1: ["En plus", "#2f7fe0"] };
+const fdrDuree = m => { m = Math.round(+m || 0); const h = Math.floor(m / 60), r = m % 60; return h ? h + " h" + (r ? " " + String(r).padStart(2, "0") : "") : m + " min"; };
+const fdrEuros = n => (Math.round((+n || 0) * 100) / 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " €";
+function fdrHtml(f) {
+  const p = f.paye || {}, parMois = f.regulier ? " par mois" : "";
+  const groupes = [5, 4, 3, 2, 1].map(n => [n, (f.taches || []).filter(t => (+t.p || 3) === n)]).filter(([, l]) => l.length);
+  const carte = encodeURIComponent(f.adresse || "");
+  return `<div class="fdr">
+    <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${esc(f.client)}${f.activite ? " · " + esc(f.activite) : ""}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
+    <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
+      <div class="fdr-chiffre paie"><b>💶 ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
+    ${f.note ? `<div class="fdr-mot">💬 ${esc(f.note)}</div>` : ""}
+    ${(f.photos || []).length ? `<div><h4>Sur place</h4><div class="fdr-photos">${f.photos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener"><img src="${esc(x.url)}" alt="${esc(x.legende || "Photo du lieu")}" loading="lazy"></a>`).join("")}</div></div>` : ""}
+    ${(f.ramener || []).length ? `<div><h4>🎒 À ramener</h4><div class="fdr-puces ramener">${f.ramener.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>` : ""}
+    ${(f.fourni || []).length ? `<div><h4>✅ Fourni, rien à prévoir</h4><div class="fdr-puces">${f.fourni.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>` : ""}
+    <div><h4>Le travail, dans l'ordre</h4><div class="plis-fdr" style="display:flex;flex-direction:column;gap:12px">${groupes.map(([n, l]) => `<div class="fdr-groupe" style="--c:${FDR_NIVEAUX[n][1]}"><div class="fdr-titre"><i></i>${FDR_NIVEAUX[n][0]} · ${l.length}</div>
+      ${l.map(t => `<div class="fdr-tache"><div><b>${esc(t.t)}</b><em>${fdrDuree(t.min)}${t.q ? " · " + esc(t.q) : ""}</em></div>${t.d ? `<p>${esc(t.d)}</p>` : ""}${t.plus ? `<details><summary>Détail</summary>${esc(t.plus)}</details>` : ""}</div>`).join("")}</div>`).join("")}</div></div>
+    ${f.consignes ? `<div class="fdr-mot"><b>Consignes du client</b><br>${esc(f.consignes)}</div>` : ""}
+    <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. Le téléphone et les consignes du client arrivent avec l'ordre de mission."}</p>
+  </div>`;
+}
+/* Une phrase pour la lecture rapide ; le reste se déroule */
+const fdrCourt = s => { s = String(s || "").trim(); const m = s.match(/^[\s\S]{15,}?[.!?](\s|$)/), c = (m ? m[0] : s).trim(); return c.length > 110 ? c.slice(0, 107).replace(/\s\S*$/, "") + "…" : c; };
+const fdrParAn = t => { const f = +t.frequence_jours, m = (t.mois || []).length; return !(f > 0) ? 0 : !m || m >= 12 ? 365 / f : f < 30.4 ? m * 30.4 / f : Math.min(365 / f, m); };
+function fdrPaie(f, taux) {
+  const h = (f.minutes || 0) / 60, t = +String(taux ?? "").replace(",", ".") || 0, comp = +f.compensation || 0;
+  f.paye = { taux: t, compensation: comp, total: t > 0 ? Math.round((h * t + comp) * 100) / 100 : 0 };
+  return f;
+}
+const fdrTaux = d => (d.mission || {}).presta_taux ?? (d.estimation || {}).cout_horaire ?? "";
+async function fdrDonnees(d, c, definitif) {
+  const e = d.estimation || {}, reg = d.type_prestation === "regulier", taches = (e.taches || []).filter(t => t && t.titre);
+  const lues = await q(sb.from("client_photos").select("apercu,legende,demande_id,partage,prise_le").eq("client_id", c.id).is("supprime_le", null).order("prise_le", { ascending: false }).limit(60));
+  const choisies = lues.filter(x => x.demande_id === d.id).concat(lues.filter(x => x.demande_id !== d.id && x.partage !== false)).slice(0, 6);
+  const urls = {};
+  if (choisies.length) { const r = await sb.storage.from("dossiers").createSignedUrls(choisies.map(x => x.apercu), 60 * 60 * 24 * 30); if (!r.error) r.data.forEach(x => { if (x.signedUrl) urls[x.path] = x.signedUrl; }); }
+  const ramener = [], fourni = []; let compensation = 0;
+  (e.articles || []).filter(a => a && a.nom).forEach(a => {
+    const m = String(a.nom).match(/^(.*) \((à apporter par .*|fourni par .*)\)$/), nom = (m ? m[1] : a.nom) + (+a.quantite > 1 ? " × " + a.quantite : "");
+    if (m && /^fourni/.test(m[2])) fourni.push(nom); else { ramener.push(nom); compensation += (+a.quantite || 1) * (+a.cout_unitaire || 0); }
+  });
+  (e.materiel || []).filter(Boolean).forEach(x => ramener.push(String(x)));
+  const minutes = reg ? Math.round(taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12) : taches.reduce((s, t) => s + (+t.duree_min || 0), 0);
+  const uneFois = reg ? taches.filter(t => !(+t.frequence_jours > 0)).reduce((s, t) => s + (+t.duree_min || 0), 0) : 0;
+  return { version: 1, definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
+    photos: choisies.filter(x => urls[x.apercu]).map(x => ({ url: urls[x.apercu], legende: x.legende || "" })), ramener, fourni,
+    taches: taches.slice().sort((a, b) => (+b.priorite || 3) - (+a.priorite || 3)).map(t => { const court = fdrCourt(t.detail); return { t: t.titre, d: court, plus: String(t.detail || "").trim() !== court ? String(t.detail).trim() : "", min: +t.duree_min || 0, p: +t.priorite || 3, q: reg ? (+t.frequence_jours ? quandTache(t) : "une fois") : "" }; }) };
+}
+async function voirFeuilleRoute(d, c) {
+  const f = fdrPaie(await fdrDonnees(d, c), fdrTaux(d));
+  fenetre(`<h2 style="margin:0 0 4px">👁 Feuille de route</h2><p class="muted small" style="margin:0 0 10px">Ce que voit le presta, sans le prix du client.</p>
+    ${fdrHtml(f)}
+    <div class="row" style="margin-top:12px">${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission en PDF</a>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`, () => {});
 }
 /* 1re étape : la feuille de route part au presta, qui répond « Je prends » ou « Je ne peux pas » dans son appli. Il n'a pas encore accès au client. */
 async function proposerPresta(d, c, re) {
   const deja = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id));
   const sollicites = deja.filter(estProposition).map(t => t.intervenante_id), gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !sollicites.includes(p.id));
-  const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id);
+  const habituels = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(a => a.intervenante_id), fiche = await fdrDonnees(d, c);
   fenetre(`<h2 style="margin:0">Transmettre au presta · ${esc(d.titre)}</h2>
     <form id="fpr" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
       <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Il reçoit la feuille de route dans son appli et répond « Je prends » ou « Je ne peux pas ». Le devis se fait ensuite.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
       <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
-      <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Feuille de route (sans prix, modifiable)</summary>
-        <textarea name="feuille" aria-label="Feuille de route" maxlength="6000" style="min-height:220px;margin-top:6px">${esc(ordreParDefaut(d, c, true))}</textarea></details>
+      <div class="deux"><label class="f"><span>Sa paie (€ de l'heure) ${aide("Il voit le total estimé sur sa feuille de route, jamais le prix du client.")}</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
+        <label class="f">Un mot pour lui (facultatif)<input type="text" name="note" maxlength="500"></label></div>
+      <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Aperçu de ce qu'il va recevoir</summary><div id="fpr-apercu" style="margin-top:8px"></div></details>
       <div class="row"><button class="btn primary" type="submit">📲 Transmettre</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    el.querySelector("#fpr").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), texte = String(f.get("feuille")).trim();
+    const form = el.querySelector("#fpr"), majApercu = () => { fiche.note = form.elements.note.value.trim(); fdrPaie(fiche, form.elements.taux.value); el.querySelector("#fpr-apercu").innerHTML = fdrHtml(fiche); };
+    form.oninput = majApercu; majApercu();
+    form.onsubmit = async e => {
+      e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), texte = JSON.stringify(fiche);
       if (!qui.length && !accord.length) return toast("Choisis au moins une personne");
-      if (!texte) return toast("La feuille de route est vide");
       bouton.disabled = true;
       try {
         if (qui.length) {
@@ -1759,14 +1839,14 @@ async function proposerPresta(d, c, re) {
           const morceaux = texte.match(/[\s\S]{1,2000}/g), maintenant = new Date().toISOString();
           await maj(sb.from("tache_documents").insert(r.data.flatMap(t => morceaux.map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
         }
-        if (accord.length) await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
+        await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_taux: f.get("taux"), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
         await chargerBase(); fermer(); toast(qui.length ? "Transmis : la réponse arrivera ici et dans À voir" : "Noté : tu peux faire le devis"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
   });
 }
 async function accepterDemande(d, c, re) {
-  const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").map(t => t.intervenante_id);
+  const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").map(t => t.intervenante_id), fiche = await fdrDonnees(d, c, true);
   const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif), nouveau = ["prospect", "termine"].includes(c.etat);
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
   // un prestataire noté à la main (ex. d'après l'Excel) qui a maintenant un compte : on le reconnaît par son nom
@@ -1782,14 +1862,16 @@ async function accepterDemande(d, c, re) {
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
       <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc([...new Set(deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre).concat((d.mission || {}).presta_accord || []))].join(", "))}"></label>
       <label class="f">À faire pour le (facultatif)<input type="date" name="echeance"></label>
-      <details><summary class="small" style="cursor:pointer;font-weight:700">📋 Ordre de mission (sans prix ni gain, modifiable)</summary>
-        <textarea name="ordre" aria-label="Ordre de mission" maxlength="6000" style="min-height:220px;margin-top:6px">${esc(ordreParDefaut(d, c))}</textarea></details>
+      <div class="deux"><label class="f"><span>Sa paie (€ de l'heure)</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
+        <label class="f">Un mot pour lui (facultatif)<input type="text" name="ordre" maxlength="500"></label></div>
+      <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Aperçu de l'ordre de mission (PDF dans son appli)</summary><div id="fac-apercu" style="margin-top:8px"></div></details>
       <div class="row"><button class="btn primary" type="submit">📋 Envoyer l'ordre de mission</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    el.querySelector("#fac").onsubmit = async e => {
-      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]");
+    const formO = el.querySelector("#fac"), majApercu = () => { fiche.note = formO.elements.ordre.value.trim(); fdrPaie(fiche, formO.elements.taux.value); el.querySelector("#fac-apercu").innerHTML = fdrHtml(fiche); };
+    formO.oninput = majApercu; majApercu();
+    formO.onsubmit = async e => {
+      e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]");
       const qui = f.getAll("qui"), sansCompte = String(f.get("sans_compte")).split(",").map(x => x.trim()).filter(Boolean), ordre = String(f.get("ordre")).trim();
       if (!qui.length && !sansCompte.length) return toast("Choisis au moins une personne");
-      if (!ordre) return toast("L'ordre de mission est vide");
       bouton.disabled = true;
       try {
         const aujourdhui = ymd(new Date()), maintenant = new Date().toISOString(), echeance = f.get("echeance") || null, estimation = d.estimation || {};
@@ -1802,14 +1884,14 @@ async function accepterDemande(d, c, re) {
         let attributions = [];
         if (aCreer.length) { const r = await sb.from("attributions").insert(aCreer).select("id"); if (r.error) throw r.error; attributions = r.data.map(x => x.id); }
         await maj(sb.from("taches").update({ fait_le: maintenant }).eq("demande_id", d.id).is("fait_le", null));   // les photos demandées avant le devis ne comptent plus dans la mission
-        if (qui.length) await maj(sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: c.id, demande_id: d.id, texte: ("Mission : " + d.titre).slice(0, 500), echeance, commentaire: ordre.slice(0, 2000), dossier_nom: d.titre.slice(0, 200) }))));
+        if (qui.length) await maj(sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: c.id, demande_id: d.id, texte: ("Mission : " + d.titre).slice(0, 500), echeance, commentaire: ordre || null, dossier_nom: d.titre.slice(0, 200) }))));
         await maj(sb.from("client_photos").update({ partage: true }).eq("demande_id", d.id));
         if (d.type_prestation === "regulier") {
           await ajouterARoute(c, (estimation.taches || []).filter(t => t && t.titre));
           if (+estimation.temps_semaine_min > 0) await maj(sb.from("clients").update({ temps_semaine_min: Math.round(+estimation.temps_semaine_min) }).eq("id", c.id));
         }
-        await maj(sb.from("demandes_devis").update({ etat: "en_cours", accepte_le: maintenant, echeance, ordre_mission: ordre, ordre_a_faire: true, client_a_archiver: nouveau && d.type_prestation === "one_shot",
-          mission: { ...(d.mission || {}), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions) } }).eq("id", d.id));
+        await maj(sb.from("demandes_devis").update({ etat: "en_cours", accepte_le: maintenant, echeance, ordre_mission: ordre || ordreParDefaut(d, c), ordre_a_faire: true, client_a_archiver: nouveau && d.type_prestation === "one_shot",
+          mission: { ...(d.mission || {}), feuille: fiche, presta_taux: f.get("taux"), intervenants: qui, sans_compte: sansCompte, attributions: ((d.mission || {}).attributions || []).concat(attributions) } }).eq("id", d.id));
         await chargerBase(); fermer(); toast("Ordre de mission envoyé : la prestation est dans « Prestations en cours »"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };

@@ -294,6 +294,35 @@ a.lien.muted{color:var(--muted)}
 .tk-grp>summary{cursor:pointer;padding:12px 16px;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);list-style:none;display:flex;gap:8px;align-items:center}
 .tk-lignes{padding:0 16px 4px}
 .doc{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--bg);border-radius:10px;padding:8px 10px}
+/* La feuille de route : à lire d'un coup d'œil, la couleur dit ce qui passe d'abord */
+.fdr{display:flex;flex-direction:column;gap:14px;min-width:0;text-align:left}
+.fdr-tete{background:var(--accent);color:var(--accent-ink);border-radius:14px;padding:14px 16px}
+.fdr-tete b{display:block;font-family:var(--titre);font-size:21px;font-weight:600;line-height:1.2}
+.fdr-tete a,.fdr-tete span{color:inherit;font-size:14px}
+.fdr-chiffres{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fdr-chiffre{background:var(--accent-soft);border-radius:12px;padding:10px 12px}
+.fdr-chiffre b{display:block;font-size:21px;line-height:1.2}
+.fdr-chiffre span{font-size:12px;color:var(--muted)}
+.fdr-chiffre.paie{background:#DFF0DC}
+.fdr-chiffre.paie b{color:#2C6B29}
+.fdr-mot{background:var(--warn-soft);border-radius:12px;padding:10px 12px;font-size:14px;white-space:pre-wrap}
+.fdr-photos{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.fdr-photos img{height:110px;width:146px;object-fit:cover;border-radius:10px;background:var(--sunk);display:block}
+.fdr h4{margin:0 0 6px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.fdr-puces{display:flex;flex-wrap:wrap;gap:6px}
+.fdr-puces span{padding:5px 10px;border-radius:999px;font-size:14px;background:var(--sunk)}
+.fdr-puces.ramener span{background:var(--warn-soft);font-weight:700}
+.fdr-groupe{display:flex;flex-direction:column;gap:6px}
+.fdr-titre{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+.fdr-titre i{width:12px;height:12px;border-radius:50%;background:var(--c);flex:none}
+.fdr-tache{border-left:5px solid var(--c);background:var(--surface);border-radius:8px;padding:8px 10px;box-shadow:0 0 0 1px var(--line)}
+.fdr-tache>div{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.fdr-tache b{font-size:15px}
+.fdr-tache em{font-style:normal;font-size:13px;color:var(--muted);white-space:nowrap}
+.fdr-tache p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.fdr-tache details{font-size:13px;margin-top:2px}
+.fdr-tache summary{cursor:pointer;color:var(--accent);font-weight:700}
+.fdr-note{font-size:12px;color:var(--muted);margin:0}
 </style>
 </head>
 <body>
@@ -909,14 +938,36 @@ function brancherTaches(zone, taches, apres) {
     if (e.target.closest("[data-ouvre]")) estProposition(t) ? ficheProposition(t, apres) : ficheTache(t, apres);
   });
 }
+/* La feuille de route d'une mission : la même pour le gérant et le presta. Jamais le prix du client. */
+const FDR_NIVEAUX = { 5: ["Essentiel", "#df3b2f"], 4: ["Important", "#ee8a12"], 3: ["À faire", "#e6bb00"], 2: ["Si le temps le permet", "#2fa84f"], 1: ["En plus", "#2f7fe0"] };
+const fdrDuree = m => { m = Math.round(+m || 0); const h = Math.floor(m / 60), r = m % 60; return h ? h + " h" + (r ? " " + String(r).padStart(2, "0") : "") : m + " min"; };
+const fdrEuros = n => (Math.round((+n || 0) * 100) / 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " €";
+function fdrHtml(f) {
+  const p = f.paye || {}, parMois = f.regulier ? " par mois" : "";
+  const groupes = [5, 4, 3, 2, 1].map(n => [n, (f.taches || []).filter(t => (+t.p || 3) === n)]).filter(([, l]) => l.length);
+  const carte = encodeURIComponent(f.adresse || "");
+  return `<div class="fdr">
+    <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${esc(f.client)}${f.activite ? " · " + esc(f.activite) : ""}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
+    <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
+      <div class="fdr-chiffre paie"><b>💶 ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
+    ${f.note ? `<div class="fdr-mot">💬 ${esc(f.note)}</div>` : ""}
+    ${(f.photos || []).length ? `<div><h4>Sur place</h4><div class="fdr-photos">${f.photos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener"><img src="${esc(x.url)}" alt="${esc(x.legende || "Photo du lieu")}" loading="lazy"></a>`).join("")}</div></div>` : ""}
+    ${(f.ramener || []).length ? `<div><h4>🎒 À ramener</h4><div class="fdr-puces ramener">${f.ramener.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>` : ""}
+    ${(f.fourni || []).length ? `<div><h4>✅ Fourni, rien à prévoir</h4><div class="fdr-puces">${f.fourni.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>` : ""}
+    <div><h4>Le travail, dans l'ordre</h4><div class="plis-fdr" style="display:flex;flex-direction:column;gap:12px">${groupes.map(([n, l]) => `<div class="fdr-groupe" style="--c:${FDR_NIVEAUX[n][1]}"><div class="fdr-titre"><i></i>${FDR_NIVEAUX[n][0]} · ${l.length}</div>
+      ${l.map(t => `<div class="fdr-tache"><div><b>${esc(t.t)}</b><em>${fdrDuree(t.min)}${t.q ? " · " + esc(t.q) : ""}</em></div>${t.d ? `<p>${esc(t.d)}</p>` : ""}${t.plus ? `<details><summary>Détail</summary>${esc(t.plus)}</details>` : ""}</div>`).join("")}</div>`).join("")}</div></div>
+    ${f.consignes ? `<div class="fdr-mot"><b>Consignes du client</b><br>${esc(f.consignes)}</div>` : ""}
+    <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. Le téléphone et les consignes du client arrivent avec l'ordre de mission."}</p>
+  </div>`;
+}
 async function ficheProposition(t, apres) {
   const { data, error } = await sb.from("tache_documents").select("nom,legende").eq("tache_id", t.id);
   if (error) return souci(error);
   const rang = d => parseInt(String(d.nom).replace(/\D/g, ""), 10) || 0, texte = data.filter(d => /^Feuille de route/.test(d.nom)).sort((a, b) => rang(a) - rang(b)).map(d => d.legende || "").join("");
+  let fiche = null; try { fiche = JSON.parse(texte); } catch (x) {}
   feuille(`<h2 style="margin:0">Mission proposée</h2>
-    <p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p>
-    <div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>
-    ${t.fait_le ? `<p class="muted small">Ta réponse : ${esc(t.commentaire || "fait")}</p>` : `<p class="muted small">Les coordonnées et les consignes du client arriveront avec l'ordre de mission, une fois le devis signé.</p>
+    ${fiche ? fdrHtml(fiche) : `<p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p><div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>`}
+    ${t.fait_le ? `<p class="muted small">Ta réponse : ${esc(t.commentaire || "fait")}</p>` : `<p class="muted small">L'ordre de mission arrive une fois le devis signé par le client.</p>
     <button class="btn primary big" type="button" id="pr-oui">✓ Je prends</button>
     <label class="f">Si tu ne peux pas, dis pourquoi (facultatif)<textarea id="pr-motif" maxlength="1500"></textarea></label>
     <button class="btn" type="button" id="pr-non" style="color:var(--stop)">Je ne peux pas</button>`}
