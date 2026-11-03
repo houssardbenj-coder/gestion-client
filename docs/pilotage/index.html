@@ -148,6 +148,18 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 .rp-ligne.incomplete{border-color:var(--warn)}
 .rp-champs{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
 .rp-ligne input{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);width:100%}
+.i{position:relative;display:inline-grid;place-items:center;width:17px;height:17px;padding:0;margin-left:3px;vertical-align:1px;border:1px solid var(--muted);border-radius:50%;background:none;color:var(--muted);font:italic 700 11px/1 Georgia,serif;text-transform:none;letter-spacing:0;cursor:pointer}
+.i::after{content:"";position:absolute;inset:-9px}
+.i:hover,.i[aria-expanded="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.aide-bulle{position:fixed;z-index:40;max-width:min(360px,calc(100vw - 16px));background:var(--ink);color:var(--bg);font-size:13px;line-height:1.45;font-weight:400;padding:10px 12px;border-radius:10px;white-space:pre-line;box-shadow:0 6px 20px rgb(0 0 0 / .3)}
+.dm{padding:0;margin-bottom:6px}
+.dm>summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;cursor:pointer;list-style:none}
+.dm>summary::-webkit-details-marker{display:none}
+.dm>summary::after{content:"▾";color:var(--muted);transition:transform .2s}
+.dm:not([open])>summary::after{transform:rotate(-90deg)}
+.dm-nom{flex:1 1 260px;min-width:0}
+.dm .btn{padding:5px 11px;font-size:13px}
+.dm-plus{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;border-top:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -184,6 +196,20 @@ const app = document.getElementById("app");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let tt; function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 3800); }
 const souci = e => toast("Ça n'a pas marché : " + ((e && e.message) || e));
+/* Le petit « i » : une explication qui ne prend aucune place tant qu'on ne clique pas dessus */
+const aide = t => `<button class="i" type="button" data-aide="${esc(t)}" aria-label="Explication" aria-expanded="false">i</button>`;
+function fermerAide() { const o = document.getElementById("aide-bulle"); if (o) { o.pour.setAttribute("aria-expanded", "false"); o.remove(); } return o; }
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-aide]"), o = fermerAide();
+  if (!b || (o && o.pour === b)) return;
+  const u = document.createElement("div"), r = b.getBoundingClientRect();
+  u.id = "aide-bulle"; u.className = "aide-bulle"; u.setAttribute("role", "note"); u.textContent = b.dataset.aide; u.pour = b;
+  document.body.append(u); b.setAttribute("aria-expanded", "true");
+  u.style.left = Math.max(8, Math.min(r.left, innerWidth - u.offsetWidth - 8)) + "px";
+  u.style.top = (r.bottom + u.offsetHeight + 12 > innerHeight ? Math.max(8, r.top - u.offsetHeight - 6) : r.bottom + 6) + "px";
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") fermerAide(); });
+addEventListener("scroll", fermerAide, true);
 const pad2 = n => String(n).padStart(2, "0");
 const jour = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 const hm = d => { d = new Date(d); return d.getHours() + "h" + pad2(d.getMinutes()); };
@@ -332,9 +358,9 @@ async function vueAVoir() {
     ${tampon.length ? `<button class="card cliquable" data-o="clients" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
       <b>📥 ${tampon.length} client${tampon.length > 1 ? "s" : ""} à traiter dans la zone tampon ›</b> <span class="muted small">(nouveaux clients VosFactures ou extraction)</span></button>` : ""}
     ${attenteDevis.length ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>📝 ${attenteDevis.length} client${attenteDevis.length > 1 ? "s" : ""} en attente de devis ›</b> <span class="muted small">(à estimer, ou réponse du client attendue)</span></button>` : ""}
+      <b>📝 ${attenteDevis.length} client${attenteDevis.length > 1 ? "s" : ""} en attente de devis ›</b></button>` : ""}
     ${aFinaliser.length ? `<button class="card cliquable" data-dsection="PRESTA" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>🏁 ${aFinaliser.length} prestation${aFinaliser.length > 1 ? "s" : ""} à finaliser ›</b> <span class="muted small">(toutes les tâches de la mission sont cochées)</span></button>` : ""}
+      <b>🏁 ${aFinaliser.length} prestation${aFinaliser.length > 1 ? "s" : ""} à finaliser ›</b></button>` : ""}
     <div class="deux" style="margin-top:12px">
       <section class="card"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
         ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${esc(nomInterv(n.intervenante_id))}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
@@ -1496,7 +1522,7 @@ async function accepterAnalyse(c, a, re) {
    L'analyse, l'estimation du gain et le devis se font dans la page « Analyse et devis » ; ce qui en revient passe par le Pont photos (5 minutes). */
 const ETATS_ATTENTE = ["a_estimer", "estimee", "devis_cree"];
 const enAttenteDevis = d => ETATS_ATTENTE.includes(d.etat);
-const ETATS_DEMANDE = { a_estimer: ["À estimer", "warn"], estimee: ["Estimée", "warn"], devis_cree: ["Devis créé : réponse attendue", "warn"], en_cours: ["Accepté : en cours", ""], finalisee: ["Terminée", "off"], refusee: ["Refusée", "off"] };
+const ETATS_DEMANDE = { a_estimer: ["À estimer", "warn"], estimee: ["Estimée", "warn"], devis_cree: ["Réponse attendue", "warn"], en_cours: ["En cours", ""], finalisee: ["Terminée", "off"], refusee: ["Refusée", "off"] };
 const TYPES_PRESTA = { one_shot: "One shot", regulier: "Régulier" };
 const ACTIVITES_DEVIS = ["Jardinage", "Ménage", "Bricolage"];
 const euros = n => (Math.round((+n || 0) * 100) / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
@@ -1513,8 +1539,7 @@ async function vueDemandes() {
   await chargerBase();
   const attente = sectionDevis === "ATTENTE", liste = cacheDemandes.filter(attente ? enAttenteDevis : d => d.etat === "en_cours");
   const archives = cacheDemandes.filter(d => d.etat === (attente ? "refusee" : "finalisee"));
-  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1><button class="btn primary" id="dm-nouvelle">📝 Nouvelle demande de devis</button></div>
-    <p class="muted small" style="margin:6px 0 0">${attente ? "Un service en plus pour un client, un prospect ou un ancien client : décris le besoin, ajoute des photos, puis estime le temps, le matériel et le gain avant de faire le devis. Le client reste à sa place dans sa liste." : "Les prestations acceptées restent ici tant que tu ne les as pas finalisées. Un client existant ne bouge pas de sa liste ; un prospect en one shot passe dans les anciens à la fin, et son profil se reprend s'il revient."}</p>
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients ${aide(attente ? "Un service en plus pour un client, un prospect ou un ancien client : décris le besoin, ajoute des photos, puis estime le temps, le matériel et le gain avant de faire le devis. Le client reste à sa place dans sa liste." : "Les prestations acceptées restent ici tant que tu ne les as pas finalisées. Un client existant ne bouge pas de sa liste ; un prospect en one shot passe dans les anciens à la fin, et son profil se reprend s'il revient.")}</h1><button class="btn primary" id="dm-nouvelle">📝 Nouvelle demande</button></div>
     ${boutonsEntreprise(true)}${boutonsDevis()}
     <div id="dm-liste" style="margin-top:12px"></div>
     ${archives.length ? `<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>${attente ? "Refusées" : "Prestations terminées"} (${archives.length})</b></summary><div id="dm-archives" style="margin-top:10px"></div></details>` : ""}`);
@@ -1536,6 +1561,15 @@ function resumeEstimation(d) {
     <span class="tag">Coût ${euros(e.cout_total)}${p}</span>${+e.vente_ht ? `<span class="tag">Vente HT ${euros(e.vente_ht)}${p}</span>
     <span class="tag ${+e.gain < 0 ? "warn" : ""}"><b>Gain estimé ${euros(e.gain)}${p}</b>${+e.vente_ht ? " (" + Math.round(e.gain / e.vente_ht * 100) + " %)" : ""}</span>` : `<span class="tag off">prix pas encore donné</span>`}</div>`;
 }
+/* Les chiffres qui comptent, sur la ligne repliée */
+function chiffresDemande(d) {
+  const e = d.estimation, p = e && e.periode === "mois" ? " / mois" : "", l = [];
+  if (e) l.push("⏱ " + String(Math.round((+e.heures || 0) * 100) / 100).replace(".", ",") + " h" + p);
+  if (d.devis_ttc && d.etat !== "refusee") l.push(euros(d.devis_ttc) + " TTC");
+  const gain = e && +e.vente_ht ? `<span class="tag ${+e.gain < 0 ? "warn" : ""}">Gain ${euros(e.gain)}${p}</span>` : "";
+  return (l.length ? `<span class="muted small">${l.join(" · ")}</span>` : "") + gain;
+}
+const dmOuvertes = new Set();   // une fiche dépliée le reste quand la liste se redessine
 async function listeDemandes(zone, liste, avecClient, re, vide) {
   const ids = liste.map(d => d.id);
   const [photos, taches] = ids.length ? await Promise.all([
@@ -1544,27 +1578,29 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
   const urls = await urlsSignees(photos.map(p => p.apercu));
   zone.innerHTML = liste.map(d => { const c = cacheClients.find(k => k.id === d.client_id) || {}, [t, k] = ETATS_DEMANDE[d.etat] || [d.etat, "off"];
     const ph = photos.filter(p => p.demande_id === d.id), ta = taches.filter(x => x.demande_id === d.id), attente = enAttenteDevis(d);
-    return `<section class="card" data-dm="${d.id}" style="margin-bottom:10px">
-      <div class="row" style="justify-content:space-between"><span style="min-width:0">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-weight:700">${esc(c.nom || "?")} ›</button><br>` : ""}<b>${esc(d.titre)}</b></span>
-        <span class="row" style="gap:4px"><span class="tag">${TYPES_PRESTA[d.type_prestation]}</span><span class="tag off">${esc(d.activite)}</span><span class="tag ${k}">${esc(t)}</span>${c.etat === "prospect" ? `<span class="tag off">prospect</span>` : c.etat === "termine" ? `<span class="tag off">ancien client</span>` : ""}</span></div>
-      <p class="muted small" style="margin:4px 0 0">Demande du ${jourAn(d.cree_le)}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}</p>
-      ${d.besoin ? `<p style="white-space:pre-wrap;margin:6px 0 0">${esc(d.besoin)}</p>` : ""}
-      ${resumeEstimation(d)}
-      ${ph.length ? `<div class="row" style="gap:6px;margin-top:8px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
-      ${ta.length ? `<div style="margin-top:8px">${ta.map(x => `<div class="small">${x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}</div>`).join("")}</div>` : ""}
-      ${(d.mission.sans_compte || []).length ? `<p class="small" style="margin:4px 0 0">Sans compte dans l'appli : ${(d.mission.sans_compte).map(esc).join(", ")}</p>` : ""}
-      <div class="row" style="margin-top:10px">
-        ${attente ? (d.dossier_drive && c.dossier_drive ? boutonIA(d.estimation ? "✏️ Reprendre et modifier le projet" : "🤖 Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", d.etat === "a_estimer" || d.etat === "estimee" ? "btn primary" : "btn") : `<span class="tag warn">Dossier en préparation : Analyser et estimer dans 5 min environ</span>`) : ""}
-        ${d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">🧾 Devis VosFactures</a>` : ""}
-        ${d.devis_pdf_url ? `<a class="btn" href="${esc(d.devis_pdf_url)}" target="_blank" rel="noopener">📄 PDF du devis</a>` : ""}
-        ${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission</a>` : d.ordre_a_faire ? `<span class="tag warn">Ordre de mission en préparation (5 min)</span>` : ""}
-        ${d.dossier_url ? `<a class="btn" href="${esc(d.dossier_url)}" target="_blank" rel="noopener">📁 Sous-dossier</a>` : ""}
-        ${attente ? `<button class="btn" data-dm-photos>📷 Ajouter des photos</button><button class="btn" data-dm-presta>📲 Demander des photos à un intervenant</button><button class="btn flat" data-dm-mod>Modifier la demande</button>` : ""}
-        ${d.etat === "estimee" || d.etat === "devis_cree" ? `<button class="btn go" data-dm-accepter>✓ Le client accepte</button>` : ""}
-        ${attente ? `<button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
-        ${d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : ""}
-        ${d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 Prestation terminée</button>` : ""}
-      </div></section>`; }).join("") || (vide ? `<p class="muted">${esc(vide)}</p>` : "");
+    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.estimation ? "✏️ Reprendre le projet" : "🤖 Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", d.etat === "devis_cree" ? "btn" : "btn primary") : `<span class="tag warn">⏳ Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
+    const accepter = d.etat === "estimee" || d.etat === "devis_cree" ? `<button class="btn go" data-dm-accepter>✓ Le client accepte</button>` : "";
+    const principal = d.etat === "devis_cree" ? accepter : ia + accepter + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 Prestation terminée</button>` : "");
+    return `<details class="card dm" data-dm="${d.id}" ${dmOuvertes.has(d.id) ? "open" : ""}>
+      <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}</span></span>
+        ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
+      <div class="dm-plus">
+        <p class="muted small">Demande du ${jourAn(d.cree_le)}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}</p>
+        ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
+        ${resumeEstimation(d)}
+        ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
+        ${ta.length ? `<div>${ta.map(x => `<div class="small">${x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}</div>`).join("")}</div>` : ""}
+        ${(d.mission.sans_compte || []).length ? `<p class="small">Sans compte dans l'appli : ${(d.mission.sans_compte).map(esc).join(", ")}</p>` : ""}
+        <div class="row">
+          ${d.etat === "devis_cree" ? ia : ""}
+          ${d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">🧾 Devis VosFactures</a>` : ""}
+          ${d.devis_pdf_url ? `<a class="btn" href="${esc(d.devis_pdf_url)}" target="_blank" rel="noopener">📄 PDF du devis</a>` : ""}
+          ${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">📋 Ordre de mission</a>` : d.ordre_a_faire ? `<span class="tag warn">⏳ Ordre de mission (5 min)</span>` : ""}
+          ${d.dossier_url ? `<a class="btn" href="${esc(d.dossier_url)}" target="_blank" rel="noopener">📁 Sous-dossier</a>` : ""}
+          ${attente ? `<button class="btn" data-dm-photos>📷 Ajouter des photos</button><button class="btn" data-dm-presta>📲 Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button><button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
+        </div>
+      </div></details>`; }).join("") || (vide ? `<p class="muted">${esc(vide)}</p>` : "");
+  zone.querySelectorAll("details[data-dm]").forEach(x => { x.ontoggle = () => { if (x.open) dmOuvertes.add(x.dataset.dm); else dmOuvertes.delete(x.dataset.dm); }; });
   zone.onclick = async e => {
     const b = e.target.closest("button"), bloc = b && b.closest("[data-dm]"); if (!bloc) return;
     const d = liste.find(x => x.id === bloc.dataset.dm), c = cacheClients.find(k => k.id === d.client_id);
@@ -1581,19 +1617,17 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     if (b.hasAttribute("data-dm-reprendre")) { await maj(sb.from("demandes_devis").update({ etat: d.devis_url ? "devis_cree" : d.estimation ? "estimee" : "a_estimer" }).eq("id", d.id)); await chargerBase(); toast("Demande reprise"); return re(); }
   };
 }
-const champsDemande = (d, c) => `${c === null ? `<label class="f">Client<select name="client_id" required><option value="">— choisir —</option>${optionsClients(cacheClients.filter(peutAvoirDevis), null)}</select></label>
-      <p class="muted small" style="margin:0">Un ancien client ou un prospect se retrouve ici : son profil est repris. Sinon, crée-le d'abord avec « ➕ Nouveau client ».</p>` : ""}
-    <label class="f">Quelle prestation ?<input type="text" name="titre" required maxlength="200" value="${esc(d.titre || "")}" placeholder="Ex. taille de la haie, grand ménage de printemps…"></label>
-    <div class="deux"><label class="f">Type<select name="type_prestation"><option value="one_shot" ${d.type_prestation !== "regulier" ? "selected" : ""}>One shot : une seule fois</option><option value="regulier" ${d.type_prestation === "regulier" ? "selected" : ""}>Régulier : revient dans le temps</option></select></label>
+const champsDemande = (d, c) => `${c === null ? `<label class="f"><span>Client ${aide("Un ancien client ou un prospect se retrouve ici : son profil est repris. Sinon, crée-le d'abord avec « ➕ Nouveau client ».")}</span><select name="client_id" required><option value="">— choisir —</option>${optionsClients(cacheClients.filter(peutAvoirDevis), null)}</select></label>` : ""}
+    <label class="f">Prestation<input type="text" name="titre" required maxlength="200" value="${esc(d.titre || "")}" placeholder="Ex. taille de la haie, grand ménage de printemps…"></label>
+    <div class="deux"><label class="f">Type<select name="type_prestation"><option value="one_shot" ${d.type_prestation !== "regulier" ? "selected" : ""}>One shot</option><option value="regulier" ${d.type_prestation === "regulier" ? "selected" : ""}>Régulier</option></select></label>
       <label class="f">Activité<select name="activite">${ACTIVITES_DEVIS.map(a => `<option ${d.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
-    <label class="f">Ce que le client souhaite, ce que l'IA doit regarder sur les photos<textarea name="besoin" maxlength="4000" style="min-height:110px" placeholder="Ex. haie de laurier de 15 m à tailler à 1,80 m, évacuer les déchets. Regarder l'accès et l'état du mur.">${esc(d.besoin || "")}</textarea></label>`;
+    <label class="f"><span>Besoin ${aide("Ce que le client souhaite, et ce que l'IA doit regarder sur les photos.")}</span><textarea name="besoin" maxlength="4000" style="min-height:80px" placeholder="Ex. haie de laurier de 15 m à tailler à 1,80 m, évacuer les déchets. Regarder l'accès et l'état du mur.">${esc(d.besoin || "")}</textarea></label>`;
 const lireDemande = f => ({ titre: String(f.get("titre")).trim(), type_prestation: f.get("type_prestation"), activite: f.get("activite"), besoin: String(f.get("besoin")).trim() || null });
 function nouvelleDemande(c, re) {
   const activites = c ? activitesClient(c) : [], activite = ACTIVITES_DEVIS.find(a => activites.includes(a)) || "Jardinage";
-  fenetre(`<h2 style="margin:0">Demande de devis${c ? " · " + esc(c.nom) : ""}</h2>
+  fenetre(`<h2 style="margin:0">Demande de devis${c ? " · " + esc(c.nom) : ""} ${aide(`Un sous-dossier est créé dans CLIENTS OIKOS › ${c ? c.nom.toUpperCase() : "NOM"} › Devis. L'analyse devient possible quand il est prêt, dans les 5 minutes.`)}</h2>
     <form id="fdm" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${champsDemande({ activite }, c)}
-      <label class="f">Photos (facultatif, tu peux en ajouter ensuite)<input type="file" name="photos" accept="image/*" multiple></label>
-      <p class="muted small" style="margin:0">Un sous-dossier est créé dans CLIENTS OIKOS › ${c ? esc(c.nom.toUpperCase()) : "NOM"} › Devis. L'analyse devient possible quand il est prêt, dans les 5 minutes.</p>
+      <label class="f">Photos (facultatif)<input type="file" name="photos" accept="image/*" multiple></label>
       <div class="row"><button class="btn primary" type="submit">Créer la demande</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
     el.querySelector("#fdm").onsubmit = async e => {
       e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), lignes = lireDemande(f);
@@ -1639,12 +1673,11 @@ function demanderPhotos(d, c, re) {
   const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif);
   if (!gens.length) return toast("Aucun intervenant avec un compte dans l'appli");
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
-  fenetre(`<h2 style="margin:0">Demander des photos · ${esc(d.titre)}</h2>
+  fenetre(`<h2 style="margin:0">Demander des photos · ${esc(d.titre)} ${aide("Il reçoit une tâche dans son appli, avec l'accès à ce client. Il y ajoute ses photos, qui arrivent dans cette demande en quelques minutes.")}</h2>
     <form id="fph" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
       <label class="f">À qui ?<select name="qui" required><option value="">— choisir —</option>${gens.map(p => `<option value="${p.id}">${esc(nomPers(p))}</option>`).join("")}</select></label>
       <label class="f">À faire pour le (facultatif)<input type="date" name="echeance"></label>
-      <label class="f">Ce qu'il doit photographier<textarea name="consigne" maxlength="2000" style="min-height:110px">${esc(`Client : ${c.nom}${c.adresse ? "\nAdresse : " + c.adresse : ""}\n\n${d.besoin || d.titre}\n\nPhotographie l'ensemble, puis les détails utiles pour estimer le travail.`)}</textarea></label>
-      <p class="muted small" style="margin:0">Il reçoit une tâche dans son appli, avec l'accès à ce client. Il y ajoute ses photos, qui arrivent dans cette demande en quelques minutes.</p>
+      <label class="f">Consigne<textarea name="consigne" maxlength="2000" style="min-height:110px">${esc(`Client : ${c.nom}${c.adresse ? "\nAdresse : " + c.adresse : ""}\n\n${d.besoin || d.titre}\n\nPhotographie l'ensemble, puis les détails utiles pour estimer le travail.`)}</textarea></label>
       <div class="row"><button class="btn primary" type="submit">📲 Envoyer la demande</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
     el.querySelector("#fph").onsubmit = async e => {
       e.preventDefault(); const f = new FormData(e.target), qui = f.get("qui"), bouton = e.target.querySelector("[type=submit]");
@@ -1679,15 +1712,18 @@ function accepterDemande(d, c, re) {
   // un prestataire noté à la main (ex. d'après l'Excel) qui a maintenant un compte : on le reconnaît par son nom
   const mots = n => norm(n).split(" ").sort().join(" "), aCompte = n => gens.some(p => mots(nomPers(p)) === mots(n));
   const dejaLa = p => deja.some(a => a.intervenante_id === p.id || (a.nom_libre && mots(a.nom_libre) === mots(nomPers(p))));
-  fenetre(`<h2 style="margin:0">Le client accepte · ${esc(d.titre)}</h2>
+  const infos = [c.etat === "prospect" ? "Le prospect devient client." : c.etat === "termine" ? "Cet ancien client revient : son profil est repris." : "Le client ne bouge pas de sa liste.",
+    "La prestation reste dans « Prestations en cours » jusqu'à ce que tu la finalises." + (d.type_prestation === "regulier" ? " Les tâches passent aussi dans sa feuille de route." : ""),
+    d.devis_url ? "" : "Aucun devis créé ici : ce n'est pas bloquant si tu l'as fait à la main.",
+    (d.estimation || {}).le ? "Projet enregistré le " + new Date(d.estimation.le).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) + " : si tu viens de le modifier, attends 5 minutes qu'il arrive ici, sinon l'ordre de mission reprendra les anciennes lignes." : ""].filter(Boolean).join("\n");
+  fenetre(`<h2 style="margin:0">Le client accepte · ${esc(d.titre)} ${aide(infos)}</h2>
     <form id="fac" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">Qui s'en charge ? Une tâche et le dossier partent dans son appli</legend>
+      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">Qui s'en charge ? ${aide("Une tâche et le dossier partent dans son appli.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
-      <label class="f">Sans compte dans l'appli (noms séparés par une virgule : ils auront le PDF à leur transmettre)<input type="text" name="sans_compte" maxlength="300" value="${esc(deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre).join(", "))}"></label>
+      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc(deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre).join(", "))}"></label>
       <label class="f">À faire pour le (facultatif)<input type="date" name="echeance"></label>
-      <p class="muted small" style="margin:0">${d.devis_url ? "" : "Aucun devis créé ici : ce n'est pas bloquant si tu l'as fait à la main. "}${(d.estimation || {}).le ? "Projet enregistré le " + new Date(d.estimation.le).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) + " : si tu viens de le modifier, attends 5 minutes qu'il arrive ici, sinon ces lignes seront les anciennes." : ""}</p>
-      <label class="f">Ordre de mission (sans prix ni gain, modifiable)<textarea name="ordre" maxlength="6000" style="min-height:220px">${esc(ordreParDefaut(d, c))}</textarea></label>
-      <p class="muted small" style="margin:0">${c.etat === "prospect" ? "Le prospect devient client. " : c.etat === "termine" ? "Cet ancien client revient : son profil est repris. " : "Le client ne bouge pas de sa liste. "}La prestation reste dans « Prestations en cours » jusqu'à ce que tu la finalises.${d.type_prestation === "regulier" ? " Les tâches passent aussi dans sa feuille de route." : ""}</p>
+      <details><summary class="small" style="cursor:pointer;font-weight:700">📋 Ordre de mission (sans prix ni gain, modifiable)</summary>
+        <textarea name="ordre" aria-label="Ordre de mission" maxlength="6000" style="min-height:220px;margin-top:6px">${esc(ordreParDefaut(d, c))}</textarea></details>
       <div class="row"><button class="btn primary" type="submit">✓ Transmettre la mission</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
     el.querySelector("#fac").onsubmit = async e => {
       e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]");
