@@ -165,8 +165,8 @@ a.lien.muted{color:var(--muted)}
 .info dd{margin:0;white-space:pre-wrap}
 /* barre d'onglets */
 .nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
-.nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
-.nav button{border:0;background:none;padding:9px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+.nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
+.nav button{border:0;background:none;padding:9px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer}
 .nav button .ic{font-size:24px;line-height:1.1}
 .nav button[aria-current="page"]{color:var(--accent)}
 /* clavier du code */
@@ -241,8 +241,8 @@ a.lien.muted{color:var(--muted)}
 /* Effets dans l'appli : jamais à chaque rafraîchissement, seulement quand on change d'écran */
 .nav div{position:relative}
 .nav button{position:relative;overflow:hidden}
-.nav-ind{position:absolute;top:6px;left:0;width:20%;height:32px;display:flex;justify-content:center;pointer-events:none;transform:translateX(calc(var(--p)*100%));transition:transform .4s cubic-bezier(.3,1.35,.5,1),opacity .2s}
-.nav-ind::before{content:"";width:56px;border-radius:999px;background:var(--accent-soft)}
+.nav-ind{position:absolute;top:6px;left:0;width:16.667%;height:32px;display:flex;justify-content:center;pointer-events:none;transform:translateX(calc(var(--p)*100%));transition:transform .4s cubic-bezier(.3,1.35,.5,1),opacity .2s}
+.nav-ind::before{content:"";width:48px;border-radius:999px;background:var(--accent-soft)}
 .nav-ind.cache{opacity:0}
 .nav.change button[aria-current="page"] .ic{animation:n-pop .5s cubic-bezier(.3,1.6,.5,1)}
 #contenu{overflow-x:clip}
@@ -324,6 +324,16 @@ a.lien.muted{color:var(--muted)}
 .fdr-tache details{font-size:13px;margin-top:2px}
 .fdr-tache summary{cursor:pointer;color:var(--accent);font-weight:700}
 .fdr-note{font-size:12px;color:var(--muted);margin:0}
+.nav-badge{position:absolute;top:3px;left:calc(50% + 6px);min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#D0342C;color:#fff;font-size:12px;line-height:19px;font-weight:800;z-index:1}
+.alerte-mission{display:block;width:100%;text-align:left;border:0;border-radius:14px;background:#D0342C;color:#fff;padding:14px 16px;margin-bottom:14px;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgb(208 52 44 / .35)}
+.alerte-mission small{display:block;font-size:13px;font-weight:400;margin-top:2px}
+.mission-ligne{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;color:var(--ink)}
+.mission-ligne.attend{border-left-color:#D0342C}
+.mission-ligne b{font-size:16px}
+.mission-ligne .droite{text-align:right;white-space:nowrap}
+.mission-ligne .paie{display:block;font-size:18px;font-weight:800;color:#2C6B29}
+.mission-ligne small{color:var(--muted);font-size:13px}
+.mission-ligne .suite{grid-column:1 / -1;color:var(--accent);font-size:13px;font-weight:700}
 </style>
 </head>
 <body>
@@ -665,7 +675,7 @@ function feuille(html, brancher, quandFerme) {
 const choixClient = (sel, nom = "client") => `<label class="f">Client<select name="${nom}" required>${clients.map(c => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>`;
 
 /* ===================== Accueil et onglets ===================== */
-const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["agenda", "📅", "Agenda"], ["clients", "👥", "Clients"], ["mois", "📊", "Reporting"], ["moi", "👤", "Moi"]];
+const ONGLETS = [["jour", "🏠", "Aujourd'hui"], ["missions", "📲", "Missions"], ["agenda", "📅", "Agenda"], ["clients", "👥", "Clients"], ["mois", "📊", "Reporting"], ["moi", "👤", "Moi"]];
 let ongletAffiche = null, sensSuivant = null;
 const rangOnglet = k => ONGLETS.findIndex(x => x[0] === k);
 async function accueil(o) {
@@ -681,12 +691,13 @@ async function accueil(o) {
   const ind = app.querySelector(".nav-ind"); void ind.offsetWidth; if (apres >= 0) ind.style.setProperty("--p", apres);
   try {
     if (!(await chargerMoi())) return;
+    majAlerteMissions();
     let c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,eleves,acces,cle,consignes,temps_semaine_min,meteo").order("nom");
     if (c.error && /eleves/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,temps_semaine_min,meteo").order("nom");   // base pas encore à jour (SQL 20)
     if (c.error && /temps_semaine_min|meteo/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes").order("nom");   // base pas encore à jour (SQL 14)
     if (c.error) throw c.error;
     clients = c.data;
-    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
+    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
     if (animer) entree(sens);
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
@@ -739,7 +750,8 @@ async function vueJour() {
   document.getElementById("voir-agenda").onclick = () => accueil("agenda");
   chargerTaches().then(taches => {   // sa liste À faire, sans ralentir l'écran
     const b = document.getElementById("bloc-taches"); if (!b) return;
-    const afaire = taches.filter(t => !t.fait_le), montrees = afaire.slice(0, 5);
+    const afaire = taches.filter(t => !t.fait_le), montrees = afaire.slice(0, 5), nbProp = taches.filter(propositionOuverte).length;
+    if (nbProp) { document.getElementById("contenu").insertAdjacentHTML("afterbegin", `<button class="alerte-mission" id="alerte-mission">📲 ${nbProp > 1 ? nbProp + " nouvelles missions proposées" : "Nouvelle mission proposée"}<small>Touche pour voir la paie, les heures et le dossier ›</small></button>`); document.getElementById("alerte-mission").onclick = () => accueil("missions"); }
     b.innerHTML = `<div class="row" style="justify-content:space-between;margin:22px 0 10px"><h2 style="margin:0">À faire${afaire.length ? " (" + afaire.length + ")" : ""}</h2>
         <button class="btn flat" id="ajout-tache" style="min-height:36px">➕ Ajouter</button></div>
       <div class="card">${montrees.length ? montrees.map(ligneTache).join("") : `<p class="muted">Rien à faire pour l'instant.</p>`}
@@ -961,6 +973,35 @@ function fdrHtml(f) {
     ${f.consignes ? `<div class="fdr-mot"><b>Consignes du client</b><br>${esc(f.consignes)}</div>` : ""}
     <p class="fdr-note">${f.definitif ? "Temps et paie estimés : tu déclares tes heures réelles." : "Temps et paie estimés. Le téléphone et les consignes du client arrivent avec l'ordre de mission."}</p>
   </div>`;
+}
+/* Ses propositions : la paie, les heures et la ville d'un coup d'œil ; le dossier complet en touchant la ligne */
+const propositionOuverte = t => estProposition(t) && !t.fait_le && !(t.echeance && t.echeance < auj10());
+async function majAlerteMissions() {
+  const { data } = await sb.from("taches").select("id,texte,demande_id,fait_le,echeance").eq("intervenante_id", moi.id).is("fait_le", null).like("texte", "Proposition*");
+  const n = (data || []).filter(propositionOuverte).length, b = document.querySelector('[data-onglet="missions"]');
+  if (b) { const v = b.querySelector(".nav-badge"); if (v) v.remove(); if (n) b.insertAdjacentHTML("beforeend", `<span class="nav-badge">${n}</span>`); }
+  try { if ("setAppBadge" in navigator) n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } catch (x) {}
+}
+function ficheDeLaProposition(docs, id) {
+  const rang = d => parseInt(String(d.nom).replace(/\D/g, ""), 10) || 0;
+  try { return JSON.parse(docs.filter(d => d.tache_id === id && /^Feuille de route/.test(d.nom)).sort((a, b) => rang(a) - rang(b)).map(d => d.legende || "").join("")); } catch (x) { return null; }
+}
+const villeDe = a => { const m = String(a || "").match(/\d{5}\s+(.+)$/); return m ? m[1].trim() : ""; };
+async function vueMissions() {
+  const { data, error } = await sb.from("taches").select("*").eq("intervenante_id", moi.id).like("texte", "Proposition*").order("cree_le", { ascending: false }).limit(40);
+  if (error) throw error;
+  const liste = data.filter(t => estProposition(t) && !(t.echeance && !t.fait_le && t.echeance < auj10()));
+  const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
+  if (lus.error) throw lus.error;
+  const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = villeDe(f.adresse);
+    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>📍 ${esc(ville || "Ville à voir")}${t.echeance ? " · 📅 avant le " + t.echeance.split("-").reverse().join("/") : ""}</small>${t.fait_le ? `<br><small>${esc(t.commentaire || "Terminé")}</small>` : ""}</span>
+      <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
+  const ouvertes = liste.filter(t => !t.fait_le), repondues = liste.filter(t => t.fait_le);
+  const el = document.getElementById("contenu");
+  el.innerHTML = `<h1>Mes propositions</h1>
+    <h2 style="margin:14px 0 8px">À répondre${ouvertes.length ? " (" + ouvertes.length + ")" : ""}</h2>${ouvertes.map(ligne).join("") || `<p class="muted">Aucune proposition pour l'instant.</p>`}
+    ${repondues.length ? `<h2 style="margin:18px 0 8px">Déjà répondu</h2>${repondues.map(ligne).join("")}` : ""}`;
+  el.onclick = e => { const b = e.target.closest("[data-id]"); if (b) ficheProposition(liste.find(t => t.id === b.dataset.id), () => accueil("missions")); };
 }
 async function ficheProposition(t, apres) {
   const { data, error } = await sb.from("tache_documents").select("nom,legende").eq("tache_id", t.id);
@@ -1719,7 +1760,7 @@ function feuillePassage(id) {
     <dl class="info card"><dt>${p.creneau_connu !== false ? "Horaires" : "Durée"}</dt><dd>${p.creneau_connu !== false ? heure(p.arrivee) + " → " + (p.depart ? heure(p.depart) : "?") + " · " : ""}<b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : "à compléter"}</b></dd>
       ${p.note ? `<dt>Remarque</dt><dd>${esc(p.note)}</dd>` : ""}
       <dt>Rapport d'activité</dt><dd>${p.exporte_le ? "✓ écrit dans ta feuille d'heures" : "en attente (quelques minutes)"}</dd></dl>
-    ${p.verrouille ? `<p class="muted small">Ce passage est facturé : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : `<button class="btn" id="corr"><span class="ic">✏️</span>Corriger</button>`}
+    ${p.verrouille ? `<p class="muted small">Ce passage est validé par OIKOS : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : `<button class="btn" id="corr"><span class="ic">✏️</span>Corriger</button>`}
     ${blocNotes("Notes sur ce passage", "Une remarque pour OIKOS sur ce passage")}
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
     if (el.querySelector("#corr")) el.querySelector("#corr").onclick = () => { fermer(); corrigerPointage(id); };

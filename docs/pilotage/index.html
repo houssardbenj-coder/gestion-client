@@ -1629,7 +1629,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "🧾 Faire le devis" : d.estimation ? "✏️ Reprendre le projet" : "🤖 Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">⏳ Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
     const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && !accord && !props.some(x => reponseProp(x) === "attente") && !devisSigne(d) ? `<button class="btn primary" data-dm-proposer>📲 ${props.length ? "Proposer à un autre presta" : "Transmettre au presta"}</button>` : "";
     const voirFeuille = ((d.estimation || {}).taches || []).length ? `<button class="btn" data-dm-feuille>👁 Voir la feuille de route</button>` : "";
-    const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>📋 Envoyer l'ordre de mission</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 Prestation terminée</button>` : "");
+    const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>📋 Envoyer l'ordre de mission</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 ${d.type_prestation === "one_shot" ? "Valider la mission" : "Prestation terminée"}</button>` : "");
     return `<details class="card dm" data-dm="${d.id}" ${dmOuvertes.has(d.id) ? "open" : ""}>
       <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}${d.echeance ? " · 📅 " + d.echeance.split("-").reverse().join("/") : ""}</span></span>
         ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
@@ -1905,11 +1905,38 @@ async function terminerDemande(d, c, taches, re) {
   const fini = d.type_prestation === "one_shot", attributions = (d.mission || {}).attributions || [];
   const autresPresta = cacheAttrib.some(a => a.client_id === c.id && prestaEnCours(a) && !attributions.includes(a.id));
   const archiver = d.client_a_archiver && fini && !autres && !autresPresta;
-  if (!confirm((restent ? restent + " tâche(s) de cette mission ne sont pas cochées. " : "") + "Finaliser « " + d.titre + " » ?" + (archiver ? " " + c.nom + " passera dans les anciens clients ; son profil reste dans la base et se reprendra s'il revient." : ""))) return;
+  const message = (restent ? restent + " tâche(s) de cette mission ne sont pas cochées. " : "") + "Finaliser « " + d.titre + " » ?" + (archiver ? " " + c.nom + " passera dans les anciens clients ; son profil reste dans la base et se reprendra s'il revient." : "");
+  const finir = async () => {
   if (fini && attributions.length) await maj(sb.from("attributions").update({ fin: ymd(new Date()) }).in("id", attributions));
   if (archiver) await maj(sb.from("clients").update({ etat: "termine", archive_auto: false }).eq("id", c.id));   // archive_auto faux : une facture récente ne le remet pas en cours tout seul
   await maj(sb.from("demandes_devis").update({ etat: "finalisee", finalise_le: new Date().toISOString() }).eq("id", d.id));
   await chargerBase(); toast(archiver ? "Prestation terminée : client rangé dans les anciens" : "Prestation terminée"); re();
+  };
+  if (fini) return validerMission(d, c, restent, finir);
+  if (confirm(message)) await finir();
+}
+/* One shot terminé : tu confirmes les heures, elles partent dans son reporting et il ne peut plus les modifier */
+async function validerMission(d, c, restent, finir) {
+  const m = d.mission || {}, qui = m.intervenants || [], sans = m.sans_compte || [], prevues = (m.feuille || {}).minutes || ((d.estimation || {}).taches || []).reduce((s, t) => s + (+(t && t.duree_min) || 0), 0);
+  const faits = qui.length ? await q(sb.from("pointages").select("intervenante_id,arrivee,depart").eq("client_id", c.id).in("intervenante_id", qui).gte("arrivee", d.accepte_le || d.cree_le).not("depart", "is", null)) : [];
+  const deja = id => faits.filter(p => p.intervenante_id === id).reduce((s, p) => s + (new Date(p.depart) - new Date(p.arrivee)) / 60000, 0);
+  const enHeures = min => String(Math.round(min / 60 * 100) / 100).replace(".", ",");
+  fenetre(`<h2 style="margin:0">Valider la mission · ${esc(d.titre)}</h2>
+    <p class="muted small" style="margin:6px 0">${esc(c.nom)}${restent ? " · ⚠ " + restent + " tâche(s) pas cochée(s)" : ""}</p>
+    <form id="fvm" style="display:flex;flex-direction:column;gap:10px">
+      <label class="f">Jour de la prestation<input type="date" name="jour" value="${ymd(new Date())}" max="${ymd(new Date())}" required></label>
+      ${qui.map(id => `<label class="f"><span><b>${esc(nomInterv(id))}</b> : heures à confirmer ${deja(id) > 0 ? `<span class="tag warn">il a déjà déclaré ${enHeures(deja(id))} h</span>` : ""}</span><input type="text" inputmode="decimal" name="h-${id}" value="${enHeures(Math.max(0, prevues - deja(id)))}"></label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte : rien à mettre dans un reporting.</p>`}
+      ${sans.length ? `<p class="muted small">Sans compte, à régler à la main : ${sans.map(esc).join(", ")}</p>` : ""}
+      <p class="muted small">Ces heures partent dans son reporting et sa feuille d'heures. Il ne pourra pas les modifier. 0 = rien à ajouter.</p>
+      <div class="row"><button class="btn go" type="submit">✓ Confirmer les heures et valider</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fvm").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), lignes = [];
+      for (const id of qui) { const h = parseFloat(String(f.get("h-" + id)).replace(",", ".")); if (!(h >= 0)) return toast("Indique les heures de " + nomInterv(id)); if (h > 0) lignes.push({ ...versPassage({ client_id: c.id, jour: f.get("jour"), minutes: Math.round(h * 60), note: ("Mission validée par OIKOS : " + d.titre).slice(0, 500) }, id), verrouille: true }); }
+      bouton.disabled = true;
+      try { if (lignes.length) await q(sb.from("pointages").insert(lignes)); await finir(); fermer(); }
+      catch (x) { bouton.disabled = false; souci(x); }
+    };
+  });
 }
 /* Qui intervient chez ce client, et tous ceux qui y sont passés */
 async function dosPresta(c, corps, re) {
