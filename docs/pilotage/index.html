@@ -1638,7 +1638,8 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
         ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
         ${resumeEstimation(d)}
         ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
-        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: "⏳", ok: "✅", refus: "❌", close: "▫️" }[reponseProp(x)] : x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${estProposition(x) && x.commentaire ? " · " + esc(x.commentaire) : ""}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}</div>`).join("")}</div>` : ""}
+        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: "⏳", ok: "✅", refus: "❌", close: "▫️" }[reponseProp(x)] : x.fait_le ? "✅" : "⬜"} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${estProposition(x) && x.commentaire ? " · " + esc(x.commentaire) : ""}${x.echeance ? ` <span class="muted">· pour le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}${attente && estProposition(x) && ["attente", "ok"].includes(reponseProp(x)) ? ` <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-annuler="${x.id}">Annuler</button>` : ""}</div>`).join("")}</div>` : ""}
+        ${attente ? ((d.mission || {}).presta_accord || []).map(n => `<div class="small">✅ ${esc(n)} : d'accord, sans compte <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-accord="${esc(n)}">Annuler</button></div>`).join("") : ""}
         ${(d.mission.sans_compte || []).length ? `<p class="small">Sans compte dans l'appli : ${(d.mission.sans_compte).map(esc).join(", ")}</p>` : ""}
         <div class="row">
           ${voirFeuille}
@@ -1653,12 +1654,19 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
   zone.querySelectorAll("details[data-dm]").forEach(x => { x.ontoggle = () => { if (x.open) dmOuvertes.add(x.dataset.dm); else dmOuvertes.delete(x.dataset.dm); }; });
   zone.onclick = async e => {
     const b = e.target.closest("button"), bloc = b && b.closest("[data-dm]"); if (!bloc) return;
-    const d = liste.find(x => x.id === bloc.dataset.dm), c = cacheClients.find(k => k.id === d.client_id);
+    const d = liste.find(x => x.id === bloc.dataset.dm), c = cacheClients.find(k => k.id === d.client_id), ta0 = id => taches.find(x => x.id === id);
     if (b.dataset.ia) return choisirCompteIA(b.dataset.ia, b.dataset.iaNom);
     if (b.hasAttribute("data-dm-client")) return ficheClient(d.client_id, "devis");
     if (b.hasAttribute("data-dm-mod")) return modifierDemande(d, c, re);
     if (b.hasAttribute("data-dm-photos")) return photosDemande(d, c, re);
     if (b.hasAttribute("data-dm-presta")) return demanderPhotos(d, c, re);
+    if (b.dataset.dmAnnuler) { const t = ta0(b.dataset.dmAnnuler);
+      if (!confirm("Annuler cette proposition" + (t ? " pour " + nomInterv(t.intervenante_id) : "") + " ? Elle se ferme dans son appli, et tu pourras la proposer à quelqu'un d'autre.")) return;
+      await maj(sb.from("taches").update({ fait_le: new Date().toISOString(), commentaire: "Proposition annulée par OIKOS" }).eq("id", b.dataset.dmAnnuler));
+      await chargerBase(); toast("Proposition annulée"); return re(); }
+    if (b.dataset.dmAccord) { if (!confirm("Annuler l'accord de " + b.dataset.dmAccord + " ?")) return;
+      await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_accord: (d.mission.presta_accord || []).filter(n => n !== b.dataset.dmAccord) } }).eq("id", d.id));
+      await chargerBase(); toast("Accord annulé"); return re(); }
     if (b.hasAttribute("data-dm-proposer")) return proposerPresta(d, c, re);
     if (b.hasAttribute("data-dm-feuille")) return voirFeuilleRoute(d, c);
     if (b.hasAttribute("data-dm-accepter")) return accepterDemande(d, c, re);
