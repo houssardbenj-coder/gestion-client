@@ -1367,11 +1367,13 @@ const jourAn = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", mo
 const tagAnalyse = a => { const [t, k] = ETATS_ANALYSE[a.etat] || [a.etat, "off"]; return `<span class="tag ${k}">${esc(t)}</span>`; };
 const lienDocAnalyse = a => a.doc_a_refaire && a.etat !== "abandonnee" ? `<span class="tag warn">document en préparation (5 min)</span>`
   : a.doc_url ? `<a class="btn" href="${esc(a.doc_url)}" target="_blank" rel="noopener">📄 Document client</a>` : "";
+/* Se supprime seulement ce que le client n'a jamais reçu : pas proposée, pas de mail parti ou en partance */
+const analyseJetable = a => ["brouillon", "abandonnee"].includes(a.etat) && !a.propose_le && [null, undefined, "erreur"].includes(a.mail_etat);
 async function dosAnalyses(c, corps, re) {
   const liste = await q(sb.from("client_analyses").select("*").eq("client_id", c.id).order("fait_le", { ascending: false }));
   const ouverte = liste.find(a => a.etat !== "abandonnee");
   const tab = v => (Array.isArray(v) ? v : []).filter(Boolean);
-  corps.innerHTML = liste.map(a => { const r = a.rapport || {}, attente = ["a_envoyer", "en_cours"].includes(a.mail_etat), modif = a.etat === "brouillon" && !attente && !a.demande_id; return `<details class="card" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
+  corps.innerHTML = liste.map(a => { const r = a.rapport || {}, attente = ["a_envoyer", "en_cours"].includes(a.mail_etat), modif = a.etat === "brouillon" && !attente && !a.demande_id, jetable = analyseJetable(a); return `<details class="card" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
       <summary class="row" style="cursor:pointer;justify-content:space-between"><b>${a.type === "menage" ? "🧽 Ménage" : "🌿 Jardin"} · ${jourAn(a.fait_le)}</b><span class="row">${tagAnalyse(a)}${lienDocAnalyse(a)}</span></summary>
       <div class="row" style="margin-top:10px">
         ${a.demande_id ? `<span class="muted small">Faite pour une demande de devis : la suite se passe dans l'onglet Devis.</span>` : ""}
@@ -1382,7 +1384,7 @@ async function dosAnalyses(c, corps, re) {
         ${a.mail_etat === "envoye" && a.mail_envoye_le && a.etat !== "brouillon" ? `<span class="muted small">Mail envoyé le ${jourAn(a.mail_envoye_le)} à ${esc(a.mail_a)}</span>` : ""}
         ${a.etat === "proposee" ? `<button class="btn primary" data-accepter>✓ Le client accepte : créer sa routine</button><button class="btn" data-etat="brouillon">Revenir au brouillon pour modifier</button>` : ""}
         ${modif || a.etat === "proposee" ? `<button class="btn flat stop" data-etat="abandonnee">Abandonner</button>` : ""}
-
+        ${jetable ? `<button class="btn flat stop" data-supprimer>🗑 Supprimer</button>` : ""}
         ${a.etat === "abandonnee" ? `<button class="btn" data-etat="brouillon">Reprendre</button>` : ""}
         ${a.etat === "acceptee" && a.accepte_le ? `<span class="muted small">Acceptée le ${jourAn(a.accepte_le)} : la routine se règle dans l'onglet Feuille de route.</span>` : ""}
         ${a.etat === "proposee" && a.propose_le ? `<span class="muted small">Proposée le ${jourAn(a.propose_le)}</span>` : ""}</div>
@@ -1413,6 +1415,12 @@ async function dosAnalyses(c, corps, re) {
       const maintenant = new Date().toISOString();
       await maj(sb.from("client_analyses").update({ etat: b.dataset.etat, ...(b.dataset.etat === "proposee" ? { propose_le: maintenant } : {}), ...(b.dataset.etat === "brouillon" ? { mail_etat: null, mail_erreur: null, ...(!a.doc_url ? { doc_a_refaire: true } : {}) } : {}) }).eq("id", a.id));
       toast("Analyse : " + ETATS_ANALYSE[b.dataset.etat][0].toLowerCase()); return re();
+    }
+    if (b.hasAttribute("data-supprimer")) {
+      if (!confirm("Supprimer définitivement l'analyse du " + jourAn(a.fait_le) + " de ce dossier ?" + (a.doc_drive_id ? " Son document client part à la corbeille du Drive." : ""))) return;
+      const { data, error } = await sb.from("client_analyses").delete().eq("id", a.id).in("etat", ["brouillon", "abandonnee"]).is("propose_le", null).or("mail_etat.is.null,mail_etat.eq.erreur").select("id");   // revérifié ici : un mail a pu partir entre-temps
+      if (error) return souci(error);
+      toast(data.length ? "Analyse supprimée" : "Pas supprimée : elle vient d'être proposée au client"); return re();
     }
     if (b.hasAttribute("data-mail")) return envoyerAnalyseMail(c, a, re);
     if (b.hasAttribute("data-mail-annule")) { await maj(sb.from("client_analyses").update({ mail_etat: null }).eq("id", a.id).eq("mail_etat", "a_envoyer")); toast("Envoi annulé, sauf si le mail venait de partir"); return re(); }
