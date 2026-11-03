@@ -87,6 +87,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .fdr-chiffre span{font-size:12px;color:var(--muted)}
 .fdr-chiffre.paie{background:#DFF0DC}
 .fdr-chiffre.paie b{color:#2C6B29}
+.fdr-delai{background:#FBE3DE;color:#8E2F1C;border-radius:12px;padding:10px 12px;font-size:15px;font-weight:700}
 .fdr-mot{background:var(--warn-soft);border-radius:12px;padding:10px 12px;font-size:14px;white-space:pre-wrap}
 .fdr-photos{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
 .fdr-photos img{height:110px;width:146px;object-fit:cover;border-radius:10px;background:var(--sunk);display:block}
@@ -1770,6 +1771,7 @@ function fdrHtml(f) {
     <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${esc(f.client)}${f.activite ? " · " + esc(f.activite) : ""}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(f.adresse)}</a>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">📞 ${esc(f.telephone)}</a>` : ""}</div>
     <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
       <div class="fdr-chiffre paie"><b>💶 ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
+    ${f.echeance ? `<div class="fdr-delai">📅 À terminer avant le ${new Date(f.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.note ? `<div class="fdr-mot">💬 ${esc(f.note)}</div>` : ""}
     ${(f.photos || []).length ? `<div><h4>Sur place</h4><div class="fdr-photos">${f.photos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener"><img src="${esc(x.url)}" alt="${esc(x.legende || "Photo du lieu")}" loading="lazy"></a>`).join("")}</div></div>` : ""}
     ${(f.ramener || []).length ? `<div><h4>🎒 À ramener</h4><div class="fdr-puces ramener">${f.ramener.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>` : ""}
