@@ -1041,7 +1041,8 @@ const villeDe = a => { const m = String(a || "").match(/\d{5}\s+(.+)$/); return 
 async function vueMissions() {
   const { data, error } = await sb.from("taches").select("*").eq("intervenante_id", moi.id).like("texte", "Proposition*").order("cree_le", { ascending: false }).limit(40);
   if (error) throw error;
-  const liste = data.filter(t => estProposition(t) && !(t.echeance && !t.fait_le && t.echeance < auj10()));
+  // annulée, déjà prise, expirée ou refusée : la mention s'en va 2 jours après
+  const liste = data.filter(t => estProposition(t) && !(t.echeance && !t.fait_le && t.echeance < auj10()) && !(t.fait_le && !/^Je prends/.test(t.commentaire || "") && Date.now() - new Date(t.fait_le) > 2 * 864e5));
   const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
   if (lus.error) throw lus.error;
   const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = f.secteur || villeDe(f.adresse), acceptee = /^Je prends/.test(t.commentaire || "");
