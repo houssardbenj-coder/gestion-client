@@ -269,6 +269,21 @@ const nomClient = id => (cacheClients.find(c => c.id === id) || {}).nom || "?";
 const ACTIVITES_CLIENT = ["Cours", "Ménage", "Jardinage", "Bricolage"];
 const activitesClient = c => [...new Set([c.activite, ...(c.activites || [])].filter(Boolean))];
 const elevesClient = c => (c.eleves || []).join(", ");
+/* OIKOS et Benjamin enseignement sont séparés partout ; un client sans entreprise est un client OIKOS, un client des deux est dans les deux */
+const ENTREPRISES = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"]], LES_DEUX = "Benjamin enseignement + OIKOS";
+const dansEntreprise = (c, k) => k === "BE" ? /enseignement/i.test(c.entite || "") : !c.entite || /OIKOS/.test(c.entite);
+let entreprise = "OIKOS";
+const clientsEnCours = () => cacheClients.filter(c => c.etat !== "termine");
+function boutonsEntreprise() {
+  return `<div class="chips" id="entreprises" style="margin-top:12px">${ENTREPRISES.map(([k, t]) => `<button class="chip" data-entreprise="${k}" aria-pressed="${k === entreprise}">${t} (${clientsEnCours().filter(c => dansEntreprise(c, k)).length})</button>`).join("")}</div>`;
+}
+function brancherEntreprise(el) {
+  el.querySelector("#entreprises").onclick = e => { const b = e.target.closest("[data-entreprise]"); if (b) { entreprise = b.dataset.entreprise; afficher(); } };
+}
+function optionsClients(liste, choisi) {
+  const o = c => `<option value="${c.id}" ${c.id === choisi ? "selected" : ""}>${esc(c.nom)}</option>`, be = c => !dansEntreprise(c, "OIKOS");
+  return ENTREPRISES.map(([k, t]) => { const l = liste.filter(c => (k === "BE") === be(c)); return l.length ? `<optgroup label="${t}">${l.map(o).join("")}</optgroup>` : ""; }).join("");
+}
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
 const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
 
@@ -634,7 +649,7 @@ async function fichePassagePrevu(x, interv, jourTxt) {
   const id = x ? x.intervenante_id : interv;
   const attrib = await q(sb.from("attributions").select("client_id,fin").eq("intervenante_id", id));
   const aujourd = ymd(new Date()), siens = cacheClients.filter(c => attrib.some(a => a.client_id === c.id && (!a.fin || a.fin >= aujourd)));
-  const choix = siens.length ? siens : cacheClients, dur = x ? (new Date(x.fin) - new Date(x.debut)) / 6e4 : 120;
+  const choix = siens.length ? siens : clientsEnCours(), dur = x ? (new Date(x.fin) - new Date(x.debut)) / 6e4 : 120;
   let client = x ? (x.client_id || "") : (choix.length === 1 ? choix[0].id : ""), hors = !!x && !x.client_id;
   let quand = x ? new Date(x.debut) : null, vue = plusJours(quand || new Date(jourTxt + "T12:00"), 0), incompris = false, tour = 0, moisAutre = null;
   const semaines = {};   // ses passages déjà prévus, par semaine (pour voir la journée et les chevauchements)
@@ -820,7 +835,7 @@ async function vueTaches() {
         <button class="btn primary" type="submit" ${gens.length ? "" : "disabled"}>Ajouter</button></div>
       <div class="row"><span class="muted small">Pour quand ?</span>${taChips(taQuand, taDate)}</div>
       <div class="deux"><label class="f">Pour<select name="qui" required>${gens.length > 1 ? `<option value="tous">Tous les intervenants</option>` : ""}${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label>
-        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label></div>
+        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${optionsClients(clientsEnCours())}</select></label></div>
       <div><button class="btn" type="submit" data-avec-dossier ${gens.length ? "" : "disabled"}>📁 Ajouter et créer un dossier</button></div></form>
     ${parQui.map(([p, l]) => `<section class="card tkc" style="margin-top:12px"><h2 style="margin:0;padding:14px 16px 8px">${esc(nomPers(p))} <span class="tag">${l.filter(t => !t.fait_le).length} à faire</span></h2>
       ${groupes(l) || `<p class="muted small" style="padding:0 16px 14px">Aucune tâche en cours.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucun intervenant actif.</p>`}`);
@@ -857,7 +872,7 @@ function ficheTache(t, apres = () => afficher("taches")) {
     <div class="deux"><form class="card" id="ft" style="display:flex;flex-direction:column;gap:10px">
         <label class="f">Quoi ?<textarea name="texte" required maxlength="500">${esc(t.texte)}</textarea></label>
         <div class="f" style="display:flex;flex-direction:column;gap:6px"><span class="muted small">Pour quand ?</span>${taChips(taQuandDe(t.echeance), t.echeance)}</div>
-        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${cacheClients.map(c => `<option value="${c.id}" ${c.id === t.client_id ? "selected" : ""}>${esc(c.nom)}</option>`).join("")}</select></label>
+        <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${optionsClients(cacheClients.filter(c => c.etat !== "termine" || c.id === t.client_id), t.client_id)}</select></label>
         <label class="f">Commentaire<textarea name="commentaire" maxlength="2000" placeholder="Ce qui a été fait, ce qu'il reste, un numéro…">${esc(t.commentaire || "")}</textarea></label>
         <label class="chk"><input type="checkbox" name="fait" ${t.fait_le ? "checked" : ""} style="width:20px;height:20px">Fait</label>
         <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat stop" type="button" id="suppr">Supprimer</button></div></form>
@@ -898,7 +913,7 @@ const elementsDossier = (docs, urls, retirer) => docs.map(d => { const fin = `<s
 async function dessinerDossier(zone, t) {
   if (!t.dossier_nom || !t.client_id) {
     zone.innerHTML = `<h3 style="margin:0 0 6px">Dossier</h3><p class="muted small" style="margin-bottom:10px">Un espace pour ranger les photos, documents et commentaires de cette tâche, dans le dossier Drive du client. Son nom se crée tout seul : qui la fait, la tâche, le client. L'intervenant le retrouve dans son appli et n'a pas accès au reste du dossier client.</p>
-      ${t.client_id ? "" : `<label class="f" style="margin-bottom:10px">Pour quel client ?<select id="dos-client"><option value="">— choisir —</option>${cacheClients.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label>`}
+      ${t.client_id ? "" : `<label class="f" style="margin-bottom:10px">Pour quel client ?<select id="dos-client"><option value="">— choisir —</option>${optionsClients(clientsEnCours())}</select></label>`}
       <button class="btn primary" id="creer">📁 Créer un dossier</button>`;
     zone.querySelector("#creer").onclick = async () => {
       const client_id = t.client_id || zone.querySelector("#dos-client").value;
@@ -1061,7 +1076,7 @@ async function ficheIntervenante(id) {
           <button class="btn go" data-pok>Oui</button><button class="btn flat" data-pko>Non</button></span></div>`).join("")}` : ""}</section>
     <section class="card"><h3 style="margin-top:0">Clients confiés</h3>
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
-      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${cacheClients.filter(c => !actives.some(a => a.client_id === c.id)).map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
+      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id)))}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
     const recharger = () => { fermer(); ficheIntervenante(id); };
     el.querySelector("#enr").onclick = async () => {
       await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked }).eq("id", id));
@@ -1099,20 +1114,26 @@ const CHAMPS_CLIENT = [["nom", "Nom"], ["telephone", "Téléphone"], ["email", "
 async function vueClients() {
   await chargerBase();
   const tampon = await q(sb.from("clients_import").select("*").in("etat", ["nouveau", "different", "a_verifier"]).order("nom"));
+  const liste = cacheClients.filter(c => dansEntreprise(c, entreprise)), anciens = liste.filter(c => c.etat === "termine").length;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1>
       <span class="row"><button class="btn primary" id="imp">📥 Importer une extraction</button><button class="btn" id="nv">➕ Nouveau client</button></span></div>
-    <p class="muted small" style="margin:6px 0 0">Les clients actifs de Pense intelligent (cours et services) arrivent ici tout seuls. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    <p class="muted small" style="margin:6px 0 0">Les clients de Pense intelligent (cours et services) arrivent ici tout seuls, les inactifs dans les anciens. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    ${boutonsEntreprise()}
     ${tampon.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Zone tampon : ${tampon.length} ligne(s) à traiter</h2>
       <table><tr><th>Extraction</th><th>Rapprochement</th><th></th></tr>${tampon.map(t => { const c = cacheClients.find(k => k.id === t.client_id);
         return `<tr><td><b>${esc(t.nom)}</b><br><span class="muted small">${esc([t.telephone, t.email, t.adresse].filter(Boolean).join(" · "))}</span></td>
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
-    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Clients enregistrés (${cacheClients.length})</h2><span class="row"><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
-      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${cacheClients.map(c => `<tr class="cliquable" data-c="${c.id}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
-  const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value;
-    el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v && !norm(r.textContent).includes(v)) || (a && !r.dataset.act.split("|").includes(a))); };
+    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
+  const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value;
+    const etatOk = r => !t || (t === "termine") === (r.dataset.etat === "termine");   // une recherche regarde aussi les anciens
+    el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a))); };
   el.querySelector("#cherche").oninput = filtrer;
   el.querySelector("#filtre-act").onchange = filtrer;
+  el.querySelector("#filtre-etat").onchange = filtrer;
+  filtrer();
+  brancherEntreprise(el);
   el.querySelector("#imp").onclick = importer;
   el.querySelector("#nv").onclick = () => ficheClient(null);
   el.onclick = async e => {
@@ -1209,12 +1230,15 @@ async function ouvrirStockage(chemin) {
 }
 function ficheClient(id, ong = "ensemble") {
   const c = cacheClients.find(k => k.id === id);
-  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activite: "Ménage", etat: "actif" })}`, (el, fermer) =>
+  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activite: entreprise === "BE" ? "Cours" : "Ménage", etat: "actif", entite: entreprise === "BE" ? "Benjamin enseignement" : "OIKOS" })}`, (el, fermer) =>
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">📁 Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
+    <div class="row" id="fiche-choix" style="margin:8px 0">
+      <span class="chips" aria-label="Activité">${ACTIVITES_CLIENT.map(a => `<button class="chip" type="button" data-activite="${a}" aria-pressed="${c.activite === a}">${a}</button>`).join("")}</span>
+      <span class="chips" aria-label="Entreprise">${[["OIKOS", "OIKOS"], ["Benjamin enseignement", "Benjamin enseignement"], [LES_DEUX, "Les deux"]].map(([v, t]) => `<button class="chip" type="button" data-entite="${v}" aria-pressed="${(c.entite || "OIKOS") === v}">${t}</button>`).join("")}</span></div>
     <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
     <div id="dos-corps"></div>`, el => {
     el.querySelectorAll("[data-ia]").forEach(b => b.onclick = () => choisirCompteIA(b.dataset.ia, b.dataset.iaNom));
@@ -1226,6 +1250,19 @@ function ficheClient(id, ong = "ensemble") {
       catch (e) { corps.innerHTML = `<p class="err">${esc(e.message || e)}</p>`; }
     };
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
+    el.querySelector("#fiche-choix").onclick = async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      let d = {};
+      if (b.dataset.entite) d.entite = b.dataset.entite;
+      else { const a = b.dataset.activite; d.activite = a;
+        if (!(c.activites || []).includes(a)) d.activites = [a];
+        if (c.entite !== LES_DEUX) d.entite = a === "Cours" ? "Benjamin enseignement" : "OIKOS"; }   // un cours relève de Benjamin enseignement, un service d'OIKOS
+      await maj(sb.from("clients").update(d).eq("id", c.id));
+      Object.assign(c, d); toast("Enregistré");
+      el.querySelectorAll("[data-activite]").forEach(x => x.setAttribute("aria-pressed", x.dataset.activite === c.activite));
+      el.querySelectorAll("[data-entite]").forEach(x => x.setAttribute("aria-pressed", x.dataset.entite === (c.entite || "OIKOS")));
+      afficher(); aller(ong);
+    };
     aller(ong);
   });
 }
@@ -1247,13 +1284,15 @@ async function vueDossiers() {
   com.concat(notes).forEach(x => noter(x.client_id, "ecrits", x.cree_le));
   jur.forEach(j => noter(j.client_id, "juridique", j.cree_le));
   const vide = { dossiers: 0, elements: 0, photos: 0, ecrits: 0, juridique: 0, dernier: "", nouveaux: 0 };
-  const liste = cacheClients.map(c => ({ c, s: parClient[c.id] || vide })).sort((a, b) => a.s.dernier === b.s.dernier ? (a.c.nom < b.c.nom ? -1 : 1) : a.s.dernier < b.s.dernier ? 1 : -1);
+  const liste = cacheClients.filter(c => dansEntreprise(c, entreprise)).map(c => ({ c, s: parClient[c.id] || vide })).sort((a, b) => a.s.dernier === b.s.dernier ? (a.c.nom < b.c.nom ? -1 : 1) : a.s.dernier < b.s.dernier ? 1 : -1);
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Dossiers clients</h1><input type="text" id="cherche" placeholder="Chercher un client…" style="max-width:240px"></div>
     <p class="muted small" style="margin:6px 0 12px">Les plus récemment actifs d'abord. Toi seul vois tout : un intervenant ne voit que ce qui lui est partagé et ses propres dossiers de tâche, jamais le Drive.</p>
-    <div class="dos-grille">${liste.map(({ c, s }) => `<button class="dos-carte" data-c="${c.id}"><span class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>${esc(c.nom)}</b>${s.nouveaux ? `<span class="tag warn">${s.nouveaux} nouveau${s.nouveaux > 1 ? "x" : ""}</span>` : ""}</span>
+    ${boutonsEntreprise()}
+    <div class="dos-grille" style="margin-top:12px">${liste.map(({ c, s }) => `<button class="dos-carte" data-c="${c.id}" ${c.etat === "termine" ? "data-ancien hidden" : ""}><span class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>${esc(c.nom)}</b>${s.nouveaux ? `<span class="tag warn">${s.nouveaux} nouveau${s.nouveaux > 1 ? "x" : ""}</span>` : ""}</span>
         <span class="row" style="gap:4px"><span class="tag">📁 ${s.dossiers} dossier${s.dossiers > 1 ? "s" : ""} · ${s.elements} élément${s.elements > 1 ? "s" : ""}</span><span class="tag">📷 ${s.photos}</span><span class="tag">💬 ${s.ecrits}</span><span class="tag">🔒 ${s.juridique}</span></span>
         ${elevesClient(c) ? `<span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}<span class="muted small">${s.dernier ? "Dernier ajout : " + jour(s.dernier) : "Rien pour l'instant"}${c.dossier_drive || c.activite === "Cours" ? "" : " · Drive en préparation"}</span></button>`).join("") || `<p class="muted">Aucun client.</p>`}</div>`);
-  el.querySelector("#cherche").oninput = e => { const v = norm(e.target.value); el.querySelectorAll("[data-c]").forEach(r => r.hidden = v && !norm(r.textContent).includes(v)); };
+  el.querySelector("#cherche").oninput = e => { const v = norm(e.target.value); el.querySelectorAll("[data-c]").forEach(r => r.hidden = v ? !norm(r.textContent).includes(v) : r.hasAttribute("data-ancien")); };
+  brancherEntreprise(el);
   el.onclick = e => { const r = e.target.closest("[data-c]"); if (r) ficheClient(r.dataset.c); };
 }
 /* Un client d'un coup d'œil : ses dossiers de tâche, ce qui est écrit, ses photos, le juridique */
@@ -1659,6 +1698,7 @@ function formClient(c) {
       <div class="deux">${ch("email", "E-mail", "email")}${ch("adresse", "Adresse")}</div>
       <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
         <label class="f">Activité<select name="activite">${ACTIVITES_CLIENT.map(a => `<option ${c.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
+      <label class="f">Entreprise<select name="entite">${[["OIKOS", "OIKOS"], ["Benjamin enseignement", "Benjamin enseignement"], [LES_DEUX, "Les deux"]].map(([v, t]) => `<option value="${v}" ${(c.entite || "OIKOS") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
       <label class="f">Élèves, séparés par des virgules${c.source_pense ? " (repris de Pense intelligent : à corriger là-bas)" : ""} — vu par l'intervenant<input type="text" name="eleves" value="${esc(elevesClient(c))}"></label>
       <label class="f">État<select name="etat">${["prospect", "avance_attente", "actif", "pause", "termine"].map(a => `<option ${c.etat === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
       <label class="f">Accès (digicode, étage…) — vu par l'intervenant<textarea name="acces">${esc(c.acces || "")}</textarea></label>
@@ -1672,6 +1712,7 @@ function brancherFormClient(el, c, apres) {
     for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
     d.zone = d.zone ? Number(d.zone) : null;
     d.eleves = (d.eleves || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
+    if (!c || !(c.activites || []).includes(d.activite)) d.activites = [d.activite];
     if (!d.nom) return toast("Le nom est obligatoire");
     if (c && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
     await maj(c ? sb.from("clients").update(d).eq("id", c.id) : sb.from("clients").insert(d));
