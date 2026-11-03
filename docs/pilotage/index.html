@@ -267,11 +267,13 @@ async function chargerBase() {
 }
 const nomClient = id => (cacheClients.find(c => c.id === id) || {}).nom || "?";
 const ACTIVITES_CLIENT = ["Cours", "Ménage", "Jardinage", "Bricolage"];
-const activitesClient = c => [...new Set([c.activite, ...(c.activites || [])].filter(Boolean))];
+const activitesClient = c => (c.activites || []).length ? c.activites : c.etat === "prospect" ? [] : [c.activite].filter(Boolean);
+const activitePrincipale = l => l.find(a => a !== "Cours") || l[0] || "Ménage";
 const elevesClient = c => (c.eleves || []).join(", ");
-/* OIKOS et Benjamin enseignement sont séparés partout ; un client sans entreprise est un client OIKOS, un client des deux est dans les deux */
-const ENTREPRISES = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"]], LES_DEUX = "Benjamin enseignement + OIKOS";
-const dansEntreprise = (c, k) => k === "BE" ? /enseignement/i.test(c.entite || "") : !c.entite || /OIKOS/.test(c.entite);
+/* Trois sections : les cases cochées décident. Cours = Benjamin enseignement, un service = OIKOS, les deux = dans les deux. Un prospect reste à part. */
+const ENTREPRISES = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"]];
+const dansEntreprise = (c, k) => { if (k === "PROSPECT") return c.etat === "prospect"; if (c.etat === "prospect") return false;
+  const a = activitesClient(c); return k === "BE" ? a.includes("Cours") : !a.length || a.some(x => x !== "Cours"); };
 let entreprise = "OIKOS";
 const clientsEnCours = () => cacheClients.filter(c => c.etat !== "termine");
 function boutonsEntreprise() {
@@ -281,8 +283,9 @@ function brancherEntreprise(el) {
   el.querySelector("#entreprises").onclick = e => { const b = e.target.closest("[data-entreprise]"); if (b) { entreprise = b.dataset.entreprise; afficher(); } };
 }
 function optionsClients(liste, choisi) {
-  const o = c => `<option value="${c.id}" ${c.id === choisi ? "selected" : ""}>${esc(c.nom)}</option>`, be = c => !dansEntreprise(c, "OIKOS");
-  return ENTREPRISES.map(([k, t]) => { const l = liste.filter(c => (k === "BE") === be(c)); return l.length ? `<optgroup label="${t}">${l.map(o).join("")}</optgroup>` : ""; }).join("");
+  const o = c => `<option value="${c.id}" ${c.id === choisi ? "selected" : ""}>${esc(c.nom)}</option>`;
+  const rang = c => c.etat === "prospect" ? "PROSPECT" : dansEntreprise(c, "OIKOS") ? "OIKOS" : "BE";
+  return ENTREPRISES.map(([k, t]) => { const l = liste.filter(c => rang(c) === k); return l.length ? `<optgroup label="${t}">${l.map(o).join("")}</optgroup>` : ""; }).join("");
 }
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
 const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
@@ -1117,7 +1120,7 @@ async function vueClients() {
   const liste = cacheClients.filter(c => dansEntreprise(c, entreprise)), anciens = liste.filter(c => c.etat === "termine").length;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients</h1>
       <span class="row"><button class="btn primary" id="imp">📥 Importer une extraction</button><button class="btn" id="nv">➕ Nouveau client</button></span></div>
-    <p class="muted small" style="margin:6px 0 0">Les clients de Pense intelligent (cours et services) arrivent ici tout seuls, les inactifs dans les anciens. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
+    <p class="muted small" style="margin:6px 0 0">Les clients de Pense intelligent arrivent ici tout seuls, les inactifs dans les anciens. Ceux qui sont seulement sur ton téléphone, sans facture ni compte VosFactures, arrivent dans Prospects. Une extraction (Excel, CSV ou copier-coller) arrive d'abord dans la zone tampon, que les intervenants ne voient jamais. Chaque ligne est rapprochée de tes clients : tu crées, mets à jour ou ignores.</p>
     ${boutonsEntreprise()}
     ${tampon.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Zone tampon : ${tampon.length} ligne(s) à traiter</h2>
       <table><tr><th>Extraction</th><th>Rapprochement</th><th></th></tr>${tampon.map(t => { const c = cacheClients.find(k => k.id === t.client_id);
@@ -1230,15 +1233,14 @@ async function ouvrirStockage(chemin) {
 }
 function ficheClient(id, ong = "ensemble") {
   const c = cacheClients.find(k => k.id === id);
-  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activite: entreprise === "BE" ? "Cours" : "Ménage", etat: "actif", entite: entreprise === "BE" ? "Benjamin enseignement" : "OIKOS" })}`, (el, fermer) =>
+  if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activites: entreprise === "BE" ? ["Cours"] : entreprise === "OIKOS" ? ["Ménage"] : [], etat: entreprise === "PROSPECT" ? "prospect" : "actif" })}`, (el, fermer) =>
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">📁 Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
-    <div class="row" id="fiche-choix" style="margin:8px 0">
-      <span class="chips" aria-label="Activité">${ACTIVITES_CLIENT.map(a => `<button class="chip" type="button" data-activite="${a}" aria-pressed="${c.activite === a}">${a}</button>`).join("")}</span>
-      <span class="chips" aria-label="Entreprise">${[["OIKOS", "OIKOS"], ["Benjamin enseignement", "Benjamin enseignement"], [LES_DEUX, "Les deux"]].map(([v, t]) => `<button class="chip" type="button" data-entite="${v}" aria-pressed="${(c.entite || "OIKOS") === v}">${t}</button>`).join("")}</span></div>
+    <div class="row" id="fiche-choix" style="margin:8px 0">${casesActivites(c)}
+      ${c.etat === "prospect" ? `<button class="btn go" type="button" id="devenu-client">✓ Devenu client</button>` : ""}</div>
     <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
     <div id="dos-corps"></div>`, el => {
     el.querySelectorAll("[data-ia]").forEach(b => b.onclick = () => choisirCompteIA(b.dataset.ia, b.dataset.iaNom));
@@ -1250,18 +1252,17 @@ function ficheClient(id, ong = "ensemble") {
       catch (e) { corps.innerHTML = `<p class="err">${esc(e.message || e)}</p>`; }
     };
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
-    el.querySelector("#fiche-choix").onclick = async e => {
-      const b = e.target.closest("button"); if (!b) return;
-      let d = {};
-      if (b.dataset.entite) d.entite = b.dataset.entite;
-      else { const a = b.dataset.activite; d.activite = a;
-        if (!(c.activites || []).includes(a)) d.activites = [a];
-        if (c.entite !== LES_DEUX) d.entite = a === "Cours" ? "Benjamin enseignement" : "OIKOS"; }   // un cours relève de Benjamin enseignement, un service d'OIKOS
+    el.querySelector("#fiche-choix").onchange = async e => {
+      const acts = [...el.querySelectorAll("#fiche-choix [name=act]:checked")].map(x => x.value);
+      if (!acts.length && c.etat !== "prospect") { e.target.checked = true; return toast("Garde au moins une activité"); }
+      const d = { activites: acts, activite: activitePrincipale(acts) };
       await maj(sb.from("clients").update(d).eq("id", c.id));
-      Object.assign(c, d); toast("Enregistré");
-      el.querySelectorAll("[data-activite]").forEach(x => x.setAttribute("aria-pressed", x.dataset.activite === c.activite));
-      el.querySelectorAll("[data-entite]").forEach(x => x.setAttribute("aria-pressed", x.dataset.entite === (c.entite || "OIKOS")));
-      afficher(); aller(ong);
+      Object.assign(c, d); toast("Enregistré"); afficher();
+    };
+    const devenu = el.querySelector("#devenu-client");
+    if (devenu) devenu.onclick = async () => {
+      await maj(sb.from("clients").update({ etat: "actif" }).eq("id", c.id));
+      c.etat = "actif"; devenu.remove(); toast("Rangé dans ses clients"); afficher(); aller(ong);
     };
     aller(ong);
   });
@@ -1691,14 +1692,14 @@ async function dosJuridique(c, corps, re) {
   };
 }
 /* Formulaire de la fiche (nouveau client, ou onglet « Fiche » du dossier) */
+const casesActivites = c => `<span class="row" aria-label="Activités">${ACTIVITES_CLIENT.map(a => `<label class="chk"><input type="checkbox" name="act" value="${a}" ${activitesClient(c).includes(a) ? "checked" : ""}>${a}</label>`).join("")}</span>`;
 function formClient(c) {
   const ch = (k, t, type = "text") => `<label class="f">${t}<input type="${type}" name="${k}" value="${esc(c[k] || "")}"></label>`;
   return `<form id="fc" style="display:flex;flex-direction:column;gap:10px">
       <div class="deux">${ch("nom", "Nom")}${ch("telephone", "Téléphone", "tel")}</div>
       <div class="deux">${ch("email", "E-mail", "email")}${ch("adresse", "Adresse")}</div>
       <div class="deux"><label class="f">Zone<select name="zone"><option value="">—</option>${[1, 2, 3].map(z => `<option ${c.zone === z ? "selected" : ""}>${z}</option>`).join("")}</select></label>
-        <label class="f">Activité<select name="activite">${ACTIVITES_CLIENT.map(a => `<option ${c.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
-      <label class="f">Entreprise<select name="entite">${[["OIKOS", "OIKOS"], ["Benjamin enseignement", "Benjamin enseignement"], [LES_DEUX, "Les deux"]].map(([v, t]) => `<option value="${v}" ${(c.entite || "OIKOS") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        ${c.id ? "" : `<div class="f"><span>Activités</span>${casesActivites(c)}</div>`}</div>
       <label class="f">Élèves, séparés par des virgules${c.source_pense ? " (repris de Pense intelligent : à corriger là-bas)" : ""} — vu par l'intervenant<input type="text" name="eleves" value="${esc(elevesClient(c))}"></label>
       <label class="f">État<select name="etat">${["prospect", "avance_attente", "actif", "pause", "termine"].map(a => `<option ${c.etat === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
       <label class="f">Accès (digicode, étage…) — vu par l'intervenant<textarea name="acces">${esc(c.acces || "")}</textarea></label>
@@ -1712,7 +1713,10 @@ function brancherFormClient(el, c, apres) {
     for (const [k, v] of new FormData(e.target)) d[k] = String(v).trim() || null;
     d.zone = d.zone ? Number(d.zone) : null;
     d.eleves = (d.eleves || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
-    if (!c || !(c.activites || []).includes(d.activite)) d.activites = [d.activite];
+    delete d.act;
+    if (!c) { d.activites = new FormData(e.target).getAll("act");
+      if (!d.activites.length && d.etat !== "prospect") return toast("Coche au moins une activité");
+      d.activite = activitePrincipale(d.activites); }
     if (!d.nom) return toast("Le nom est obligatoire");
     if (c && d.adresse !== c.adresse) { d.lat = null; d.lng = null; }   // la position sera recalculée
     await maj(c ? sb.from("clients").update(d).eq("id", c.id) : sb.from("clients").insert(d));

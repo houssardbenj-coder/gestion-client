@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=18;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=19;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1319,7 +1319,85 @@ function nativeToolsHTML(){
   return `<div class="section-label">Mes données et rappels</div><article class="card"><div class="pnote" style="padding-top:14px">Tout est enregistré sur ce téléphone. Fais une sauvegarde de temps en temps et garde-la sur ton Drive ou envoie-la-toi par mail.</div>
   <div class="adv"><button class="btn" data-backup="1">Sauvegarder mes données</button><label class="btn" for="restore-file">Restaurer une sauvegarde</label><input type="file" id="restore-file" accept="application/json,.json" hidden></div>
   <div class="adv"><label class="btn" for="contacts-file">Importer mes contacts (élèves, parents)</label><input type="file" id="contacts-file" accept="application/json,.json" hidden><span class="pnote" style="padding:0">Fichier « contacts-pense-intelligent.json » préparé par le PC dans Google Drive › Pense intelligent.</span></div>
+  ${piloteHTML()}
   <div class="adv"><button class="iconbtn" data-calpick="1">Choisir l'agenda utilisé pour les RDV</button><button class="iconbtn" data-alarms="1">Réglages des alarmes et notifications</button></div><div class="adv"><span class="pnote" style="padding:0">Version ${NATIVE.version()}${window.PB_store&&PB_store.sizeKB?" · données : "+PB_store.sizeKB()+" Ko":""}</span><button class="iconbtn" data-update="1">Vérifier les mises à jour</button></div></article>`;
+}
+/* OIKOS Pilotage : les personnes qui ne sont que sur ce téléphone (ni facture ni compte VosFactures) partent dans sa section Prospects.
+   Relié une fois avec le compte gérant : le mot de passe n'est pas gardé, seul le jeton de connexion l'est, jamais dans les sauvegardes. */
+const PILOTE_URL="https://nzxphozupnmqyikitwhv.supabase.co",PILOTE_CLE="sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q";
+const piloteLu=()=>{try{return JSON.parse(localStorage.getItem("pb-pilotage"))||null}catch(e){return null}};
+const piloteNote=o=>{try{o?localStorage.setItem("pb-pilotage",JSON.stringify(o)):localStorage.removeItem("pb-pilotage")}catch(e){}};
+async function piloteAuth(type,corps){
+  const r=await fetch(PILOTE_URL+"/auth/v1/token?grant_type="+type,{method:"POST",headers:{apikey:PILOTE_CLE,"Content-Type":"application/json"},body:JSON.stringify(corps)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error("refus");e.refus=r.status>=400&&r.status<500;throw e}
+  return j;
+}
+async function piloteBase(jeton,chemin,methode,corps){
+  const r=await fetch(PILOTE_URL+"/rest/v1/"+chemin,{method:methode||"GET",headers:{apikey:PILOTE_CLE,Authorization:"Bearer "+jeton,"Content-Type":"application/json",Prefer:"return=minimal"},body:corps?JSON.stringify(corps):undefined});
+  if(!r.ok)throw new Error("base "+r.status);
+  const t=await r.text();return t?JSON.parse(t):null;
+}
+const piloteMots=s=>fold(s).replace(/[^a-z0-9]+/g," ").trim().split(" ").sort().join(" ");
+const piloteTel=t=>String(t||"").replace(/\D/g,"").slice(-9);
+function prospectsDuTelephone(){
+  const out=[],vus=new Set();
+  const ajoute=(sorte,x,acts,eleves)=>{
+    const prenom=String(x.firstName||"").trim(),nom=String(x.lastName||"").trim(),tel=x.phone||"",mel=x.email||"",adr=x.address||"";
+    if((!prenom&&!nom)||(!tel&&!mel&&!adr))return;
+    const m=piloteMots(prenom+" "+nom);if(vus.has(m))return;vus.add(m);
+    out.push({nom:(nom.toUpperCase()+" "+prenom).trim(),telephone:tel||null,email:mel||null,adresse:adr||null,activite:acts.find(a=>a!=="Cours")||acts[0]||"Ménage",activites:acts,eleves,etat:"prospect",source_pense:"pi:"+sorte+":"+x.id});
+  };
+  customers.filter(c=>!c.extKey).forEach(c=>{const noms=svcOf(c).map(v=>(actById(v.act)||{}).name).filter(a=>["Cours","Ménage","Jardinage","Bricolage"].includes(a)),el=studentsOf(c);
+    if(el.length&&!noms.includes("Cours"))noms.push("Cours");ajoute("c",c,noms,el)});
+  leads.filter(l=>l.status==="open"||!l.status).forEach(l=>ajoute("l",l,[],[]));
+  projects.filter(p=>!p.doneAt&&!p.customerId).forEach(p=>ajoute("p",p,[],[]));
+  return out;
+}
+let piloteEnCours=false,piloteMinuteur=null;
+function piloteBientot(){clearTimeout(piloteMinuteur);piloteMinuteur=setTimeout(()=>envoyerProspects(false),8000)}
+async function envoyerProspects(manuel){
+  const s=piloteLu();if(!s||piloteEnCours)return;
+  const liste=prospectsDuTelephone(),sig=JSON.stringify(liste);
+  if(!manuel&&s.sig===sig)return;
+  piloteEnCours=true;
+  try{
+    const a=await piloteAuth("refresh_token",{refresh_token:s.refresh});s.refresh=a.refresh_token;piloteNote(s);
+    const connus=await piloteBase(a.access_token,"clients?select=id,nom,telephone,email,adresse,source_pense"),neufs=[];
+    for(const x of liste){
+      const tel=piloteTel(x.telephone),mel=fold(x.email),mots=piloteMots(x.nom);
+      const k=connus.find(c=>c.source_pense===x.source_pense)||connus.find(c=>piloteMots(c.nom)===mots)||connus.find(c=>(tel.length===9&&piloteTel(c.telephone)===tel)||(mel&&fold(c.email)===mel));
+      if(!k){neufs.push(x);continue}
+      if(k.source_pense&&!k.source_pense.startsWith("pi:"))continue;   // déjà un vrai client : rien à faire
+      const d={};["telephone","email","adresse"].forEach(f=>{if(x[f]&&!k[f])d[f]=x[f]});
+      if(!k.source_pense)d.source_pense=x.source_pense;
+      if(Object.keys(d).length)await piloteBase(a.access_token,"clients?id=eq."+k.id,"PATCH",d);
+    }
+    if(neufs.length)await piloteBase(a.access_token,"clients","POST",neufs);
+    s.sig=sig;s.n=liste.length;s.at=Date.now();piloteNote(s);
+    if(manuel){$("#status").textContent=liste.length+" prospect"+(liste.length>1?"s":"")+" à jour dans OIKOS Pilotage.";render()}
+  }catch(e){
+    if(e.refus){s.expire=true;piloteNote(s)}
+    if(manuel){$("#status").textContent=e.refus?"Connexion à OIKOS Pilotage expirée : relie-le de nouveau.":"Envoi vers OIKOS Pilotage impossible pour l'instant.";render()}
+  }finally{piloteEnCours=false}
+}
+function piloteHTML(){
+  const s=piloteLu(),relie=s&&!s.expire;
+  return `<div class="adv">${relie?`<button class="btn" data-pilote="1">Envoyer mes prospects à OIKOS Pilotage</button><button class="iconbtn" data-pilote-off="1">Délier</button>`:`<button class="btn" data-pilote="1">Relier à OIKOS Pilotage</button>`}<span class="pnote" style="padding:0">${relie?(s.at?`Envoi automatique. ${s.n} prospect${s.n>1?"s":""}, dernier envoi le ${esc(new Date(s.at).toLocaleString("fr-FR"))}.`:"Envoi automatique des personnes qui ne sont que sur ce téléphone."):"Envoie tout seul les personnes qui ne sont que sur ce téléphone vers la section Prospects."}</span></div>`;
+}
+function openPilote(){
+  const root=$("#sheet-root");
+  root.innerHTML=`<div class="sheet-bg" id="sheet-bg"><form class="sheet" id="pi-form" role="dialog" aria-modal="true" aria-labelledby="pi-h"><h3 id="pi-h">Relier à OIKOS Pilotage</h3>
+   <div class="pnote" style="padding:0">Ton compte gérant, une seule fois. Le mot de passe n'est pas gardé sur le téléphone.</div>
+   <label class="field">E-mail<input type="email" id="pi-e" autocomplete="username" required></label>
+   <label class="field">Mot de passe<input type="password" id="pi-m" autocomplete="current-password" required></label>
+   <div class="status" id="pi-s"></div>
+   <button class="btn primary" type="submit">Relier</button><button class="btn" type="button" id="pi-close">Fermer</button></form></div>`;
+  const b=$("#sheet-bg");b.addEventListener("click",ev=>{if(ev.target===b||ev.target.id==="pi-close")root.innerHTML=""});
+  $("#pi-form").addEventListener("submit",async ev=>{ev.preventDefault();
+    try{const a=await piloteAuth("password",{email:$("#pi-e").value.trim().toLowerCase(),password:$("#pi-m").value});
+      piloteNote({refresh:a.refresh_token});root.innerHTML="";await envoyerProspects(true);render()}
+    catch(e){$("#pi-s").textContent=e.refus?"E-mail ou mot de passe incorrect.":"Pas de réseau."}});
 }
 async function openCalPicker(){
   const list=await NATIVE.calendars();const cur=NATIVE.chosenCalendarId();
@@ -2035,6 +2113,8 @@ document.addEventListener("click",e=>{
     t.disabled=true;pushToAgenda(kind,x).then(ok=>{if(!ok)t.disabled=false});
     return}
   if(g("[data-calpick]")){if(NATIVE)openCalPicker();return}
+  if(g("[data-pilote-off]")){piloteNote(null);render();return}
+  if(g("[data-pilote]")){const s=piloteLu();if(s&&!s.expire)envoyerProspects(true);else openPilote();return}
   if(g("[data-agenda-allow]")){if(NATIVE)NATIVE.askAgenda().then(loadAgenda);return}
   if(g("[data-backup]")){if(NATIVE)NATIVE.exportData().catch(()=>{$("#status").textContent="Sauvegarde impossible."});return}
   if(g("[data-update]")){if(NATIVE){$("#status").textContent="Recherche de mise à jour…";NATIVE.checkUpdate().then(r=>{$("#status").textContent={uptodate:"✓ Ton appli est à jour.",updated:"Mise à jour en cours…",none:"Mises à jour automatiques non configurées.",error:"Impossible de vérifier : "+(window.PB_lastUpdateError||"pas de connexion ?")}[r]||""})}return}
@@ -2260,11 +2340,11 @@ render();
   if(!db){render();return}
   loadAgenda();
   db.collection("routines").orderBy("order").onSnapshot(s=>{routines=s.docs.map(x=>({id:x.id,...x.data()}));render()},e=>{$("#status").textContent="Connexion perdue. Recharge la page."});
-  db.collection("projects").onSnapshot(s=>{projects=s.docs.map(x=>{const b=x.data();return {id:x.id,...b,done:{...(b.done||{})},steps:(b.steps||[]).map(t=>({...t}))}});render()},()=>{});
-  db.collection("leads").onSnapshot(s=>{leads=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
+  db.collection("projects").onSnapshot(s=>{projects=s.docs.map(x=>{const b=x.data();return {id:x.id,...b,done:{...(b.done||{})},steps:(b.steps||[]).map(t=>({...t}))}});render();piloteBientot()},()=>{});
+  db.collection("leads").onSnapshot(s=>{leads=s.docs.map(x=>({id:x.id,...x.data()}));render();piloteBientot()},()=>{});
   db.collection("appts").onSnapshot(s=>{appts=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
   db.collection("tasks").onSnapshot(s=>{tasks=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
-  db.collection("customers").onSnapshot(s=>{customers=s.docs.map(x=>({id:x.id,...x.data()}));render();occSyncSoon()},()=>{});
+  db.collection("customers").onSnapshot(s=>{customers=s.docs.map(x=>({id:x.id,...x.data()}));render();occSyncSoon();piloteBientot()},()=>{});
   db.collection("skips").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());skips=m;render();occSyncSoon()},()=>{});
   db.collection("occcal").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());occcal=m},()=>{});
   db.collection("config").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());cfg=m;render();vacAuto()},()=>{});
