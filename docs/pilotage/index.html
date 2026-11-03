@@ -1631,7 +1631,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     const voirFeuille = ((d.estimation || {}).taches || []).length ? `<button class="btn" data-dm-feuille>👁 Voir la feuille de route</button>` : "";
     const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>📋 Envoyer l'ordre de mission</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn go" data-dm-fin>🏁 Prestation terminée</button>` : "");
     return `<details class="card dm" data-dm="${d.id}" ${dmOuvertes.has(d.id) ? "open" : ""}>
-      <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}</span></span>
+      <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · 📷 " + ph.length : ""}${d.echeance ? " · 📅 " + d.echeance.split("-").reverse().join("/") : ""}</span></span>
         ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
       <div class="dm-plus">
         <p class="muted small">Demande du ${jourAn(d.cree_le)}${signeLe(d) ? " · devis signé le " + jourAn(signeLe(d)) : ""}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}${(d.mission.devis_anciens || []).length ? " · remplace " + d.mission.devis_anciens.map(x => esc(x.numero)).join(", ") : ""}</p>
@@ -1805,7 +1805,7 @@ async function fdrDonnees(d, c, definitif) {
   (e.materiel || []).filter(Boolean).forEach(x => ramener.push(String(x)));
   const minutes = reg ? Math.round(taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12) : taches.reduce((s, t) => s + (+t.duree_min || 0), 0);
   const uneFois = reg ? taches.filter(t => !(+t.frequence_jours > 0)).reduce((s, t) => s + (+t.duree_min || 0), 0) : 0;
-  return { version: 1, definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
+  return { version: 1, echeance: d.echeance || "", definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
     photos: choisies.filter(x => urls[x.apercu]).map(x => ({ url: urls[x.apercu], legende: x.legende || "" })), ramener, fourni,
     taches: taches.slice().sort((a, b) => (+b.priorite || 3) - (+a.priorite || 3)).map(t => { const court = fdrCourt(t.detail); return { t: t.titre, d: court, plus: String(t.detail || "").trim() !== court ? String(t.detail).trim() : "", min: +t.duree_min || 0, p: +t.priorite || 3, q: reg ? (+t.frequence_jours ? quandTache(t) : "une fois") : "" }; }) };
 }
@@ -1826,10 +1826,11 @@ async function proposerPresta(d, c, re) {
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
       <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure) ${aide("Il voit le total estimé sur sa feuille de route, jamais le prix du client.")}</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
-        <label class="f">Un mot pour lui (facultatif)<input type="text" name="note" maxlength="500"></label></div>
+        <label class="f"><span>Deadline (facultatif) ${aide("Il la voit en haut de sa feuille de route.")}</span><input type="date" name="echeance" value="${esc(d.echeance || "")}"></label></div>
+      <label class="f">Un mot pour lui (facultatif)<input type="text" name="note" maxlength="500"></label>
       <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Aperçu de ce qu'il va recevoir</summary><div id="fpr-apercu" style="margin-top:8px"></div></details>
       <div class="row"><button class="btn primary" type="submit">📲 Transmettre</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    const form = el.querySelector("#fpr"), majApercu = () => { fiche.note = form.elements.note.value.trim(); fdrPaie(fiche, form.elements.taux.value); el.querySelector("#fpr-apercu").innerHTML = fdrHtml(fiche); };
+    const form = el.querySelector("#fpr"), majApercu = () => { fiche.note = form.elements.note.value.trim(); fiche.echeance = form.elements.echeance.value; fdrPaie(fiche, form.elements.taux.value); el.querySelector("#fpr-apercu").innerHTML = fdrHtml(fiche); };
     form.oninput = majApercu; majApercu();
     form.onsubmit = async e => {
       e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), texte = JSON.stringify(fiche);
@@ -1841,7 +1842,7 @@ async function proposerPresta(d, c, re) {
           const morceaux = texte.match(/[\s\S]{1,2000}/g), maintenant = new Date().toISOString();
           await maj(sb.from("tache_documents").insert(r.data.flatMap(t => morceaux.map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
         }
-        await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_taux: f.get("taux"), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
+        await maj(sb.from("demandes_devis").update({ echeance: f.get("echeance") || null, mission: { ...(d.mission || {}), presta_taux: f.get("taux"), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
         await chargerBase(); fermer(); toast(qui.length ? "Transmis : la réponse arrivera ici et dans À voir" : "Noté : tu peux faire le devis"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
@@ -1863,12 +1864,12 @@ async function accepterDemande(d, c, re) {
       <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">Qui s'en charge ? ${aide("Une tâche et le dossier partent dans son appli.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
       <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc([...new Set(deja.filter(a => a.nom_libre && !aCompte(a.nom_libre)).map(a => a.nom_libre).concat((d.mission || {}).presta_accord || []))].join(", "))}"></label>
-      <label class="f">À faire pour le (facultatif)<input type="date" name="echeance"></label>
+      <label class="f">Deadline (facultatif)<input type="date" name="echeance" value="${esc(d.echeance || "")}"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure)</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
         <label class="f">Un mot pour lui (facultatif)<input type="text" name="ordre" maxlength="500"></label></div>
       <details><summary class="small" style="cursor:pointer;font-weight:700">👁 Aperçu de l'ordre de mission (PDF dans son appli)</summary><div id="fac-apercu" style="margin-top:8px"></div></details>
       <div class="row"><button class="btn primary" type="submit">📋 Envoyer l'ordre de mission</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
-    const formO = el.querySelector("#fac"), majApercu = () => { fiche.note = formO.elements.ordre.value.trim(); fdrPaie(fiche, formO.elements.taux.value); el.querySelector("#fac-apercu").innerHTML = fdrHtml(fiche); };
+    const formO = el.querySelector("#fac"), majApercu = () => { fiche.note = formO.elements.ordre.value.trim(); fiche.echeance = formO.elements.echeance.value; fdrPaie(fiche, formO.elements.taux.value); el.querySelector("#fac-apercu").innerHTML = fdrHtml(fiche); };
     formO.oninput = majApercu; majApercu();
     formO.onsubmit = async e => {
       e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]");
