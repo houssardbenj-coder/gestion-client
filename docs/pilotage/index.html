@@ -1803,8 +1803,10 @@ async function fdrDonnees(d, c, definitif) {
     if (m && /^fourni/.test(m[2])) fourni.push(nom); else { ramener.push(nom); compensation += (+a.quantite || 1) * (+a.cout_unitaire || 0); }
   });
   (e.materiel || []).filter(Boolean).forEach(x => ramener.push(String(x)));
-  const minutes = reg ? Math.round(taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12) : taches.reduce((s, t) => s + (+t.duree_min || 0), 0);
-  const uneFois = reg ? taches.filter(t => !(+t.frequence_jours > 0)).reduce((s, t) => s + (+t.duree_min || 0), 0) : 0;
+  // le temps est le même pour le client et le presta : le total arrondi au quart d'heure supérieur
+  const auQuart = m => Math.ceil(Math.round(m * 1000) / 1000 / 15) * 15;
+  const minutes = auQuart(reg ? taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12 : taches.reduce((s, t) => s + (+t.duree_min || 0), 0));
+  const uneFois = reg ? auQuart(taches.filter(t => !(+t.frequence_jours > 0)).reduce((s, t) => s + (+t.duree_min || 0), 0)) : 0;
   return { version: 1, echeance: d.echeance || "", definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
     photos: choisies.filter(x => urls[x.apercu]).map(x => ({ url: urls[x.apercu], legende: x.legende || "" })), ramener, fourni,
     taches: taches.slice().sort((a, b) => (+b.priorite || 3) - (+a.priorite || 3)).map(t => { const court = fdrCourt(t.detail); return { t: t.titre, d: court, plus: String(t.detail || "").trim() !== court ? String(t.detail).trim() : "", min: +t.duree_min || 0, p: +t.priorite || 3, q: reg ? (+t.frequence_jours ? quandTache(t) : "une fois") : "" }; }) };
@@ -1917,7 +1919,7 @@ async function terminerDemande(d, c, taches, re) {
 }
 /* One shot terminé : tu confirmes les heures, elles partent dans son reporting et il ne peut plus les modifier */
 async function validerMission(d, c, restent, finir) {
-  const m = d.mission || {}, qui = m.intervenants || [], sans = m.sans_compte || [], prevues = (m.feuille || {}).minutes || ((d.estimation || {}).taches || []).reduce((s, t) => s + (+(t && t.duree_min) || 0), 0);
+  const m = d.mission || {}, qui = m.intervenants || [], sans = m.sans_compte || [], prevues = (m.feuille || {}).minutes || Math.ceil(((d.estimation || {}).taches || []).reduce((s, t) => s + (+(t && t.duree_min) || 0), 0) / 15) * 15;
   const faits = qui.length ? await q(sb.from("pointages").select("intervenante_id,arrivee,depart").eq("client_id", c.id).in("intervenante_id", qui).gte("arrivee", d.accepte_le || d.cree_le).not("depart", "is", null)) : [];
   const deja = id => faits.filter(p => p.intervenante_id === id).reduce((s, p) => s + (new Date(p.depart) - new Date(p.arrivee)) / 60000, 0);
   const enHeures = min => String(Math.round(min / 60 * 100) / 100).replace(".", ",");
