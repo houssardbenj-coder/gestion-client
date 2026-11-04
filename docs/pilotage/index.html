@@ -2064,6 +2064,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
           ${attente && !iaEnTete ? ia : ""}
           ${d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">${ico("recu")} Devis VosFactures</a>` : ""}
           ${d.devis_pdf_url ? `<a class="btn" href="${esc(d.devis_pdf_url)}" target="_blank" rel="noopener">${ico("doc")} PDF du devis</a>` : ""}
+          ${(d.mission || {}).feuille_mission_url ? `<a class="btn" href="${esc(d.mission.feuille_mission_url)}" target="_blank" rel="noopener">${ico("doc")} Feuille de mission</a>` : ""}
           ${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">${ico("route")} Ordre de mission</a>` : d.ordre_a_faire ? `<span class="tag warn">${ico("chrono")} Ordre de mission (5 min)</span>` : ""}
           ${d.dossier_url ? `<a class="btn" href="${esc(d.dossier_url)}" target="_blank" rel="noopener">${ico("dossier")} Sous-dossier</a>` : ""}
           ${attente ? `<button class="btn" data-dm-photos>${ico("photo")} Ajouter des photos</button><button class="btn" data-dm-presta>${ico("mission")} Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button>${(d.etat === "estimee" || d.etat === "devis_cree") && !devisSigne(d) ? `<button class="btn flat" data-dm-accepter>Le client a accepté sans signer : envoyer l'ordre</button>` : ""}<button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
@@ -2294,7 +2295,7 @@ async function fdrDonnees(d, c, definitif) {
   (e.materiel || []).filter(Boolean).forEach(x => ramener.push(String(x)));
   // le temps est le même pour le client et le presta : le total arrondi au quart d'heure supérieur
   const auQuart = m => Math.ceil(Math.round(m * 1000) / 1000 / 15) * 15;
-  const minutes = auQuart(reg ? taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12 : taches.reduce((s, t) => s + (+t.duree_min || 0), 0));
+  const minutes = auQuart(reg ? (+e.temps_semaine_min > 0 ? +e.temps_semaine_min * 52 / 12 : taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12) : taches.reduce((s, t) => s + (+t.duree_min || 0), 0));
   const uneFois = reg ? auQuart(taches.filter(t => !(+t.frequence_jours > 0)).reduce((s, t) => s + (+t.duree_min || 0), 0)) : 0;
   return { version: 1, potentiel: !definitif && !signeLe(d), echeance: d.echeance || "", accepter_avant: definitif ? "" : (d.mission || {}).accepter_avant || "", definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
     photos: choisies.filter(x => urls[x.apercu]).map(x => ({ url: urls[x.apercu], legende: x.legende || "" })), ramener, fourni,
