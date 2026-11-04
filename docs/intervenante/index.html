@@ -1257,6 +1257,7 @@ function fdrHtml(f) {
     <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${[f.client, f.activite].filter(Boolean).map(esc).join(" · ")}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">${ico("lieu")} ${esc(f.adresse)}</a>` : f.secteur ? `<br><span>${ico("lieu")} ${esc(f.secteur)}</span>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">${ico("tel")} ${esc(f.telephone)}</a>` : ""}</div>
     <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
       <div class="fdr-chiffre paie"><b>${ico("euro")} ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
+    ${f.potentiel ? `<div class="fdr-delai">${ico("agenda")} Mission possible : elle se fera seulement si le client accepte le devis.</div>` : ""}
     ${f.accepter_avant ? `<div class="fdr-delai">${ico("agenda")} À accepter avant le ${new Date(f.accepter_avant + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.echeance ? `<div class="fdr-delai">${ico("agenda")} À terminer avant le ${new Date(f.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.note ? `<div class="fdr-mot">${ico("bulle")} ${esc(f.note)}</div>` : ""}
@@ -1333,7 +1334,7 @@ async function rappelsMission() {
   const finTravail = t => (ficheDeLaProposition(docsAcceptees.data || [], t.id) || {}).echeance || "";
   const html = aPlacer.filter(t => !poses.some(c => c.client_id === t.client_id && c.debut >= t.cree_le)).map(t => `<div class="rappel-mission">${ico("agenda")} <b>${esc(t.texte.replace(/^Mission : /, ""))}</b> : à placer dans ton emploi du temps, et prends contact avec le client${t.echeance ? " (à terminer avant le " + t.echeance.split("-").reverse().join("/") + ")" : ""}.
       <div class="row"><button class="btn" data-fiche-client="${t.client_id}">${ico("personne")} Contacter le client</button></div></div>`)
-    .concat(acceptees.map(t => `<div class="rappel-mission">${ico("ok")} <b>${esc(t.texte.replace(/^Proposition : /, ""))}</b> : mission acceptée. Garde du temps${finTravail(t) ? " avant le " + finTravail(t).split("-").reverse().join("/") : ""} : l'ordre de mission et le contact du client arrivent quand le client a signé.</div>`)).join("");
+    .concat(acceptees.map(t => /principe/.test(t.commentaire || "") ? `<div class="rappel-mission">${ico("ok")} <b>${esc(t.texte.replace(/^Proposition : /, ""))}</b> : accord de principe donné. Rien n'est définitif tant que le client n'a pas accepté le devis.</div>` : `<div class="rappel-mission">${ico("ok")} <b>${esc(t.texte.replace(/^Proposition : /, ""))}</b> : mission acceptée. Garde du temps${finTravail(t) ? " avant le " + finTravail(t).split("-").reverse().join("/") : ""} : l'ordre de mission et le contact du client arrivent quand le client a signé.</div>`)).join("");
   if (html && document.getElementById("contenu") === zone) zone.insertAdjacentHTML("afterbegin", html);
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-fiche-client]"); if (b) ficheClient(b.dataset.ficheClient); });
@@ -1361,7 +1362,7 @@ async function vueMissions() {
   const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
   if (lus.error) throw lus.error;
   const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = f.secteur || villeDe(f.adresse), acceptee = /^Je prends/.test(t.commentaire || "");
-    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>${ico("lieu")} ${esc(ville || "Ville à voir")}${ouverte && t.echeance ? " · " + ico("agenda") + " répondre avant le " + t.echeance.split("-").reverse().join("/") : ""}${f.echeance ? " · " + ico("agenda") + " à terminer avant le " + f.echeance.split("-").reverse().join("/") : ""}</small>${acceptee ? `<br><small><b style="font-size:13px;color:var(--paie-ink)">${ico("ok")} Acceptée</b> : l'ordre de mission arrive quand le client a signé</small>` : ""}</span>
+    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>${ico("lieu")} ${esc(ville || "Ville à voir")}${ouverte && t.echeance ? " · " + ico("agenda") + " répondre avant le " + t.echeance.split("-").reverse().join("/") : ""}${f.echeance ? " · " + ico("agenda") + " à terminer avant le " + f.echeance.split("-").reverse().join("/") : ""}</small>${acceptee ? (/principe/.test(t.commentaire) ? `<br><small><b style="font-size:13px;color:var(--paie-ink)">${ico("ok")} Accord de principe</b> : rien n'est définitif tant que le client n'a pas accepté</small>` : `<br><small><b style="font-size:13px;color:var(--paie-ink)">${ico("ok")} Acceptée</b> : l'ordre de mission arrive quand le client a signé</small>`) : ""}</span>
       <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
   const fermee = t => t.fait_le && !/^Je prends/.test(t.commentaire || ""), mention = t => /annul/i.test(t.commentaire || "") ? "Annulée" : /prise/i.test(t.commentaire || "") ? "Déjà prise" : /expir/i.test(t.commentaire || "") ? "Expirée" : "Refusée";
   const ouvertes = liste.filter(t => !t.fait_le), acceptees = liste.filter(t => t.fait_le && !fermee(t) && !enCours.some(m => m.demande_id === t.demande_id)), closes = liste.filter(fermee);
@@ -1395,8 +1396,8 @@ async function ficheProposition(t, apres) {
   let fiche = null; try { fiche = JSON.parse(texte); } catch (x) {}
   feuille(`<h2 style="margin:0">Mission proposée</h2>
     ${fiche ? fdrHtml(t.fait_le ? { ...fiche, accepter_avant: "" } : fiche) : `<p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p><div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>`}
-    ${t.fait_le ? `<p class="muted small">${/^Je /.test(t.commentaire || "") ? "Ta réponse : " : ""}${esc(t.commentaire || "Terminé")}</p>` : `<p class="muted small">Si d'autres presta ont reçu cette proposition, le premier qui accepte a la mission. L'ordre de mission arrive une fois le devis signé par le client.</p>
-    <button class="btn primary big" type="button" id="pr-oui">✓ Je prends</button>
+    ${t.fait_le ? `<p class="muted small">${/^Je /.test(t.commentaire || "") ? "Ta réponse : " : ""}${esc(t.commentaire || "Terminé")}</p>` : `<p class="muted small">${fiche && fiche.potentiel ? "Le client n'a pas encore accepté le devis : tu donnes un accord de principe, rien n'est définitif. Si le client accepte, OIKOS choisit parmi ceux qui ont donné leur accord et l'ordre de mission arrive." : "Si d'autres presta ont reçu cette proposition, le premier qui accepte a la mission. L'ordre de mission arrive une fois le devis signé par le client."}</p>
+    <button class="btn primary big" type="button" id="pr-oui">✓ ${fiche && fiche.potentiel ? "D'accord sur le principe" : "Je prends"}</button>
     <label class="f">Si tu ne peux pas, dis pourquoi (facultatif)<textarea id="pr-motif" maxlength="1500"></textarea></label>
     <button class="btn" type="button" id="pr-non" style="color:var(--stop)">Je ne peux pas</button>`}
     <button class="btn flat" type="button" data-fermer>Fermer</button>`, (el, fermer) => {
@@ -1407,7 +1408,7 @@ async function ficheProposition(t, apres) {
       toast(data.length ? message : "Trop tard : cette proposition est fermée, la mission est déjà prise ou annulée."); fermer();
     };
     if (el.querySelector("#pr-oui")) {
-      el.querySelector("#pr-oui").onclick = () => repondre("Je prends", "Réponse envoyée ! Le premier qui accepte a la mission ; l'ordre de mission arrivera une fois le devis signé.");
+      el.querySelector("#pr-oui").onclick = () => fiche && fiche.potentiel ? repondre("Je prends (accord de principe)", "Accord de principe envoyé. Si le client accepte et qu'OIKOS te confie la mission, l'ordre de mission arrivera.") : repondre("Je prends", "Réponse envoyée ! Le premier qui accepte a la mission ; l'ordre de mission arrivera une fois le devis signé.");
       el.querySelector("#pr-non").onclick = () => { const m = el.querySelector("#pr-motif").value.trim(); repondre("Je ne peux pas" + (m ? " : " + m : ""), "C'est noté, OIKOS le voit."); };
     }
   }, apres);

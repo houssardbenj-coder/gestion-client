@@ -447,13 +447,14 @@ async function compteurAVoir() {
     const nc = (c.count || 0) + (dv.count || 0); if (ec) ec.innerHTML = nc ? `<span class="bulle">${nc}</span>` : "";
   } catch (e) {}
 }
-let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [];
+let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [], cachePropositions = [];
 async function chargerBase() {
-  [cacheProfils, cacheClients, cacheAttrib, cacheDemandes] = await Promise.all([
+  [cacheProfils, cacheClients, cacheAttrib, cacheDemandes, cachePropositions] = await Promise.all([
     q(sb.from("profils").select("*").order("prenom")),
     q(sb.from("clients").select("*").order("nom")),
     q(sb.from("attributions").select("*")),
-    sb.from("demandes_devis").select("*").order("cree_le", { ascending: false }).then(r => r.data || [])]);
+    sb.from("demandes_devis").select("*").order("cree_le", { ascending: false }).then(r => r.data || []),
+    sb.from("taches").select("demande_id,intervenante_id,texte,fait_le,commentaire").like("texte", "Proposition*").not("demande_id", "is", null).then(r => r.data || [])]);
 }
 const nomClient = id => (cacheClients.find(c => c.id === id) || {}).nom || "?";
 const ACTIVITES_CLIENT = ["Cours", "Ménage", "Jardinage", "Bricolage"];
@@ -465,6 +466,10 @@ const nomPresta = a => a.intervenante_id ? nomInterv(a.intervenante_id) : a.nom_
 const prestaEnCours = a => !a.fin || a.fin > ymd(new Date());
 const etiquettePresta = a => nomPresta(a) + (a.activite ? " (" + a.activite + ")" : "");
 const prestatairesActuels = c => cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(etiquettePresta).join(", ");
+/* Presta potentiels : sollicités ou notés sur une demande dont le client n'a pas encore dit oui. Ce n'est pas une attribution : aucun accès au client tant que l'ordre de mission n'est pas parti. */
+const potentielsDemande = d => { const m = d.mission || {}, ta = cachePropositions.filter(t => t.demande_id === d.id);
+  return { attente: ta.filter(t => reponseProp(t) === "attente").map(t => nomInterv(t.intervenante_id)), oui: ta.filter(t => reponseProp(t) === "ok").map(t => nomInterv(t.intervenante_id)).concat(m.presta_accord || []), contacter: m.potentiels || [] }; };
+const prestaPotentiels = c => [...new Set(cacheDemandes.filter(d => d.client_id === c.id && enAttenteDevis(d)).flatMap(d => { const p = potentielsDemande(d); return [...p.oui, ...p.attente, ...p.contacter]; }))].join(", ");
 /* Trois sections : l'entreprise du client décide (le compte VosFactures de sa dernière facture, ou les cases de sa fiche), car OIKOS donne aussi des cours.
    Sans entreprise connue : Cours = Benjamin enseignement, un service = OIKOS. Un client des deux est dans les deux, un prospect reste à part. */
 const ENTREPRISES = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"]];
@@ -1607,7 +1612,7 @@ async function vueClients() {
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
     <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
-      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
   const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value;
     const etatOk = r => !t || (t === "termine") === (r.dataset.etat === "termine");   // une recherche regarde aussi les anciens
     el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a))); };
@@ -1716,7 +1721,7 @@ function ficheClient(id, ong = "ensemble") {
   if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activites: entreprise === "BE" ? ["Cours"] : entreprise === "OIKOS" ? ["Ménage"] : [], entite: NOMS_ENTREPRISE[entreprise] || null, etat: entreprise === "PROSPECT" ? "prospect" : "actif" })}`, (el, fermer) =>
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
-      ${peutAvoirDevis(c) ? `<button class="btn primary" type="button" id="dm-nv">${ico("stylo")} Demande de devis</button>` : ""}
+      ${peutAvoirDevis(c) ? `<button class="btn primary" type="button" id="dm-nv">${ico("stylo")} Demande de devis</button><button class="btn" type="button" id="dm-rat">${ico("recu")} Devis déjà envoyé</button>` : ""}
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
@@ -1734,6 +1739,8 @@ function ficheClient(id, ong = "ensemble") {
     };
     const nvDm = el.querySelector("#dm-nv");
     if (nvDm) nvDm.onclick = () => nouvelleDemande(c, () => { afficher(); aller("devis"); });
+    const ratDm = el.querySelector("#dm-rat");
+    if (ratDm) ratDm.onclick = () => rattacherDevis(c, () => { afficher(); aller("devis"); });
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
     el.querySelector("#fiche-choix").onchange = async e => {
       const coches = n => [...el.querySelectorAll(`#fiche-choix [name=${n}]:checked`)].map(x => x.value);
@@ -1798,7 +1805,7 @@ async function dosEnsemble(c, corps, re) {
   const docs = taches.length ? await q(sb.from("tache_documents").select("*").in("tache_id", taches.map(t => t.id)).order("cree_le")) : [];
   const [urlsP, urlsT] = await Promise.all([urlsSignees(photos.map(p => p.apercu)), urlsDocs(docs)]);
   const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
-  corps.innerHTML = `${prestatairesActuels(c) ? `<p style="margin:0 0 6px"><b>Prestataire :</b> ${esc(prestatairesActuels(c))}</p>` : ""}${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("etincelle")} Analyses (${analyses.length})</h2>
+  corps.innerHTML = `${prestatairesActuels(c) ? `<p style="margin:0 0 6px"><b>Prestataire :</b> ${esc(prestatairesActuels(c))}</p>` : ""}${prestaPotentiels(c) ? `<p style="margin:0 0 6px"><b>Prestataire potentiel :</b> ${esc(prestaPotentiels(c))}</p>` : ""}${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("etincelle")} Analyses (${analyses.length})</h2>
       ${analyses.map(a => `<div class="ligne"><span>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`).join("")}</section>` : ""}
     <section class="card"><h2 style="margin-top:0">${ico("dossier")} Dossiers de tâches (${taches.length})</h2>
       ${taches.map(t => { const l = docs.filter(d => d.tache_id === t.id); return `<div class="dos-tache" data-t="${t.id}"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow-wrap:anywhere">${esc(t.dossier_nom)}</b>
@@ -1962,7 +1969,7 @@ const accordPresta = (d, ta) => ((d.mission || {}).presta_accord || []).length >
 function etatDemande(d, ta) {
   const props = ta.filter(estProposition), accord = accordPresta(d, ta);
   if (d.etat === "estimee") return accord ? ["✓ Presta d'accord : devis à envoyer", "warn"] : props.some(t => reponseProp(t) === "attente") ? ["Réponse du presta attendue", "warn"] : props.length ? ["✗ Pas de presta : à reproposer", "warn"] : ["Estimée : à proposer au presta", "warn"];
-  if (d.etat === "devis_cree") return devisSigne(d) ? (accord ? ["Signé : ordre de mission à envoyer", ""] : props.some(t => reponseProp(t) === "attente") ? ["Signé · réponse du presta attendue", "warn"] : ["Signé : presta à choisir", "warn"]) : accord ? ["✓ Presta d'accord · signature du client attendue", "warn"] : ["Signature du client attendue", "warn"];
+  if (d.etat === "devis_cree") return devisSigne(d) ? (accord ? ["Signé : ordre de mission à envoyer", ""] : props.some(t => reponseProp(t) === "attente") ? ["Signé · réponse du presta attendue", "warn"] : ["Signé : presta à choisir", "warn"]) : accord ? ["✓ Accord de principe · signature du client attendue", "warn"] : ["Signature du client attendue", "warn"];
   return ETATS_DEMANDE[d.etat] || [d.etat, "off"];
 }
 const signeLe = d => (d.mission || {}).devis_signe_le;
@@ -1996,7 +2003,7 @@ async function vueDemandes() {
 }
 async function dosDevis(c, corps, re) {
   corps.innerHTML = `<div id="dm-liste"></div>`;
-  await listeDemandes(corps.querySelector("#dm-liste"), cacheDemandes.filter(d => d.client_id === c.id), false, re, peutAvoirDevis(c) ? "Aucune demande pour ce client : utilise « Demande de devis » en haut de son dossier." : "Aucune demande pour ce client.");
+  await listeDemandes(corps.querySelector("#dm-liste"), cacheDemandes.filter(d => d.client_id === c.id), false, re, peutAvoirDevis(c) ? "Aucune demande pour ce client : utilise « Demande de devis » ou « Devis déjà envoyé » en haut de son dossier." : "Aucune demande pour ce client.");
 }
 /* Une estimation enregistrée avant la règle du temps unique garde un coût sur le temps brut : on le relit au quart d'heure supérieur, le gain suit */
 function estimationAuQuart(e) {
@@ -2010,6 +2017,7 @@ function estimationAuQuart(e) {
 function resumeEstimation(d) {
   const e = estimationAuQuart(d.estimation); if (!e) return "";
   const p = e.periode === "mois" ? " / mois" : "";
+  if (e.rattache) return `<div class="row" style="margin-top:8px;gap:6px"><span class="tag">${ico("chrono")} ${String(Math.round((+e.heures || 0) * 100) / 100).replace(".", ",")} h${p}</span></div>`;
   return `<div class="row" style="margin-top:8px;gap:6px"><span class="tag">${ico("chrono")} ${String(Math.round((+e.heures || 0) * 100) / 100).replace(".", ",")} h${p}</span>
     <span class="tag">Coût ${euros(e.cout_total)}${p}</span>${+e.vente_ht ? `<span class="tag">Vente HT ${euros(e.vente_ht)}${p}</span>
     <span class="tag ${+e.gain < 0 ? "warn" : ""}"><b>Gain estimé ${euros(e.gain)}${p}</b>${+e.vente_ht ? " (" + Math.round(e.gain / e.vente_ht * 100) + " %)" : ""}</span>` : `<span class="tag off">prix pas encore donné</span>`}</div>`;
@@ -2031,11 +2039,12 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
   const urls = await urlsSignees(photos.map(p => p.apercu));
   zone.innerHTML = liste.map(d => { const c = cacheClients.find(k => k.id === d.client_id) || {};
     const ph = photos.filter(p => p.demande_id === d.id), ta = taches.filter(x => x.demande_id === d.id), attente = enAttenteDevis(d), [t, k] = etatDemande(d, ta), accord = accordPresta(d, ta), props = ta.filter(estProposition), premier = premierOui(ta);
-    const suivi = accord ? "✓ " + [premier && nomInterv(premier.intervenante_id), ...((d.mission || {}).presta_accord || [])].filter(Boolean).join(", ") : attente ? props.filter(x => ["attente", "refus"].includes(reponseProp(x))).map(x => ({ attente: "En attente :", refus: "Refus :" }[reponseProp(x)] + " " + nomInterv(x.intervenante_id))).join(" · ") : "";
+    const oks = props.filter(x => reponseProp(x) === "ok").sort((a, b) => a.fait_le < b.fait_le ? -1 : 1).map(x => nomInterv(x.intervenante_id)), enAttenteDe = props.filter(x => reponseProp(x) === "attente").map(x => nomInterv(x.intervenante_id));
+    const suivi = accord ? "✓ " + [...oks, ...((d.mission || {}).presta_accord || [])].join(", ") + (enAttenteDe.length ? " · En attente : " + enAttenteDe.join(", ") : "") : attente ? props.filter(x => ["attente", "refus"].includes(reponseProp(x))).map(x => ({ attente: "En attente :", refus: "Refus :" }[reponseProp(x)] + " " + nomInterv(x.intervenante_id))).concat(((d.mission || {}).potentiels || []).map(n => "À contacter : " + n)).join(" · ") : "";
     const repondreAvant = accord ? "" : props.filter(x => reponseProp(x) === "attente" && x.echeance).map(x => x.echeance).sort().pop() || "";   // la dernière limite encore ouverte
     const iaEnTete = d.etat === "a_estimer" || (d.etat === "estimee" && accord);
-    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "Faire le devis" : d.estimation ? "Reprendre le projet" : "Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">${ico("chrono")} Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
-    const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && !accord ? `<button class="btn primary" data-dm-proposer>${props.some(x => reponseProp(x) === "attente") ? ico("plus") + " Ajouter un presta" : props.length ? ico("mission") + " Proposer à un autre presta" : ico("mission") + " Transmettre au presta"}</button>` : "";
+    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "Faire le devis" : d.estimation && !d.estimation.rattache ? "Reprendre le projet" : "Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation && !d.estimation.rattache ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">${ico("chrono")} Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
+    const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && (!accord || !signeLe(d)) ? `<button class="btn ${accord ? "" : "primary"}" data-dm-proposer>${accord || props.some(x => reponseProp(x) === "attente") ? ico("plus") + " Ajouter un presta" : props.length ? ico("mission") + " Proposer à un autre presta" : ico("mission") + " Transmettre au presta"}</button>` : "";
     const voirFeuille = ((d.estimation || {}).taches || []).length ? `<button class="btn" data-dm-feuille>${ico("oeil")} Voir la feuille de route</button>` : "";
     const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>${ico("route")} Envoyer l'ordre de mission</button>` : "") + (d.etat === "devis_cree" && accord && !devisSigne(d) ? (d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">${ico("recu")} Envoyer le devis</a>` : "") + `<button class="btn" disabled title="Il s'activera dès que le client aura signé le devis">${ico("route")} Ordre de mission : après signature</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn flat stop" data-dm-annuler-ordre>${ico("retour")} Annuler l'ordre</button><button class="btn go" data-dm-fin>${ico("drapeau")} ${d.type_prestation === "one_shot" ? "Valider la mission" : "Prestation terminée"}</button>` : "");
     return `<details class="card dm" data-dm="${d.id}" ${dmOuvertes.has(d.id) ? "open" : ""}>
@@ -2046,8 +2055,9 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
         ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
         ${resumeEstimation(d)}
         ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
-        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: ico("chrono"), ok: ico("ok"), refus: ico("croix"), close: ico("rond") }[reponseProp(x)] : missionAnnulee(x) ? ico("rond") : x.fait_le ? ico("ok") : ico("rond")} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${(estProposition(x) || missionAnnulee(x)) && x.commentaire ? " · " + esc(x.commentaire) : ""}${estProposition(x) && reponseProp(x) === "ok" && premier && x.id !== premier.id ? ` <span class="tag warn">arrivé après ${esc(nomInterv(premier.intervenante_id))}</span>` : ""}${x.echeance && (!estProposition(x) || reponseProp(x) === "attente") ? ` <span class="muted">· ${estProposition(x) ? "réponse avant le" : "pour le"} ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}${attente && estProposition(x) && ["attente", "ok"].includes(reponseProp(x)) ? ` <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-annuler="${x.id}">Annuler</button>` : ""}</div>`).join("")}</div>` : ""}
+        ${ta.length ? `<div>${ta.map(x => `<div class="small">${estProposition(x) ? { attente: ico("chrono"), ok: ico("ok"), refus: ico("croix"), close: ico("rond") }[reponseProp(x)] : missionAnnulee(x) ? ico("rond") : x.fait_le ? ico("ok") : ico("rond")} ${esc(nomInterv(x.intervenante_id))} : ${esc(x.texte)}${(estProposition(x) || missionAnnulee(x)) && x.commentaire ? " · " + esc(x.commentaire) : ""}${estProposition(x) && reponseProp(x) === "ok" && premier && x.id !== premier.id && !/principe/.test(x.commentaire || "") ? ` <span class="tag warn">arrivé après ${esc(nomInterv(premier.intervenante_id))}</span>` : ""}${x.echeance && (!estProposition(x) || reponseProp(x) === "attente") ? ` <span class="muted">· ${estProposition(x) ? "réponse avant le" : "pour le"} ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}${attente && estProposition(x) && ["attente", "ok"].includes(reponseProp(x)) ? ` <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-annuler="${x.id}">Annuler</button>` : ""}</div>`).join("")}</div>` : ""}
         ${attente ? ((d.mission || {}).presta_accord || []).map(n => `<div class="small">${ico("ok")} ${esc(n)} : d'accord, sans compte <button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-accord="${esc(n)}">Annuler</button></div>`).join("") : ""}
+        ${attente ? ((d.mission || {}).potentiels || []).map(n => `<div class="small">${ico("chrono")} ${esc(n)} : à contacter <button class="btn flat" style="padding:2px 6px;min-height:0" data-dm-pot-ok="${esc(n)}">D'accord</button><button class="btn flat stop" style="padding:2px 6px;min-height:0" data-dm-pot-non="${esc(n)}">Retirer</button></div>`).join("") : ""}
         ${(d.mission.sans_compte || []).length ? `<p class="small">Sans compte dans l'appli : ${(d.mission.sans_compte).map(esc).join(", ")}</p>` : ""}
         <div class="row">
           ${voirFeuille}
@@ -2076,12 +2086,20 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     if (b.dataset.dmAccord) { if (!confirm("Annuler l'accord de " + b.dataset.dmAccord + " ?")) return;
       await maj(sb.from("demandes_devis").update({ mission: { ...(d.mission || {}), presta_accord: (d.mission.presta_accord || []).filter(n => n !== b.dataset.dmAccord) } }).eq("id", d.id));
       await chargerBase(); toast("Accord annulé"); return re(); }
+    if (b.dataset.dmPotOk || b.dataset.dmPotNon) { const n = b.dataset.dmPotOk || b.dataset.dmPotNon, m = d.mission || {};
+      await maj(sb.from("demandes_devis").update({ mission: { ...m, potentiels: (m.potentiels || []).filter(x => x !== n), ...(b.dataset.dmPotOk ? { presta_accord: [...new Set([...(m.presta_accord || []), n])] } : {}) } }).eq("id", d.id));
+      await chargerBase(); toast(b.dataset.dmPotOk ? "Noté : " + n + " est d'accord" : "Retiré"); return re(); }
     if (b.hasAttribute("data-dm-proposer")) return proposerPresta(d, c, re);
     if (b.hasAttribute("data-dm-feuille")) return voirFeuilleRoute(d, c);
     if (b.hasAttribute("data-dm-accepter")) return accepterDemande(d, c, re);
     if (b.hasAttribute("data-dm-annuler-ordre")) return annulerOrdre(d, c, re);
     if (b.hasAttribute("data-dm-fin")) return terminerDemande(d, c, taches.filter(t => t.demande_id === d.id), re);
-    if (b.hasAttribute("data-dm-refus")) { if (!confirm("Le client refuse « " + d.titre + " » ? La demande reste consultable et peut être reprise.")) return;
+    if (b.hasAttribute("data-dm-refus")) { if (!confirm("Le client refuse « " + d.titre + " » ? La demande reste consultable et peut être reprise. Les presta sollicités sont retirés, et ceux qui avaient accepté reçoivent un message.")) return;
+      const ouvertes = taches.filter(x => x.demande_id === d.id && estProposition(x) && ["attente", "ok"].includes(reponseProp(x))), maintenant = new Date().toISOString();
+      for (const x of ouvertes) await maj(sb.from("taches").update({ fait_le: x.fait_le || maintenant, vue_le: maintenant, commentaire: "Proposition annulée : le client n'a pas donné suite" }).eq("id", x.id));
+      if (ouvertes.length) await maj(sb.from("tache_documents").delete().in("tache_id", ouvertes.map(x => x.id)));
+      const prevenus = ouvertes.filter(x => reponseProp(x) === "ok");
+      if (prevenus.length) await maj(sb.from("messages").insert(prevenus.map(x => ({ intervenante_id: x.intervenante_id, texte: "La mission « " + x.texte.replace(/^Proposition : /, "") + " » ne se fera pas : le client n'a pas donné suite. Tu n'as plus à garder ce temps." }))));
       if ((d.mission.attributions || []).length) await maj(sb.from("attributions").update({ fin: ymd(new Date()) }).in("id", d.mission.attributions));
       await maj(sb.from("demandes_devis").update({ etat: "refusee", refuse_le: new Date().toISOString(), mission: {} }).eq("id", d.id)); await chargerBase(); toast("Demande refusée"); return re(); }
     if (b.hasAttribute("data-dm-reprendre")) { await maj(sb.from("demandes_devis").update({ etat: d.devis_url ? "devis_cree" : d.estimation ? "estimee" : "a_estimer" }).eq("id", d.id)); await chargerBase(); toast("Demande reprise"); return re(); }
@@ -2093,6 +2111,42 @@ const champsDemande = (d, c) => `${c === null ? `<label class="f"><span>Client $
       <label class="f">Activité<select name="activite">${ACTIVITES_DEVIS.map(a => `<option ${d.activite === a ? "selected" : ""}>${a}</option>`).join("")}</select></label></div>
     <label class="f"><span>Besoin ${aide("Ce que le client souhaite, et ce que l'IA doit regarder sur les photos.")}</span><textarea name="besoin" maxlength="4000" style="min-height:80px" placeholder="Ex. haie de laurier de 15 m à tailler à 1,80 m, évacuer les déchets. Regarder l'accès et l'état du mur.">${esc(d.besoin || "")}</textarea></label>`;
 const lireDemande = f => ({ titre: String(f.get("titre")).trim(), type_prestation: f.get("type_prestation"), activite: f.get("activite"), besoin: String(f.get("besoin")).trim() || null });
+/* Un devis fait sans demande (depuis « Faire un devis ») : il devient une demande déjà au stade « devis envoyé », et tout le parcours suit : presta potentiels, suivi de la signature, ordre de mission.
+   Le temps et le travail sont ceux que tu indiques ici : ils font la feuille de route que le presta reçoit. Jamais le prix. */
+const ID_DEVIS = s => (String(s || "").trim().match(/\/invoices\/(\d+)/) || String(s || "").trim().match(/^(\d{5,})$/) || [])[1] || "";
+function rattacherDevis(c, re) {
+  const activites = activitesClient(c), activite = ACTIVITES_DEVIS.find(a => activites.includes(a)) || "Jardinage";
+  fenetre(`<h2 style="margin:0">Devis déjà envoyé · ${esc(c.nom)} ${aide("Pour un devis fait sans demande. Il rejoint « En attente de devis » : tu peux y mobiliser des presta, et la signature du client se suit toute seule si tu donnes le lien.")}</h2>
+    <form id="frd" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${champsDemande({ activite, type_prestation: "regulier" }, c)}
+      <div class="deux"><label class="f">N° du devis<input type="text" name="numero" required maxlength="60" placeholder="Ex. ${esc(norm(c.nom).split(" ").pop().toUpperCase())}-1-1"></label>
+        <label class="f">Montant TTC (facultatif)<input type="number" name="ttc" min="0" step="0.01"></label></div>
+      <label class="f"><span>Lien du devis dans VosFactures (facultatif) ${aide("Copie l'adresse de la page du devis. Avec ce lien, « Signé » s'affiche tout seul dans les 5 minutes. Sans lien, c'est toi qui diras que le client a accepté.")}</span><input type="text" name="lien" maxlength="300" placeholder="https://oikos-sud-services.vosfactures.fr/invoices/…"></label>
+      <div class="deux"><label class="f"><span>Temps (heures) ${aide("Le temps que le presta verra. Pour un régulier : le temps d'un passage.")}</span><input type="number" name="heures" min="0.25" step="0.25" required></label>
+        <label class="f" id="frd-freq">Fréquence<select name="frequence">${FREQS.filter(([v]) => v).map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></label></div>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer et mobiliser</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    const form = el.querySelector("#frd"), majFreq = () => { el.querySelector("#frd-freq").style.display = form.elements.type_prestation.value === "regulier" ? "" : "none"; };
+    form.elements.type_prestation.onchange = majFreq; majFreq();
+    form.onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), l = lireDemande(f), numero = String(f.get("numero")).trim(), lien = String(f.get("lien")).trim(), id = ID_DEVIS(lien);
+      if (!l.titre) return toast("Indique la prestation");
+      if (lien && !id) return toast("Ce lien n'est pas celui d'un devis VosFactures");
+      if (cacheDemandes.some(d => d.client_id === c.id && (d.devis_numero === numero || (id && ID_DEVIS(d.devis_url) === id)))) return toast("Ce devis est déjà rattaché à une demande de ce client");
+      const minutes = Math.round(+f.get("heures") * 60), reg = l.type_prestation === "regulier", freq = reg ? +f.get("frequence") : 0;
+      if (!(minutes > 0)) return toast("Indique le temps");
+      const tache = { titre: l.titre, detail: l.besoin || "", duree_min: minutes, priorite: 3, frequence_jours: freq || null, categorie: l.activite === "Ménage" ? "menage" : "autre" };
+      const num = numero.match(/-(\d+)-\d+$/);
+      bouton.disabled = true;
+      try {
+        const { data, error } = await sb.from("demandes_devis").insert({ ...l, client_id: c.id, etat: "devis_cree", devis_numero: numero, devis_url: id ? "https://oikos-sud-services.vosfactures.fr/invoices/" + id : null, devis_ttc: +f.get("ttc") || null, devis_cree_le: new Date().toISOString(),
+          estimation: { rattache: true, periode: reg ? "mois" : "", heures: reg ? Math.ceil(minutes * fdrParAn(tache) / 12 / 15) / 4 : Math.ceil(minutes / 15) / 4, taches: [tache], articles: [], materiel: [], ...(freq === 7 ? { temps_semaine_min: minutes } : {}) },
+          mission: num ? { presta_num: +num[1] } : {} }).select().single();
+        if (error) throw error;
+        await chargerBase(); fermer(); toast("Devis rattaché"); re();
+        proposerPresta(data, c, re);
+      } catch (x) { bouton.disabled = false; souci(x); }
+    };
+  });
+}
 function nouvelleDemande(c, re, depart = {}, apresCreation = null) {
   const activites = c ? activitesClient(c) : [], activite = ACTIVITES_DEVIS.find(a => activites.includes(a)) || "Jardinage";
   fenetre(`<h2 style="margin:0">Demande de devis${c ? " · " + esc(c.nom) : ""} ${aide(`Un sous-dossier est créé dans CLIENTS OIKOS › ${c ? c.nom.toUpperCase() : "NOM"} › Devis. L'analyse devient possible quand il est prêt, dans les 5 minutes.`)}</h2>
@@ -2190,6 +2244,7 @@ function fdrHtml(f) {
     <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${[f.client, f.activite].filter(Boolean).map(esc).join(" · ")}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">${ico("lieu")} ${esc(f.adresse)}</a>` : f.secteur ? `<br><span>${ico("lieu")} ${esc(f.secteur)}</span>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">${ico("tel")} ${esc(f.telephone)}</a>` : ""}</div>
     <div class="fdr-chiffres"><div class="fdr-chiffre"><b>${ico("chrono")} ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
       <div class="fdr-chiffre paie"><b>${ico("euro")} ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
+    ${f.potentiel ? `<div class="fdr-delai">${ico("agenda")} Mission possible : elle se fera seulement si le client accepte le devis.</div>` : ""}
     ${f.accepter_avant ? `<div class="fdr-delai">${ico("agenda")} À accepter avant le ${new Date(f.accepter_avant + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.echeance ? `<div class="fdr-delai">${ico("agenda")} À terminer avant le ${new Date(f.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.note ? `<div class="fdr-mot">${ico("bulle")} ${esc(f.note)}</div>` : ""}
@@ -2227,7 +2282,7 @@ async function fdrDonnees(d, c, definitif) {
   const auQuart = m => Math.ceil(Math.round(m * 1000) / 1000 / 15) * 15;
   const minutes = auQuart(reg ? taches.reduce((s, t) => s + (+t.duree_min || 0) * fdrParAn(t), 0) / 12 : taches.reduce((s, t) => s + (+t.duree_min || 0), 0));
   const uneFois = reg ? auQuart(taches.filter(t => !(+t.frequence_jours > 0)).reduce((s, t) => s + (+t.duree_min || 0), 0)) : 0;
-  return { version: 1, echeance: d.echeance || "", accepter_avant: definitif ? "" : (d.mission || {}).accepter_avant || "", definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
+  return { version: 1, potentiel: !definitif && !signeLe(d), echeance: d.echeance || "", accepter_avant: definitif ? "" : (d.mission || {}).accepter_avant || "", definitif: !!definitif, regulier: reg, titre: d.titre, activite: d.activite, client: c.nom, adresse: c.adresse || "", telephone: definitif ? c.telephone || "" : "", consignes: definitif ? c.consignes || "" : "", minutes, une_fois: uneFois, compensation,
     photos: choisies.filter(x => urls[x.apercu]).map(x => ({ url: urls[x.apercu], legende: x.legende || "" })), ramener, fourni,
     taches: taches.slice().sort((a, b) => (+b.priorite || 3) - (+a.priorite || 3)).map(t => { const court = fdrCourt(t.detail); return { t: t.titre, d: court, plus: String(t.detail || "").trim() !== court ? String(t.detail).trim() : "", min: +t.duree_min || 0, p: +t.priorite || 3, q: reg ? (+t.frequence_jours ? quandTache(t) : "une fois") : "" }; }) };
 }
@@ -2264,10 +2319,12 @@ async function proposerPresta(d, c, re) {
   fenetre(`<h2 style="margin:0">${deja.some(t => estProposition(t) && reponseProp(t) === "attente") ? "Ajouter un presta" : "Transmettre au presta"} · ${esc(d.titre)}</h2>
     ${sollicitesTxt ? `<p class="small" style="margin:6px 0 0">Déjà sollicités : ${esc(sollicitesTxt)}</p>` : ""}
     <form id="fpr" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide("Coche-en autant que tu veux : le premier « Je prends », à l'heure enregistrée par la base, a la mission, et les autres propositions se ferment. Chacun reçoit la feuille de route dans son appli, sans le nom ni l'adresse du client, sauf s'il y est déjà allé : seulement l'arrondissement ou la commune. Le devis se fait ensuite.")}</legend>
+      <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">À qui ? ${aide((signeLe(d) ? "Coche-en autant que tu veux : le premier « Je prends », à l'heure enregistrée par la base, a la mission, et les autres propositions se ferment." : "Coche-en autant que tu veux : tous peuvent donner un accord de principe. Tu choisis à l'ordre de mission, le premier arrivé est coché d'office.") + " Chacun reçoit la feuille de route dans son appli, sans le nom ni l'adresse du client, sauf s'il y est déjà allé : seulement l'arrondissement ou la commune. Le devis se fait ensuite.")}</legend>
         ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${habituels.includes(p.id) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Tous les intervenants ont déjà été sollicités.</p>`}</fieldset>
-      <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix : le devis peut partir tout de suite.")}</span><input type="text" name="accord" maxlength="300"></label>
-      <div class="deux"><label class="f"><span>À accepter avant le ${aide("Il la voit en haut de sa feuille de route. Passé cette date sans réponse, la proposition disparaît de son appli. Si tu en sollicites plusieurs, le premier qui accepte a la mission.")}</span><input type="date" name="accepter" min="${ymd(new Date())}" value="${esc(accepterAvant)}"></label>
+      ${signeLe(d) ? "" : `<p class="small" style="margin:0">${ico("chrono")} Le client n'a pas encore accepté : chaque presta donne un accord de principe, rien n'est définitif avant l'ordre de mission.</p>`}
+      <div class="deux"><label class="f"><span>À contacter, sans compte (noms séparés par une virgule) ${aide("Quelqu'un que tu penses appeler, sans son accord pour l'instant. Son nom est noté sur la demande et dans la liste des clients, comme potentiel. Rien ne lui est envoyé.")}</span><input type="text" name="potentiels" maxlength="300"></label>
+        <label class="f"><span>Déjà d'accord, sans compte (noms séparés par une virgule) ${aide("Quelqu'un qui t'a dit oui de vive voix.")}</span><input type="text" name="accord" maxlength="300"></label></div>
+      <div class="deux"><label class="f"><span>À accepter avant le ${aide("Il la voit en haut de sa feuille de route. Passé cette date sans réponse, la proposition disparaît de son appli. ")}</span><input type="date" name="accepter" min="${ymd(new Date())}" value="${esc(accepterAvant)}"></label>
         <label class="f"><span>À terminer avant le (facultatif) ${aide("La date pour faire le travail : il la voit sur sa feuille de route, puis sur l'ordre de mission.")}</span><input type="date" name="echeance" value="${esc(d.echeance || "")}"></label></div>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure) ${aide("Il voit le total estimé sur sa feuille de route, jamais le prix du client.")}</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
         <label class="f">Un mot pour lui (facultatif)<input type="text" name="note" maxlength="500"></label></div>
@@ -2276,8 +2333,8 @@ async function proposerPresta(d, c, re) {
     const form = el.querySelector("#fpr"), majApercu = () => { fiche.note = form.elements.note.value.trim(); fiche.echeance = form.elements.echeance.value; fiche.accepter_avant = form.elements.accepter.value; fdrPaie(fiche, form.elements.taux.value); el.querySelector("#fpr-apercu").innerHTML = fdrHtml(fdrAnonyme(fiche, c)); };
     form.oninput = majApercu; majApercu();
     form.onsubmit = async e => {
-      e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), anonyme = fdrAnonyme(fiche, c);
-      if (!qui.length && !accord.length) return toast("Choisis au moins une personne");
+      e.preventDefault(); majApercu(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), qui = f.getAll("qui"), accord = String(f.get("accord")).split(",").map(x => x.trim()).filter(Boolean), aContacter = String(f.get("potentiels")).split(",").map(x => x.trim()).filter(Boolean), anonyme = fdrAnonyme(fiche, c);
+      if (!qui.length && !accord.length && !aContacter.length) return toast("Choisis au moins une personne");
       const accepter = f.get("accepter"), terminer = f.get("echeance");
       if (qui.length && !accepter) return toast("Indique la date limite pour accepter");
       if (accepter && terminer && accepter > terminer) return toast("La date pour accepter doit arriver avant celle du travail");
@@ -2288,14 +2345,14 @@ async function proposerPresta(d, c, re) {
           const maintenant = new Date().toISOString();
           await maj(sb.from("tache_documents").insert(r.data.flatMap(t => JSON.stringify(connaissent.has(t.intervenante_id) ? fiche : anonyme).match(/[\s\S]{1,2000}/g).map((m, i) => ({ tache_id: t.id, nom: "Feuille de route " + (i + 1), legende: m, vue_le: maintenant })))));
         }
-        await maj(sb.from("demandes_devis").update({ echeance: terminer || null, mission: { ...(d.mission || {}), accepter_avant: accepter || (d.mission || {}).accepter_avant || null, presta_taux: f.get("taux"), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])] } }).eq("id", d.id));
-        await chargerBase(); fermer(); toast(qui.length ? "Transmis : la réponse arrivera ici et dans À voir" : "Noté : tu peux faire le devis"); re();
+        await maj(sb.from("demandes_devis").update({ echeance: terminer || null, mission: { ...(d.mission || {}), accepter_avant: accepter || (d.mission || {}).accepter_avant || null, presta_taux: f.get("taux"), presta_accord: [...new Set([...((d.mission || {}).presta_accord || []), ...accord])], potentiels: [...new Set([...((d.mission || {}).potentiels || []), ...aContacter])].filter(n => !accord.includes(n)) } }).eq("id", d.id));
+        await chargerBase(); fermer(); toast(qui.length ? "Transmis : la réponse arrivera ici et dans À voir" : "Noté"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
   });
 }
 async function accepterDemande(d, c, re) {
-  const reponses = await q(sb.from("taches").select("intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").sort((a, b) => a.fait_le < b.fait_le ? -1 : 1).slice(0, 1).map(t => t.intervenante_id), fiche = await fdrDonnees(d, c, true);
+  const reponses = await q(sb.from("taches").select("id,intervenante_id,texte,fait_le,commentaire").eq("demande_id", d.id)), tousOui = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok"), accords = reponses.filter(t => estProposition(t) && reponseProp(t) === "ok").sort((a, b) => a.fait_le < b.fait_le ? -1 : 1).slice(0, 1).map(t => t.intervenante_id), fiche = await fdrDonnees(d, c, true);
   const gens = cacheProfils.filter(p => p.role !== "gerant" && p.actif && !p.gele), nouveau = ["prospect", "termine"].includes(c.etat);
   const deja = cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a));
   // un prestataire noté à la main (ex. d'après l'Excel) qui a maintenant un compte : on le reconnaît par son nom
@@ -2311,8 +2368,8 @@ async function accepterDemande(d, c, re) {
   fenetre(`<h2 style="margin:0">Ordre de mission définitif · ${esc(d.titre)} ${aide(infos)}</h2>
     <form id="fac" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
       <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px"><legend class="small" style="font-weight:700">Qui s'en charge ? ${aide("Une tâche et le dossier partent dans son appli.")}</legend>
-        ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
-      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc((quelquUn ? accordsSansCompte : deja.filter(a => a.nom_libre && !aCompte(a.nom_libre) && !retires.includes(a.nom_libre)).map(a => a.nom_libre)).join(", "))}"></label>
+        ${gens.map(p => `<label class="row small" style="gap:6px;flex-wrap:nowrap;padding:3px 0"><input type="checkbox" name="qui" value="${p.id}" ${dejaLa(p) ? "checked" : ""} style="width:auto">${esc(nomPers(p))}${tousOui.some(t => t.intervenante_id === p.id) ? ` <span class="muted">· d'accord le ${jourAn(tousOui.find(t => t.intervenante_id === p.id).fait_le)}</span>` : ""}</label>`).join("") || `<p class="muted small">Aucun intervenant avec un compte.</p>`}</fieldset>
+      <label class="f"><span>Sans compte (noms séparés par une virgule) ${aide("Ils n'ont pas l'appli : ils auront le PDF à leur transmettre.")}</span><input type="text" name="sans_compte" maxlength="300" value="${esc((quelquUn ? accordsSansCompte : deja.filter(a => a.nom_libre && !aCompte(a.nom_libre) && !retires.includes(a.nom_libre)).map(a => a.nom_libre).concat((d.mission || {}).potentiels || [])).join(", "))}"></label>
       <label class="f">À terminer avant le (facultatif)<input type="date" name="echeance" value="${esc(d.echeance || "")}"></label>
       <div class="deux"><label class="f"><span>Sa paie (€ de l'heure)</span><input type="number" name="taux" min="0" step="0.5" value="${esc(fdrTaux(d))}"></label>
         <label class="f">Un mot pour lui (facultatif)<input type="text" name="ordre" maxlength="500"></label></div>
@@ -2340,6 +2397,12 @@ async function accepterDemande(d, c, re) {
         if (ouvertes.length) {
           await maj(sb.from("taches").update({ fait_le: maintenant, vue_le: maintenant, commentaire: "Mission déjà prise par un autre presta" }).in("id", ouvertes.map(t => t.id)));
           await maj(sb.from("tache_documents").delete().in("tache_id", ouvertes.map(t => t.id)));
+        }
+        const nonRetenus = tousOui.filter(t => !qui.includes(t.intervenante_id));   // un accord de principe sans la mission : il ne garde plus ce temps
+        if (nonRetenus.length) {
+          await maj(sb.from("taches").update({ vue_le: maintenant, commentaire: "Mission déjà prise par un autre presta" }).in("id", nonRetenus.map(t => t.id)));
+          await maj(sb.from("tache_documents").delete().in("tache_id", nonRetenus.map(t => t.id)));
+          await maj(sb.from("messages").insert(nonRetenus.map(t => ({ intervenante_id: t.intervenante_id, texte: "La mission « " + t.texte.replace(/^Proposition : /, "") + " » a été confiée à un autre presta. Merci pour ton accord, tu n'as plus à garder ce temps." }))));
         }
         await maj(sb.from("taches").update({ fait_le: maintenant }).eq("demande_id", d.id).is("fait_le", null));   // les photos demandées avant le devis ne comptent plus dans la mission
         if (qui.length) await maj(sb.from("taches").insert(qui.map(id => ({ intervenante_id: id, client_id: c.id, demande_id: d.id, texte: ("Mission : " + d.titre).slice(0, 500), echeance, commentaire: ordre || null, dossier_nom: d.titre.slice(0, 200) }))));
@@ -2451,7 +2514,11 @@ async function dosPresta(c, corps, re) {
   const actuels = lignes.filter(prestaEnCours).sort((a, b) => (a.debut || "") < (b.debut || "") ? 1 : -1), anciens = lignes.filter(a => !prestaEnCours(a)).sort((a, b) => a.fin < b.fin ? 1 : -1);
   const titre = a => `<b>${esc(nomPresta(a))}</b>${a.activite ? " · " + esc(a.activite) : ""}`;
   const recharger = async () => { await chargerBase(); afficher(); re(); };
-  corps.innerHTML = `<section class="card"><h2 style="margin-top:0">En ce moment</h2>
+  const enAttente = cacheDemandes.filter(d => d.client_id === c.id && enAttenteDevis(d));
+  corps.innerHTML = `${enAttente.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">Potentiels ${aide("Devis pas encore accepté : ces personnes n'ont aucun accès au client tant que l'ordre de mission n'est pas parti.")}</h2>
+      ${enAttente.map(d => { const p = potentielsDemande(d), l = [p.oui.length ? "D'accord : " + p.oui.join(", ") : "", p.attente.length ? "Réponse attendue : " + p.attente.join(", ") : "", p.contacter.length ? "À contacter : " + p.contacter.join(", ") : ""].filter(Boolean).join(" · ");
+        return `<div class="ligne"><span style="min-width:0"><b>${esc(d.titre)}</b>${d.devis_numero ? ` <span class="muted small">devis ${esc(d.devis_numero)}</span>` : ""}<br><span class="muted small">${esc(l || "Personne pour l'instant")}</span></span>${["estimee", "devis_cree"].includes(d.etat) && (!p.oui.length || !signeLe(d)) ? `<button class="btn" data-pot="${d.id}">${ico("mission")} Mobiliser</button>` : ""}</div>`; }).join("")}</section>` : ""}
+    <section class="card"><h2 style="margin-top:0">En ce moment</h2>
       ${actuels.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} ${a.debut ? `<span class="muted small">depuis le ${dateFr(a.debut)}</span>` : ""}${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><button class="btn stop" data-arret="${a.id}">Fin de mission</button></div>`).join("") || `<p class="muted small">Aucun prestataire.</p>`}
       <h3>Ajouter un prestataire</h3>
       <form id="pr-aj" style="display:flex;flex-direction:column;gap:10px">
@@ -2472,6 +2539,7 @@ async function dosPresta(c, corps, re) {
   };
   corps.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.pot) return proposerPresta(cacheDemandes.find(d => d.id === b.dataset.pot), c, recharger);
     if (b.dataset.efface) { if (confirm("Effacer cette ligne de l'historique ? À réserver à une erreur de saisie.")) { await maj(sb.from("attributions").delete().eq("id", b.dataset.efface)); recharger(); } return; }
     const a = lignes.find(x => x.id === b.dataset.arret); if (!a) return;
     fenetre(`<h2 style="margin:0">${esc(nomPresta(a))} s'arrête chez ${esc(c.nom)}</h2>
