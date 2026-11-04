@@ -1119,18 +1119,38 @@ const propositionOuverte = t => estProposition(t) && !t.fait_le && !(t.echeance 
 const pushPossible = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const surIphoneNonInstalle = () => /iphone|ipad/i.test(navigator.userAgent) && !(navigator.standalone || matchMedia("(display-mode: standalone)").matches);
 const pushEtat = () => surIphoneNonInstalle() ? "iphone" : !pushPossible() ? "impossible" : Notification.permission;
+let pushEchec = false;   // autorisé mais pas enregistré : le bouton reste pour réessayer
 async function abonnerPush() {
-  const c = await sb.from("push_cle").select("cle_publique").eq("id", 1).maybeSingle();
-  if (c.error || !c.data) throw new Error("Les notifications ne sont pas encore prêtes : réessaie dans quelques minutes.");
-  const t = c.data.cle_publique.replace(/-/g, "+").replace(/_/g, "/"), cle = Uint8Array.from(atob(t + "=".repeat((4 - t.length % 4) % 4)), x => x.charCodeAt(0));
-  const r = await navigator.serviceWorker.ready;
-  const a = await r.pushManager.getSubscription() || await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cle });
-  const { error } = await sb.from("push_abonnements").upsert({ endpoint: a.endpoint, intervenante_id: moi.id });
-  if (error) throw error;
+  try {
+    const c = await sb.from("push_cle").select("cle_publique").eq("id", 1).maybeSingle();
+    if (c.error || !c.data) throw Object.assign(new Error("Les notifications ne sont pas encore prêtes : réessaie dans quelques minutes."), { fr: true });
+    const t = c.data.cle_publique.replace(/-/g, "+").replace(/_/g, "/"), cle = Uint8Array.from(atob(t + "=".repeat((4 - t.length % 4) % 4)), x => x.charCodeAt(0));
+    const r = await Promise.race([navigator.serviceWorker.ready, new Promise((_, non) => setTimeout(() => non(new Error("service worker absent")), 15000))]);
+    const nouveau = () => r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cle });
+    let a = await r.pushManager.getSubscription() || await nouveau();
+    const enregistrer = () => sb.from("push_abonnements").upsert({ endpoint: a.endpoint, intervenante_id: moi.id });
+    let { error } = await enregistrer();
+    /* Ce téléphone est encore enregistré sous un autre compte : la base refuse de le reprendre, il lui faut une nouvelle adresse */
+    if (error && error.code === "42501") { await a.unsubscribe(); a = await nouveau(); ({ error } = await enregistrer()); }
+    if (error) throw error;
+    pushEchec = false;
+  } catch (x) { if (!reseau(x)) pushEchec = true; throw x; }
+}
+/* Le navigateur et la base répondent en anglais : on dit la cause et quoi faire, en français */
+function pushErreur(x) {
+  const m = `${(x && x.name) || ""} ${(x && x.message) || x || ""}`;
+  if (x && x.fr) return x.message;
+  if (reseau(x)) return "Pas de réseau : réessaie dans un instant.";
+  if (x && x.code === "42501") return "Ce compte ne peut pas enregistrer les notifications : préviens OIKOS.";
+  if ((x && x.code === "23514") || /constraint/i.test(m)) return "Ce navigateur n'est pas reconnu pour les notifications : essaie avec Chrome.";
+  if (/service worker/i.test(m)) return "L'appli n'a pas fini de s'installer : recharge la page, puis réessaie.";
+  if (/permission|NotAllowed/i.test(m)) return "Notifications bloquées : autorise-les dans les réglages de ton téléphone.";
+  if (/push service|registration failed|Abort|NotSupported/i.test(m)) return "Le service de notifications de ce navigateur ne répond pas : réessaie plus tard, ou essaie avec Chrome.";
+  return "Notifications impossibles pour l'instant" + (x && (x.code || x.name) ? " (réf. " + (x.code || x.name) + ")" : "");
 }
 function blocPush() {
   const e = pushEtat();
-  if (e === "granted" || e === "impossible") return "";
+  if (e === "impossible" || (e === "granted" && !pushEchec)) return "";
   if (e === "iphone") return `<div class="fdr-mot" style="margin-bottom:14px">${ico("cloche")} <b>Pour recevoir les missions en notification</b> : touche Partager puis « Sur l'écran d'accueil », et ouvre l'appli depuis cette icône.</div>`;
   if (e === "denied") return `<div class="fdr-mot" style="margin-bottom:14px">${ico("clocheoff")} <b>Notifications bloquées</b> : autorise-les pour cette appli dans les réglages de ton téléphone, sinon tu ne seras pas prévenu des missions.</div>`;
   return `<button class="alerte-mission" style="background:var(--accent)" data-activer-push>${ico("cloche")} Activer les notifications<small>Pour être prévenu dès qu'une mission arrive</small></button>`;
@@ -1140,7 +1160,7 @@ document.addEventListener("click", async e => {
   try {
     if (await Notification.requestPermission() !== "granted") { toast("Notifications refusées"); return accueil(); }
     await abonnerPush(); toast("Notifications activées ✓"); accueil();
-  } catch (x) { toast(x.message || "Notifications impossibles pour l'instant"); }
+  } catch (x) { toast(pushErreur(x)); }
 });
 if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "missions") accueil("missions"); });
 /* Mission acceptée ou confiée : le rappel reste dans l'emploi du temps tant qu'aucun passage n'est posé chez ce client */
@@ -2216,7 +2236,7 @@ function etapesDidacticiel() {
   const etat = pushEtat();
   const notif = etat === "default" ? { pose: "notification", titre: "Activez les notifications", texte: "Très important : c'est comme ça que vous saurez dès qu'une mission arrive, et la première personne qui accepte l'obtient.", boutons: [["Plus tard", false], ["Activer", true, async () => {
       try { if (await Notification.requestPermission() === "granted") { await abonnerPush(); toast("Notifications activées"); } }
-      catch (x) { toast(x.message || "Notifications impossibles pour l'instant"); }
+      catch (x) { toast(pushErreur(x)); }
     }]] }
     : etat === "iphone" ? { pose: "notification", titre: "Les notifications", texte: "Sur iPhone, elles ne marchent que dans l'appli installée. Touchez Partager puis « Sur l'écran d'accueil », et ouvrez l'appli depuis cette icône. Sinon, vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
     : etat === "denied" ? { pose: "notification", titre: "Les notifications", texte: "Elles sont bloquées sur ce téléphone. Autorisez-les pour cette appli dans vos réglages, sinon vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
