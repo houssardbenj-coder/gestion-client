@@ -1968,11 +1968,13 @@ const missionAnnulee = t => /^Mission : /.test(t.texte || "") && /^Mission annul
 const accordPresta = (d, ta) => ((d.mission || {}).presta_accord || []).length > 0 || ta.some(t => estProposition(t) && reponseProp(t) === "ok");
 function etatDemande(d, ta) {
   const props = ta.filter(estProposition), accord = accordPresta(d, ta);
+  if (demandeAnnulee(d)) return ["Annulée", "off"];
   if (d.etat === "estimee") return accord ? ["✓ Presta d'accord : devis à envoyer", "warn"] : props.some(t => reponseProp(t) === "attente") ? ["Réponse du presta attendue", "warn"] : props.length ? ["✗ Pas de presta : à reproposer", "warn"] : ["Estimée : à proposer au presta", "warn"];
   if (d.etat === "devis_cree") return devisSigne(d) ? (accord ? ["Signé : ordre de mission à envoyer", ""] : props.some(t => reponseProp(t) === "attente") ? ["Signé · réponse du presta attendue", "warn"] : ["Signé : presta à choisir", "warn"]) : accord ? ["✓ Accord de principe · signature du client attendue", "warn"] : ["Signature du client attendue", "warn"];
   return ETATS_DEMANDE[d.etat] || [d.etat, "off"];
 }
 const signeLe = d => (d.mission || {}).devis_signe_le;
+const demandeAnnulee = d => d.etat === "refusee" && !!(d.mission || {}).abandon_le;   // c'est toi qui abandonnes, pas le client qui refuse
 const devisSigne = d => d.etat === "devis_cree" && !!signeLe(d);   // signé par le client : l'ordre de mission attend ton clic
 const ETATS_DEMANDE = { a_estimer: ["À estimer", "warn"], estimee: ["Estimée", "warn"], devis_cree: ["Réponse attendue", "warn"], en_cours: ["En cours", ""], finalisee: ["Terminée", "off"], refusee: ["Refusée", "off"] };
 const TYPES_PRESTA = { one_shot: "One shot", regulier: "Régulier" };
@@ -1994,7 +1996,7 @@ async function vueDemandes() {
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Clients ${aide(attente ? "Un service en plus pour un client, un prospect ou un ancien client : décris le besoin, ajoute des photos, puis estime le temps, le matériel et le gain avant de faire le devis. Le client reste à sa place dans sa liste." : "Les prestations acceptées restent ici tant que tu ne les as pas finalisées. Un client existant ne bouge pas de sa liste ; un prospect en one shot passe dans les anciens à la fin, et son profil se reprend s'il revient.")}</h1><button class="btn primary" id="dm-nouvelle">${ico("stylo")} Nouvelle demande</button></div>
     ${boutonsEntreprise(true)}${boutonsDevis()}
     <div id="dm-liste" style="margin-top:12px"></div>
-    ${archives.length ? `<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>${attente ? "Refusées" : "Prestations terminées"} (${archives.length})</b></summary><div id="dm-archives" style="margin-top:10px"></div></details>` : ""}`);
+    ${archives.length ? `<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>${attente ? (archives.some(demandeAnnulee) ? "Refusées ou annulées" : "Refusées") : "Prestations terminées"} (${archives.length})</b></summary><div id="dm-archives" style="margin-top:10px"></div></details>` : ""}`);
   brancherEntreprise(el); brancherDevis(el);
   const re = () => afficher();
   el.querySelector("#dm-nouvelle").onclick = () => nouvelleDemande(null, re);
@@ -2051,7 +2053,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
       <summary><span class="dm-nom">${avecClient ? `<button class="btn flat" data-dm-client style="padding:0;font-size:inherit;font-weight:700">${esc(c.nom || "?")} ›</button> ` : ""}<b>${esc(d.titre)}</b> <span class="muted small">${TYPES_PRESTA[d.type_prestation]} · ${esc(d.activite)}${c.etat === "prospect" ? " · prospect" : c.etat === "termine" ? " · ancien client" : ""}${ph.length ? " · " + ico("photo") + " " + ph.length : ""}${repondreAvant ? " · " + ico("chrono") + " réponse avant le " + repondreAvant.split("-").reverse().join("/") : ""}${d.echeance ? " · " + ico("agenda") + " à terminer avant le " + d.echeance.split("-").reverse().join("/") : ""}${suivi ? " · " + esc(suivi) : ""}</span></span>
         ${chiffresDemande(d)}<span class="tag ${k}">${esc(t)}</span>${principal}</summary>
       <div class="dm-plus">
-        <p class="muted small">Demande du ${jourAn(d.cree_le)}${signeLe(d) ? " · devis signé le " + jourAn(signeLe(d)) : ""}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? " · refusée le " + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}${(d.mission.devis_anciens || []).length ? " · remplace " + d.mission.devis_anciens.map(x => esc(x.numero)).join(", ") : ""}</p>
+        <p class="muted small">Demande du ${jourAn(d.cree_le)}${signeLe(d) ? " · devis signé le " + jourAn(signeLe(d)) : ""}${d.accepte_le ? " · acceptée le " + jourAn(d.accepte_le) : ""}${d.finalise_le ? " · terminée le " + jourAn(d.finalise_le) : ""}${d.refuse_le && d.etat === "refusee" ? (demandeAnnulee(d) ? " · annulée le " : " · refusée le ") + jourAn(d.refuse_le) : ""}${d.devis_ttc && d.etat !== "refusee" ? " · devis " + (d.devis_numero ? "n° " + esc(d.devis_numero) + " " : "") + "de " + euros(d.devis_ttc) + " TTC" : ""}${(d.mission.devis_anciens || []).length ? " · remplace " + d.mission.devis_anciens.map(x => esc(x.numero)).join(", ") : ""}</p>
         ${d.besoin ? `<p style="white-space:pre-wrap">${esc(d.besoin)}</p>` : ""}
         ${resumeEstimation(d)}
         ${ph.length ? `<div class="row" style="gap:6px">${ph.map(p => `<img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || "Photo de la demande")}" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--sunk)">`).join("")}</div>` : ""}
@@ -2067,7 +2069,8 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
           ${(d.mission || {}).feuille_mission_url ? `<a class="btn" href="${esc(d.mission.feuille_mission_url)}" target="_blank" rel="noopener">${ico("doc")} Feuille de mission</a>` : ""}
           ${d.ordre_url ? `<a class="btn" href="${esc(d.ordre_url)}" target="_blank" rel="noopener">${ico("route")} Ordre de mission</a>` : d.ordre_a_faire ? `<span class="tag warn">${ico("chrono")} Ordre de mission (5 min)</span>` : ""}
           ${d.dossier_url ? `<a class="btn" href="${esc(d.dossier_url)}" target="_blank" rel="noopener">${ico("dossier")} Sous-dossier</a>` : ""}
-          ${attente ? `<button class="btn" data-dm-photos>${ico("photo")} Ajouter des photos</button><button class="btn" data-dm-presta>${ico("mission")} Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button>${(d.etat === "estimee" || d.etat === "devis_cree") && !devisSigne(d) ? `<button class="btn flat" data-dm-accepter>Le client a accepté sans signer : envoyer l'ordre</button>` : ""}<button class="btn flat stop" data-dm-refus>Refusé</button>` : ""}
+          ${attente ? `<button class="btn" data-dm-photos>${ico("photo")} Ajouter des photos</button><button class="btn" data-dm-presta>${ico("mission")} Photos par un intervenant</button><button class="btn flat" data-dm-mod>Modifier</button>${(d.etat === "estimee" || d.etat === "devis_cree") && !devisSigne(d) ? `<button class="btn flat" data-dm-accepter>Le client a accepté sans signer : envoyer l'ordre</button>` : ""}<button class="btn flat stop" data-dm-refus title="C'est le client qui ne veut pas">Refusé</button>` : ""}
+          ${attente || d.etat === "en_cours" ? `<button class="btn flat stop" data-dm-abandon title="C'est toi qui abandonnes : tout ce qui est en cours s'arrête">${ico("croix")} Annuler la demande</button>` : ""}
         </div>
       </div></details>`; }).join("") || (vide ? `<p class="muted">${esc(vide)}</p>` : "");
   zone.querySelectorAll("details[data-dm]").forEach(x => { x.ontoggle = () => { if (x.open) dmOuvertes.add(x.dataset.dm); else dmOuvertes.delete(x.dataset.dm); }; });
@@ -2103,7 +2106,9 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
       if (prevenus.length) await maj(sb.from("messages").insert(prevenus.map(x => ({ intervenante_id: x.intervenante_id, texte: "La mission « " + x.texte.replace(/^Proposition : /, "") + " » ne se fera pas : le client n'a pas donné suite. Tu n'as plus à garder ce temps." }))));
       if ((d.mission.attributions || []).length) await maj(sb.from("attributions").update({ fin: ymd(new Date()) }).in("id", d.mission.attributions));
       await maj(sb.from("demandes_devis").update({ etat: "refusee", refuse_le: new Date().toISOString(), mission: {} }).eq("id", d.id)); await chargerBase(); toast("Demande refusée"); return re(); }
-    if (b.hasAttribute("data-dm-reprendre")) { await maj(sb.from("demandes_devis").update({ etat: d.devis_url ? "devis_cree" : d.estimation ? "estimee" : "a_estimer" }).eq("id", d.id)); await chargerBase(); toast("Demande reprise"); return re(); }
+    if (b.hasAttribute("data-dm-abandon")) return abandonnerDemande(d, c, re);
+    if (b.hasAttribute("data-dm-reprendre")) { const { abandon_le, ...suite } = d.mission || {};
+      await maj(sb.from("demandes_devis").update({ etat: d.devis_url ? "devis_cree" : d.estimation ? "estimee" : "a_estimer", ...(abandon_le ? { mission: suite, refuse_le: null } : {}) }).eq("id", d.id)); await chargerBase(); toast("Demande reprise"); return re(); }
   };
 }
 const champsDemande = (d, c) => `${c === null ? `<label class="f"><span>Client ${aide("Un ancien client ou un prospect se retrouve ici : son profil est repris. Sinon, crée-le d'abord avec « Nouveau client ».")}</span><select name="client_id" required><option value="">— choisir —</option>${optionsClients(cacheClients.filter(peutAvoirDevis), null)}</select></label>` : ""}
@@ -2478,6 +2483,61 @@ async function annulerOrdre(d, c, re) {
           mission: { ...reste, retires: [...new Set([...(m.retires || []), ...qui, ...sansCompte])], ...(client_avant && !remettre ? { client_avant } : {}) } }).eq("id", d.id));
         dmOuvertes.add(d.id); if (sectionDevis === "PRESTA") sectionDevis = "ATTENTE";
         await chargerBase(); fermer(); toast("Ordre annulé : la demande est revenue dans « En attente de devis »"); re();
+      } catch (x) { bouton.disabled = false; souci(x); }
+    };
+  });
+}
+/* Annuler la demande : c'est toi qui abandonnes, le client n'a rien refusé. Tout ce qui est en cours s'arrête : propositions, missions, tâches, accès au client, passages à venir.
+   La demande est rangée avec les refusées, marquée « Annulée », et « Reprendre » la relance. Elle garde son devis, son dossier et ses photos. */
+async function abandonnerDemande(d, c, re) {
+  const m = d.mission || {}, ids = m.attributions || [], sansCompte = [...new Set([...(m.sans_compte || []), ...(m.presta_accord || []), ...(m.potentiels || [])])];
+  const [creees, taches] = await Promise.all([ids.length ? q(sb.from("attributions").select("*").in("id", ids)) : [], q(sb.from("taches").select("id,intervenante_id,texte,commentaire,fait_le").eq("demande_id", d.id))]);
+  const perdent = creees.map(a => a.intervenante_id).filter(Boolean);
+  const [passes, aVenir] = await Promise.all([
+    perdent.length ? q(sb.from("pointages").select("intervenante_id").eq("client_id", c.id).in("intervenante_id", perdent).gte("arrivee", d.cree_le)) : [],
+    perdent.length ? q(sb.from("creneaux").select("id").eq("client_id", c.id).in("intervenante_id", perdent).eq("annule", false).gte("debut", new Date().toISOString())) : []]);
+  const estMission = t => /^Mission : /.test(t.texte || "");
+  const missions = taches.filter(t => estMission(t) && !missionAnnulee(t)), propsOuvertes = taches.filter(t => estProposition(t) && ["attente", "ok"].includes(reponseProp(t))), autres = taches.filter(t => !t.fait_le && !estMission(t) && !estProposition(t));
+  const avecMail = new Set(missions.map(t => t.intervenante_id));   // le Pont photos envoie déjà un e-mail à qui perd une mission
+  const aPrevenir = [...new Set([...propsOuvertes.filter(t => reponseProp(t) === "ok"), ...autres].map(t => t.intervenante_id))].filter(Boolean).filter(i => !avecMail.has(i));
+  const prevenus = [...new Set([...avecMail, ...aPrevenir])];
+  const nb = missions.length + propsOuvertes.length + autres.length;
+  fenetre(`<h2 style="margin:0">Annuler la demande · ${esc(d.titre)} ${aide("C'est toi qui abandonnes : le client n'a rien refusé. La demande part dans « Refusées ou annulées », marquée « Annulée », et « Reprendre » la relance. Le devis, le dossier et les photos restent.")}</h2>
+    <form id="fad" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+      <p class="small" style="margin:0">${nb ? `<b>${nb} tâche${nb > 1 ? "s" : ""} en cours</b> ser${nb > 1 ? "ont fermées" : "a fermée"}.` : "Aucune tâche en cours."}${prevenus.length ? " Prévenus dans l'appli ou par e-mail : <b>" + prevenus.map(nomInterv).map(esc).join(", ") + "</b>." : ""}</p>
+      ${passes.length ? `<p class="small" style="margin:0"><span class="tag warn">${ico("alerte")} ${passes.length} passage(s) déjà déclaré(s) : ils restent dans le reporting</span></p>` : ""}
+      ${aVenir.length ? `<p class="small" style="margin:0"><span class="tag warn">${ico("alerte")} ${aVenir.length} passage(s) à venir retiré(s) du planning</span></p>` : ""}
+      ${sansCompte.length ? `<p class="small" style="margin:0"><span class="tag warn">${ico("alerte")} Sans compte, à prévenir toi-même : ${sansCompte.map(esc).join(", ")}</span></p>` : ""}
+      ${d.devis_url ? `<p class="small" style="margin:0"><span class="tag warn">${ico("alerte")} ${signeLe(d) ? "Ce devis est déjà signé par le client : à régler avec lui." : "Le client peut encore signer ce devis :"} <a href="${esc(d.devis_url)}" target="_blank" rel="noopener">passe-le à « Refusé » dans VosFactures</a></span></p>` : ""}
+      ${prevenus.length ? `<label class="f">Un mot pour ${prevenus.length > 1 ? "eux" : "lui"} (facultatif)<input type="text" name="mot" maxlength="500"></label>` : ""}
+      <div class="row"><button class="btn stop" type="submit">${ico("croix")} Annuler la demande</button><button class="btn flat" type="button" data-fermer>Garder la demande</button></div></form>`, (el, fermer) => {
+    el.querySelector("#fad").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), bouton = e.target.querySelector("[type=submit]"), mot = String(f.get("mot") || "").trim(), maintenant = new Date().toISOString(), hier = ymd(plusJours(new Date(), -1));
+      bouton.disabled = true;
+      try {
+        if (missions.length) await maj(sb.from("taches").update({ fait_le: maintenant, vue_le: maintenant, commentaire: ("Mission annulée par OIKOS" + (mot ? " : " + mot : "")).slice(0, 2000) }).in("id", missions.map(t => t.id)));
+        for (const t of propsOuvertes) await maj(sb.from("taches").update({ fait_le: t.fait_le || maintenant, vue_le: maintenant, commentaire: "Proposition annulée par OIKOS" }).eq("id", t.id));
+        if (autres.length) await maj(sb.from("taches").update({ fait_le: maintenant, vue_le: maintenant, commentaire: "Annulée par OIKOS" }).in("id", autres.map(t => t.id)));
+        if (propsOuvertes.length) await maj(sb.from("tache_documents").delete().in("tache_id", propsOuvertes.map(t => t.id)));
+        const toutes = taches.map(t => t.id);
+        if (toutes.length) {   // son ordre de mission disparaît ; ce qu'il a lui-même déposé dans le dossier reste
+          await sb.storage.from("taches").remove(toutes.map(id => id + "/ordre-de-mission.pdf"));
+          await maj(sb.from("tache_documents").delete().in("tache_id", toutes).like("chemin", "%/ordre-de-mission.pdf"));
+        }
+        if (aPrevenir.length) await maj(sb.from("messages").insert(aPrevenir.map(i => ({ intervenante_id: i, texte: ("OIKOS annule « " + d.titre + " » : cela ne se fera pas, tu n'as plus à garder ce temps." + (mot ? " " + mot : "")).slice(0, 2000) }))));
+        // a_le_client compte le jour de fin : pour couper l'accès tout de suite, la ligne s'efface ou finit hier. Il garde une trace s'il est déjà venu.
+        for (const a of creees) {
+          if (a.intervenante_id && passes.some(p => p.intervenante_id === a.intervenante_id)) await maj(sb.from("attributions").update({ fin: hier, debut: a.debut > hier ? hier : a.debut, note: ("Demande annulée : " + d.titre).slice(0, 1000) }).eq("id", a.id));
+          else await maj(sb.from("attributions").delete().eq("id", a.id));
+        }
+        if (aVenir.length) await maj(sb.from("creneaux").update({ annule: true }).in("id", aVenir.map(x => x.id)));
+        const occupe = cacheDemandes.some(x => x.id !== d.id && x.client_id === c.id && x.etat === "en_cours") || cacheAttrib.some(a => a.client_id === c.id && prestaEnCours(a) && !ids.includes(a.id));
+        const remettre = m.client_avant && !occupe;   // le prospect ou l'ancien client redevient ce qu'il était
+        if (remettre) await maj(sb.from("clients").update(m.client_avant).eq("id", c.id));
+        const { feuille, intervenants, sans_compte, attributions, presta_accord, potentiels, client_avant, ...reste } = m;
+        await maj(sb.from("demandes_devis").update({ etat: "refusee", refuse_le: maintenant, accepte_le: null, ordre_url: null, ordre_a_faire: false, client_a_archiver: remettre ? false : d.client_a_archiver,
+          mission: { ...reste, abandon_le: maintenant, ...(client_avant && !remettre ? { client_avant } : {}) } }).eq("id", d.id));
+        await chargerBase(); fermer(); toast("Demande annulée : tout ce qui était en cours est arrêté"); re();
       } catch (x) { bouton.disabled = false; souci(x); }
     };
   });
