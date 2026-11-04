@@ -2191,6 +2191,7 @@ async function vueMoi() {
       <dt>Adresse</dt><dd>${esc(moi.adresse || "—")}</dd><dt>Activités</dt><dd>${esc((moi.activites || []).join(", ") || "—")}</dd>
       <dt>Zones</dt><dd>${esc((moi.zones || []).map(z => "Zone " + z).join(", ") || "—")}</dd></dl>
     <div class="stack" style="margin-top:14px">
+      ${!estInstalle() && (surTelephone() || invitInstall) ? `<button class="btn doux" id="installer-appli"><span class="ic">${ico("telecharger")}</span>Installer l'appli sur ce téléphone</button>` : ""}
       <button class="btn" id="infos"><span class="ic">${ico("stylo")}</span>Modifier mes informations</button>
       <button class="btn" id="pin"><span class="ic">${ico("code")}</span>Changer mon code à 4 chiffres</button>
       <button class="btn" id="mdp"><span class="ic">${ico("cle")}</span>Changer mon mot de passe</button>
@@ -2201,6 +2202,8 @@ async function vueMoi() {
     <p class="muted small" style="margin-top:18px">Mes factures arriveront ici prochainement.</p>`);
   document.getElementById("papiers").onclick = () => accueil("papiers");
   document.getElementById("revoir").onclick = () => lancerDidacticiel();
+  const inst = document.getElementById("installer-appli");
+  if (inst) inst.onclick = installerAppli;
   document.getElementById("infos").onclick = () => ecranProfil(false);
   document.getElementById("pin").onclick = () => ecranChoisirPin(true);
   document.getElementById("mdp").onclick = () => ecranNouveauMdp(false);
@@ -2265,6 +2268,25 @@ function ecranInstaller() {
     document.getElementById("inst-suite").innerHTML = `<p class="fdr-mot" style="margin-top:14px">${ico("ok")} <b>C'est installé.</b> Ouvrez l'appli depuis sa nouvelle icône, sur votre écran d'accueil.</p>`;
     document.getElementById("sans").textContent = "Continuer ici";
   };
+}
+
+/* Bouton de l'onglet Moi : la fenêtre d'installation si le navigateur l'a préparée, sinon la marche à suivre */
+async function installerAppli() {
+  if (invitInstall) {
+    invitInstall.prompt();
+    const { outcome } = await invitInstall.userChoice;
+    invitInstall = null;
+    if (outcome === "accepted") {
+      LS.set("install-vu", 1);
+      document.getElementById("installer-appli")?.remove();
+      toast("C'est installé : ouvrez l'appli depuis sa nouvelle icône.");
+    }
+    return;
+  }
+  const consignes = surIOS()
+    ? `<ol class="inst-liste"><li>Touchez <b>Partager</b> ${ico("envoi")} en bas de l'écran.</li><li>Choisissez <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol>`
+    : `<ol class="inst-liste"><li>Si une ancienne icône OIKOS est sur le téléphone, supprimez-la d'abord.</li><li>Touchez le menu du navigateur, les trois points.</li><li>Choisissez <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol>`;
+  feuille(`<h2 style="margin:0">Installer l'appli OIKOS</h2>${consignes}<button class="btn flat" data-fermer>Fermer</button>`);
 }
 
 function didacticielSiBesoin() {
