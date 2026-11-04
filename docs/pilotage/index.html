@@ -1721,7 +1721,7 @@ function ficheClient(id, ong = "ensemble") {
   if (!c) return fenetre(`<h2 style="margin:0">Nouveau client</h2>${formClient({ activites: entreprise === "BE" ? ["Cours"] : entreprise === "OIKOS" ? ["Ménage"] : [], entite: NOMS_ENTREPRISE[entreprise] || null, etat: entreprise === "PROSPECT" ? "prospect" : "actif" })}`, (el, fermer) =>
     brancherFormClient(el, null, () => { fermer(); afficher("clients"); }));
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(c.nom)}</h1><span class="row">
-      ${peutAvoirDevis(c) ? `<button class="btn primary" type="button" id="dm-nv">${ico("stylo")} Demande de devis</button><button class="btn" type="button" id="dm-rat">${ico("recu")} Devis déjà envoyé</button>` : ""}
+      ${peutAvoirDevis(c) ? `<button class="btn primary" type="button" id="dm-nv">${ico("stylo")} Demande de devis</button><button class="btn" type="button" id="dm-rat">${ico("mission")} Mobiliser des presta</button>` : ""}
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Son dossier Drive</a>` : ""}
       <button class="btn flat" data-fermer>Fermer ✕</button></span></div>
@@ -1740,7 +1740,7 @@ function ficheClient(id, ong = "ensemble") {
     const nvDm = el.querySelector("#dm-nv");
     if (nvDm) nvDm.onclick = () => nouvelleDemande(c, () => { afficher(); aller("devis"); });
     const ratDm = el.querySelector("#dm-rat");
-    if (ratDm) ratDm.onclick = () => rattacherDevis(c, () => { afficher(); aller("devis"); });
+    if (ratDm) ratDm.onclick = () => mobiliserPresta(c, () => { afficher(); aller("devis"); });
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
     el.querySelector("#fiche-choix").onchange = async e => {
       const coches = n => [...el.querySelectorAll(`#fiche-choix [name=${n}]:checked`)].map(x => x.value);
@@ -2003,7 +2003,7 @@ async function vueDemandes() {
 }
 async function dosDevis(c, corps, re) {
   corps.innerHTML = `<div id="dm-liste"></div>`;
-  await listeDemandes(corps.querySelector("#dm-liste"), cacheDemandes.filter(d => d.client_id === c.id), false, re, peutAvoirDevis(c) ? "Aucune demande pour ce client : utilise « Demande de devis » ou « Devis déjà envoyé » en haut de son dossier." : "Aucune demande pour ce client.");
+  await listeDemandes(corps.querySelector("#dm-liste"), cacheDemandes.filter(d => d.client_id === c.id), false, re, peutAvoirDevis(c) ? "Aucune demande pour ce client : utilise « Demande de devis » ou « Mobiliser des presta » en haut de son dossier." : "Aucune demande pour ce client.");
 }
 /* Une estimation enregistrée avant la règle du temps unique garde un coût sur le temps brut : on le relit au quart d'heure supérieur, le gain suit */
 function estimationAuQuart(e) {
@@ -2114,9 +2114,23 @@ const lireDemande = f => ({ titre: String(f.get("titre")).trim(), type_prestatio
 /* Un devis fait sans demande (depuis « Faire un devis ») : il devient une demande déjà au stade « devis envoyé », et tout le parcours suit : presta potentiels, suivi de la signature, ordre de mission.
    Le temps et le travail sont ceux que tu indiques ici : ils font la feuille de route que le presta reçoit. Jamais le prix. */
 const ID_DEVIS = s => (String(s || "").trim().match(/\/invoices\/(\d+)/) || String(s || "").trim().match(/^(\d{5,})$/) || [])[1] || "";
+/* L'entrée unique : choisir le devis concerné, ou en rattacher un fait sans demande */
+function mobiliserPresta(c, re) {
+  const liste = cacheDemandes.filter(d => d.client_id === c.id && ["estimee", "devis_cree"].includes(d.etat) && !signeLe(d));
+  if (!liste.length) return rattacherDevis(c, re);
+  fenetre(`<h2 style="margin:0">Mobiliser des presta · ${esc(c.nom)}</h2>
+    <p class="muted small" style="margin:6px 0 10px">Pour quel devis ?</p>
+    <div style="display:flex;flex-direction:column;gap:8px">${liste.map(d => `<button class="btn" type="button" data-choix="${d.id}" style="justify-content:flex-start;text-align:left">${ico("mission")} ${esc(d.titre)}${d.devis_numero ? " · " + esc(d.devis_numero) : ""}</button>`).join("")}
+      <button class="btn" type="button" data-autre style="justify-content:flex-start">${ico("recu")} Un autre devis déjà envoyé</button>
+      <button class="btn flat" type="button" data-fermer>Annuler</button></div>`, (el, fermer) => {
+    el.onclick = e => { const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.choix) { fermer(); return proposerPresta(liste.find(d => d.id === b.dataset.choix), c, re); }
+      if (b.hasAttribute("data-autre")) { fermer(); return rattacherDevis(c, re); } };
+  });
+}
 function rattacherDevis(c, re) {
   const activites = activitesClient(c), activite = ACTIVITES_DEVIS.find(a => activites.includes(a)) || "Jardinage";
-  fenetre(`<h2 style="margin:0">Devis déjà envoyé · ${esc(c.nom)} ${aide("Pour un devis fait sans demande. Il rejoint « En attente de devis » : tu peux y mobiliser des presta, et la signature du client se suit toute seule si tu donnes le lien.")}</h2>
+  fenetre(`<h2 style="margin:0">Devis déjà envoyé · ${esc(c.nom)} ${aide("Pour un devis fait sans demande, avant de mobiliser des presta. Il rejoint « En attente de devis » : tu peux y mobiliser des presta, et la signature du client se suit toute seule si tu donnes le lien.")}</h2>
     <form id="frd" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${champsDemande({ activite, type_prestation: "regulier" }, c)}
       <div class="deux"><label class="f">N° du devis<input type="text" name="numero" required maxlength="60" placeholder="Ex. ${esc(norm(c.nom).split(" ").pop().toUpperCase())}-1-1"></label>
         <label class="f">Montant TTC (facultatif)<input type="number" name="ttc" min="0" step="0.01"></label></div>
@@ -2515,7 +2529,8 @@ async function dosPresta(c, corps, re) {
   const titre = a => `<b>${esc(nomPresta(a))}</b>${a.activite ? " · " + esc(a.activite) : ""}`;
   const recharger = async () => { await chargerBase(); afficher(); re(); };
   const enAttente = cacheDemandes.filter(d => d.client_id === c.id && enAttenteDevis(d));
-  corps.innerHTML = `${enAttente.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">Potentiels ${aide("Devis pas encore accepté : ces personnes n'ont aucun accès au client tant que l'ordre de mission n'est pas parti.")}</h2>
+  corps.innerHTML = `${enAttente.length || peutAvoirDevis(c) ? `<section class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Potentiels ${aide("Devis pas encore accepté : ces personnes n'ont aucun accès au client tant que l'ordre de mission n'est pas parti.")}</h2><button class="btn primary" data-mobiliser>${ico("mission")} Mobiliser des presta</button></div>
+      ${enAttente.length ? "" : `<p class="muted small">Personne pour l'instant.</p>`}
       ${enAttente.map(d => { const p = potentielsDemande(d), l = [p.oui.length ? "D'accord : " + p.oui.join(", ") : "", p.attente.length ? "Réponse attendue : " + p.attente.join(", ") : "", p.contacter.length ? "À contacter : " + p.contacter.join(", ") : ""].filter(Boolean).join(" · ");
         return `<div class="ligne"><span style="min-width:0"><b>${esc(d.titre)}</b>${d.devis_numero ? ` <span class="muted small">devis ${esc(d.devis_numero)}</span>` : ""}<br><span class="muted small">${esc(l || "Personne pour l'instant")}</span></span>${["estimee", "devis_cree"].includes(d.etat) && (!p.oui.length || !signeLe(d)) ? `<button class="btn" data-pot="${d.id}">${ico("mission")} Mobiliser</button>` : ""}</div>`; }).join("")}</section>` : ""}
     <section class="card"><h2 style="margin-top:0">En ce moment</h2>
@@ -2539,6 +2554,7 @@ async function dosPresta(c, corps, re) {
   };
   corps.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.hasAttribute("data-mobiliser")) return mobiliserPresta(c, recharger);
     if (b.dataset.pot) return proposerPresta(cacheDemandes.find(d => d.id === b.dataset.pot), c, recharger);
     if (b.dataset.efface) { if (confirm("Effacer cette ligne de l'historique ? À réserver à une erreur de saisie.")) { await maj(sb.from("attributions").delete().eq("id", b.dataset.efface)); recharger(); } return; }
     const a = lignes.find(x => x.id === b.dataset.arret); if (!a) return;
