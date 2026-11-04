@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#7A8568">
+<meta name="theme-color" content="#1B1D15">
 <meta name="robots" content="noindex,nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Intervenant</title>
@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Appli des intervenantes OIKOS : un écran à la fois, gros boutons, barre d'onglets en bas.
    Rien n'est gardé sur le téléphone à part la session et le code à 4 chiffres (chiffré). */
@@ -452,12 +452,81 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 @keyframes did-pose{from{opacity:0;transform:scale(.8)}}
 @keyframes did-chute{0%{opacity:0;transform:translateY(-240px)}55%{opacity:1;transform:translateY(0)}72%{transform:translateY(-22px)}88%{transform:translateY(0)}94%{transform:translateY(-6px)}}
 @media (prefers-reduced-motion:reduce){.did-trou,.did-queue{transition:none}.did-trou.vise::after,.did-trou.secoue,.did-chute,.did-pose{animation:none}}
+/* Ouverture de l'appli : le logo se trace en lumière, puis s'efface sur le premier écran. Toujours sombre, comme l'écran du code. */
+.intro{position:fixed;inset:0;z-index:9999;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(90% 62% at 50% 46%,#30351F 0%,#1B1D15 52%,#0D0E09 100%);transition:opacity .6s ease;-webkit-tap-highlight-color:transparent}
+.intro.sort{opacity:0;pointer-events:none}
+.intro .i-scene{transition:transform .6s cubic-bezier(.4,0,.6,1)}
+.intro.sort .i-scene{transform:scale(1.07)}
+.i-rayons{position:absolute;left:50%;top:46%;width:190vmax;height:190vmax;margin:-95vmax 0 0 -95vmax;border-radius:50%;background:conic-gradient(from 20deg,transparent 0 6%,rgb(255 240 200 / .1) 11%,transparent 17% 29%,rgb(201 212 170 / .08) 34%,transparent 41% 53%,rgb(255 240 200 / .11) 58%,transparent 64% 76%,rgb(201 212 170 / .07) 82%,transparent 90%);-webkit-mask:radial-gradient(circle,#000 4%,transparent 42%);mask:radial-gradient(circle,#000 4%,transparent 42%);animation:i-rayons-in 1.4s .35s ease-out both,i-tourne 34s linear infinite}
+.i-halo{position:absolute;left:50%;top:46%;width:150vmin;height:150vmin;margin:-75vmin 0 0 -75vmin;border-radius:50%;background:radial-gradient(circle,rgb(255 240 200 / .3) 0%,rgb(201 212 170 / .13) 30%,transparent 62%);animation:i-halo 1.5s .15s cubic-bezier(.2,.7,.2,1) both,i-respire 3.2s 1.9s ease-in-out infinite alternate}
+.i-grain{position:absolute;left:var(--x);bottom:-8px;width:var(--t);height:var(--t);border-radius:50%;background:#FFF3D0;box-shadow:0 0 8px 1px rgb(255 240 200 / .7);opacity:0;animation:i-grain var(--d) var(--r) linear infinite}
+.i-scene{position:relative;width:min(70vw,42vh,340px);aspect-ratio:1;flex:none}
+.i-scene svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.i-plein{transform-origin:50% 62%;transform-box:view-box;animation:i-plein 1s .7s cubic-bezier(.2,.7,.2,1) both}
+.i-trait{fill:none;stroke:#F3F1E7;stroke-width:3.5;stroke-linejoin:miter;stroke-dasharray:1;animation:i-trace 1s .15s cubic-bezier(.55,.05,.35,1) both}
+.i-trait.large{stroke:#E8E2B8;stroke-width:12;stroke-opacity:.2}
+.i-tete{fill:none;stroke:#FFF8E2;stroke-linecap:round;stroke-dasharray:.035 .965;opacity:0;animation:i-tete 1s .15s cubic-bezier(.55,.05,.35,1) both}
+.i-tete.large{stroke-width:20;stroke-opacity:.32}
+.i-tete.fine{stroke-width:6}
+.i-mot{position:absolute;left:16.6%;top:40%;width:66.4%;aspect-ratio:340/150;background:url(logo-mot.png) center/100% 100% no-repeat;animation:i-mot .75s 1.05s cubic-bezier(.3,.7,.3,1) both}
+.i-mot i{position:absolute;inset:0;-webkit-mask:url(logo-mot.png) center/100% 100% no-repeat;mask:url(logo-mot.png) center/100% 100% no-repeat;background:linear-gradient(105deg,transparent 40%,#FFF7D8 50%,transparent 60%) 140% 0/300% 100% no-repeat;animation:i-reflet 3.4s 1.7s ease-in-out infinite}
+.i-eclat{position:absolute;left:-30%;right:-30%;top:50%;height:3px;margin-top:-1.5px;background:linear-gradient(90deg,transparent,rgb(255 240 200 / .55) 34%,#FFF9E8 50%,rgb(255 240 200 / .55) 66%,transparent);box-shadow:0 0 18px 3px rgb(255 236 190 / .4);opacity:0;animation:i-eclat .95s 1.28s cubic-bezier(.2,.7,.3,1) both}
+.i-sous{position:relative;margin-top:clamp(10px,3vh,28px);font:500 11px/1 "Inter Tight",system-ui,sans-serif;letter-spacing:.34em;padding-left:.34em;text-transform:uppercase;color:rgb(243 241 231 / .82);animation:i-sous .8s 1.55s ease-out both}
+@keyframes i-rayons-in{from{opacity:0}}
+@keyframes i-tourne{to{transform:rotate(360deg)}}
+@keyframes i-halo{from{opacity:0;transform:scale(.35)}}
+@keyframes i-respire{to{opacity:.68;transform:scale(1.06)}}
+@keyframes i-grain{0%{opacity:0;transform:translate3d(0,0,0)}15%{opacity:var(--o)}80%{opacity:var(--o)}100%{opacity:0;transform:translate3d(var(--v),-105vh,0)}}
+@keyframes i-plein{from{opacity:0;transform:scale(.93)}}
+@keyframes i-trace{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes i-tete{0%{opacity:0;stroke-dashoffset:.035}6%,92%{opacity:1}100%{opacity:0;stroke-dashoffset:-1}}
+@keyframes i-mot{from{opacity:0;clip-path:inset(0 100% 0 0);transform:translateY(5px)}to{opacity:1;clip-path:inset(0 0 0 0);transform:none}}
+@keyframes i-reflet{0%{background-position:140% 0}34%,100%{background-position:-40% 0}}
+@keyframes i-eclat{0%{opacity:0;transform:scaleX(.08)}35%{opacity:1}100%{opacity:0;transform:scaleX(1)}}
+@keyframes i-sous{from{opacity:0;letter-spacing:.6em}}
+@media (prefers-reduced-motion:reduce){.intro *{animation:none!important;transition:none!important}.i-tete,.i-eclat,.i-grain{display:none}}
 </style>
 </head>
 <body>
 <div class="fond" aria-hidden="true"><i></i><i></i><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg></div>
 <div id="app"></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="intro" id="intro" aria-hidden="true">
+  <div class="i-rayons"></div><div class="i-halo"></div>
+  <div class="i-scene">
+    <svg viewBox="0 0 512 512"><defs><linearGradient id="i-deg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A9B583"/><stop offset="1" stop-color="#4A5138"/></linearGradient></defs>
+      <path class="i-plein" fill="url(#i-deg)" d="M252 97 438 437H78Z"/>
+      <path class="i-trait large" pathLength="1" d="M198.3 73.6 439.3 375.6 69.9 436.1Z"/>
+      <path class="i-trait" pathLength="1" d="M198.3 73.6 439.3 375.6 69.9 436.1Z"/>
+      <path class="i-tete large" pathLength="1" d="M198.3 73.6 439.3 375.6 69.9 436.1Z"/>
+      <path class="i-tete fine" pathLength="1" d="M198.3 73.6 439.3 375.6 69.9 436.1Z"/>
+    </svg>
+    <div class="i-mot"><i></i></div>
+    <div class="i-eclat"></div>
+  </div>
+  <div class="i-sous">Espace intervenant</div>
+</div>
+<script>
+/* L'ouverture ne passe la main qu'une fois le premier écran prêt ; un toucher l'écourte. */
+window.introOuverte = true;
+(function () {
+  const el = document.getElementById("intro"), app = document.getElementById("app"), debut = Date.now();
+  const duree = matchMedia("(prefers-reduced-motion: reduce)").matches ? 500 : 2500;
+  [[8,3,9,.5,14,0],[17,2,7,.8,-10,1.2],[26,4,11,.35,22,.5],[35,2,8,.7,-18,2],[44,3,10,.45,12,.2],[52,2,6,.9,-8,1.6],[61,3,9,.55,20,.9],[70,2,7,.75,-14,.1],[79,4,12,.3,16,1.4],[88,2,8,.7,-20,.7],[94,3,10,.45,10,2.2],[3,2,9,.6,18,1.8]]
+    .forEach(g => { const i = document.createElement("i"); i.className = "i-grain"; i.style.cssText = `--x:${g[0]}%;--t:${g[1]}px;--d:${g[2]}s;--o:${g[3]};--v:${g[4]}vw;--r:${g[5] - 1}s`; el.prepend(i); });
+  let fini = false;
+  const part = () => {
+    if (fini) return; fini = true;
+    window.introOuverte = false;
+    if (window.introBarre) document.querySelector('meta[name="theme-color"]').content = window.introBarre;
+    el.classList.add("sort");
+    setTimeout(() => el.remove(), 650);
+  };
+  new MutationObserver((m, o) => { o.disconnect(); setTimeout(part, Math.max(0, duree - (Date.now() - debut))); }).observe(app, { childList: true });
+  el.addEventListener("pointerdown", () => { if (app.firstChild) part(); });
+  setTimeout(part, 9000);   // jamais bloquée sur l'ouverture, même si le réseau ne répond pas
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" integrity="sha384-2zrRDgDHSYB/GN3nFW3fsZXoxEhKIr3N2h63Tc6DEOB9JJdFIu8xMJT2Cph/gBil" crossorigin="anonymous"></script>
 <script>
 /* ===================== Réglages ===================== */
@@ -621,7 +690,7 @@ function ecranNouveauMdp(obligatoire) {
 /* Clavier du code à 4 chiffres */
 const TRIANGLE = `<svg viewBox="0 0 20 18" aria-hidden="true"><path d="M10 1.6 18.6 16.6H1.4Z"/></svg>`;
 const vibre = m => { try { if (navigator.vibrate) navigator.vibrate(m); } catch (_) {} };
-const couleurBarre = c => document.querySelector('meta[name="theme-color"]').content = c;
+const couleurBarre = c => { if (window.introOuverte) window.introBarre = c; else document.querySelector('meta[name="theme-color"]').content = c; };
 const couleurFond = () => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
 /* Effets : l'onde part du doigt sur les boutons, et l'en-tête prend une ombre dès qu'on fait défiler */
 const moinsDeMouvement = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
