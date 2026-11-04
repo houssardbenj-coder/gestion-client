@@ -1857,9 +1857,17 @@ async function dosDevis(c, corps, re) {
   corps.innerHTML = `<div id="dm-liste"></div>`;
   await listeDemandes(corps.querySelector("#dm-liste"), cacheDemandes.filter(d => d.client_id === c.id), false, re, peutAvoirDevis(c) ? "Aucune demande pour ce client : utilise « Demande de devis » en haut de son dossier." : "Aucune demande pour ce client.");
 }
+/* Une estimation enregistrée avant la règle du temps unique garde un coût sur le temps brut : on le relit au quart d'heure supérieur, le gain suit */
+function estimationAuQuart(e) {
+  if (!e) return e;
+  const quart = h => Math.ceil(Math.round(h * 400) / 100) / 4, rond = n => Math.round(n * 100) / 100, taux = +e.cout_horaire, avant = +e.cout_heures, r = { ...e };
+  if (e.periode !== "mois" && +e.heures > 0) r.heures = quart(+e.heures);
+  if (taux > 0 && avant > 0) { const ecart = rond(quart(avant / taux) * taux - avant); if (ecart) { r.cout_heures = rond(avant + ecart); r.cout_total = rond((+e.cout_total || 0) + ecart); r.gain = +e.vente_ht ? rond(+e.vente_ht - r.cout_total) : rond((+e.gain || 0) - ecart); } }
+  return r;
+}
 /* Ce qu'une estimation dit en clair : réservé à toi, jamais transmis à l'intervenant */
 function resumeEstimation(d) {
-  const e = d.estimation; if (!e) return "";
+  const e = estimationAuQuart(d.estimation); if (!e) return "";
   const p = e.periode === "mois" ? " / mois" : "";
   return `<div class="row" style="margin-top:8px;gap:6px"><span class="tag">${ico("chrono")} ${String(Math.round((+e.heures || 0) * 100) / 100).replace(".", ",")} h${p}</span>
     <span class="tag">Coût ${euros(e.cout_total)}${p}</span>${+e.vente_ht ? `<span class="tag">Vente HT ${euros(e.vente_ht)}${p}</span>
@@ -1867,7 +1875,7 @@ function resumeEstimation(d) {
 }
 /* Les chiffres qui comptent, sur la ligne repliée */
 function chiffresDemande(d) {
-  const e = d.estimation, p = e && e.periode === "mois" ? " / mois" : "", l = [];
+  const e = estimationAuQuart(d.estimation), p = e && e.periode === "mois" ? " / mois" : "", l = [];
   if (e) l.push(ico("chrono") + " " + String(Math.round((+e.heures || 0) * 100) / 100).replace(".", ",") + " h" + p);
   if (d.devis_ttc && d.etat !== "refusee") l.push(euros(d.devis_ttc) + " TTC");
   const gain = e && +e.vente_ht ? `<span class="tag ${+e.gain < 0 ? "warn" : ""}">Gain ${euros(e.gain)}${p}</span>` : "";
