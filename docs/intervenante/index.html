@@ -2180,6 +2180,33 @@ function didacticielSiBesoin() {
   if (did || !didacticielAFaire() || inviterInstall()) return;
   lancerDidacticiel();
 }
+/* Exemples de la visite : affichés seulement à l'écran, à la place d'une liste vide, jamais écrits dans la base.
+   Le prochain affichage de l'onglet les efface ; ils ne servent que si le compte n'a pas encore le vrai élément. */
+const TAG_EXEMPLE = `<span class="tag">Exemple</span>`;
+const titreDeSection = t => [...document.querySelectorAll("#contenu h2")].find(h => h.textContent.startsWith(t));
+function exemplePassage() {
+  const h = titreDeSection("Aujourd'hui");
+  if (document.querySelector("details.passage") || !h || !h.nextElementSibling) return;
+  h.nextElementSibling.innerHTML = `<details class="card passage did-exemple" open><summary><span><span class="quand">9 h 00 – 11 h 00</span><span class="client-nom">Mme Martin ${TAG_EXEMPLE}</span></span></summary>
+    <div class="passage-corps"><span class="adresse">12 rue des Oliviers</span><span class="btn doux">Feuille de route</span>
+    <div class="actions3"><span class="btn action"><span class="ic">${ico("lieu")}</span>Y aller</span><span class="btn action"><span class="ic">${ico("personne")}</span>Fiche</span><span class="btn action"><span class="ic">${ico("plus")}</span>Tâche</span></div></div></details>`;
+}
+function exempleMission() {
+  const h = titreDeSection("À répondre");
+  if (document.querySelector(".mission-ligne") || !h || !h.nextElementSibling) return;
+  h.nextElementSibling.outerHTML = `<div class="mission-ligne attend did-exemple"><span><b>Taille de haies</b> ${TAG_EXEMPLE}<br><small>${ico("lieu")} Ville du client · ${ico("agenda")} avant le 30/11</small></span>
+    <span class="droite"><span class="paie">≈ 60 €</span><small>2 h</small></span><span class="suite">Voir le dossier complet ›</span></div>`;
+}
+function exempleAjout() {
+  const rdv = document.getElementById("ajout-rdv");
+  if (document.querySelector("#ajout, .did-ajout-ex") || !rdv || !sousTraitante() || moi.gele) return;
+  rdv.insertAdjacentHTML("beforebegin", `<span class="btn primary did-exemple did-ajout-ex"><span class="ic">${ico("plus")}</span>Ajouter un passage</span>`);
+}
+function exempleClient() {
+  const l = document.querySelector("#contenu .stack");
+  if (document.querySelector("[data-fiche]") || !l) return;
+  l.innerHTML = `<div class="card did-exemple" data-fiche="exemple"><span class="client-nom">Mme Martin ›</span><span class="muted">12 rue des Oliviers</span><span class="row">${TAG_EXEMPLE}<span class="tag">Jardinage</span></span></div>`;
+}
 function etapesDidacticiel() {
   const nomComplet = moi.civilite && moi.nom ? moi.civilite + " " + moi.nom : moi.prenom || "";
   const onglet = (k, titre, texte) => ({ cible: `[data-onglet="${k}"]`, pose: "regarde", titre, texte, aide: "Touchez l'onglet éclairé pour continuer.", action: () => accueil(k) });
@@ -2198,14 +2225,15 @@ function etapesDidacticiel() {
     { pose: "bonjour", chute: true, titre: nomComplet ? `Bienvenue ${esc(nomComplet)} !` : "Bienvenue !", texte: "Je suis Olive. Je vous fais visiter votre espace OIKOS, c'est rapide.", boutons: [["C'est parti", true]] },
     onglet("jour", "Aujourd'hui", "Votre journée d'un coup d'œil."),
     bouton("#declarer", "Déclarer mes heures", "Après un passage, c'est ici. Le geste le plus important de l'appli."),
+    { ...bouton("details.passage", "Vos passages", "Chaque passage a son adresse, sa feuille de route, la fiche du client et un bouton pour y aller."), exemple: exemplePassage },
     { ...bouton("#ajout-tache", "Votre liste À faire", "Notez ce que vous avez à faire. OIKOS peut aussi y ajouter des tâches."), tardif: true },   // ce bloc arrive après l'écran
     onglet("missions", "Missions", "Les missions que vous propose OIKOS."),
-    bouton(".mission-ligne, #contenu h2", "Répondez vite", "Chaque proposition montre la paie, les heures et la ville. La première personne qui accepte obtient la mission."),
+    { ...bouton(".mission-ligne", "Répondez vite", "Chaque proposition montre la paie, les heures et la ville. La première personne qui accepte obtient la mission."), exemple: exempleMission },
     onglet("agenda", "Agenda", "Votre planning, à la semaine ou au jour."),
-    bouton("#ajout", "Ajouter un passage", "Placez ici vos passages chez vos clients."),
+    { ...bouton("#ajout, .did-ajout-ex", "Ajouter un passage", "Placez ici vos passages chez vos clients."), exemple: exempleAjout },
     bouton("#ajout-rdv", "Rendez-vous hors client", "Pour tout ce qui n'est pas chez un client : réunion, formation…"),
     onglet("clients", "Clients", "Les clients qu'OIKOS vous confie."),
-    bouton("[data-fiche]", "La fiche du client", "Touchez un client pour son adresse, son téléphone, ses consignes et sa feuille de route."),
+    { ...bouton("[data-fiche]", "La fiche du client", "Touchez un client pour son adresse, son téléphone, ses consignes et sa feuille de route."), exemple: exempleClient },
     onglet("mois", "Reporting", "Vos heures du mois."),
     bouton(".card:has(> #dire)", "Écrivez ce que vous avez fait", "Écrivez simplement « Bibas 3h ce matin », puis Vérifier. L'appli prépare la ligne, vous n'avez plus qu'à l'envoyer."),
     bouton(".card:has(> .compteur)", "Votre total du mois", `${sousTraitante() ? "OIKOS fait votre facture à partir de ces heures. " : ""}Vérifiez qu'elles sont justes.`),
@@ -2260,6 +2288,7 @@ async function afficherEtape(i) {
   const d = did, e = d.etapes[i];
   if (!e) { fermerDidacticiel(true); return; }
   d.i = i;
+  if (e.exemple) e.exemple();
   if (e.cible) {
     for (let n = e.tardif ? 24 : 2; n > 0 && !document.querySelector(e.cible); n--) await new Promise(r => setTimeout(r, 125));
     if (did !== d) return;
@@ -2269,9 +2298,9 @@ async function afficherEtape(i) {
   }
   d.bulle.innerHTML = `<button class="did-passer" type="button">Passer</button>
     <div class="${e.chute ? "did-chute" : "did-pose"}">${olive(e.pose)}</div>
-    <div class="did-txt"><h2>${e.titre}</h2><p>${e.texte}</p>${e.aide ? `<p class="did-aide">${e.aide}</p>` : ""}</div>
+    <div class="did-txt"><h2>${e.titre}</h2><p>${e.texte}</p>${e.aide ? `<p class="did-aide">${e.exemple && cibleVisible(e.cible)?.closest(".did-exemple") ? "Ceci est un exemple pour la visite, il disparaîtra ensuite. Touchez-le pour continuer." : e.aide}</p>` : ""}</div>
     ${e.boutons ? `<div class="did-btns">${e.boutons.map(([t, principal], n) => `<button class="btn${principal ? " primary" : ""}" type="button" data-b="${n}">${t}</button>`).join("")}</div>` : ""}`;
-  d.bulle.querySelector(".did-passer").onclick = () => { fermerDidacticiel(true); toast("Vous pourrez revoir la visite dans l'onglet Moi."); };
+  d.bulle.querySelector(".did-passer").onclick = () => { const exemple = document.querySelector(".did-exemple"); fermerDidacticiel(true); if (exemple) accueil(); toast("Vous pourrez revoir la visite dans l'onglet Moi."); };
   d.bulle.querySelectorAll("[data-b]").forEach(b => b.onclick = async () => {
     const f = e.boutons[b.dataset.b][2];
     if (f === undefined) return passerEtape();
@@ -2284,6 +2313,7 @@ async function afficherEtape(i) {
 }
 function placerDidacticiel() {
   const d = did; if (!d || d.occupe || d.i < 0) return;
+  if (d.etapes[d.i] && d.etapes[d.i].exemple) d.etapes[d.i].exemple();   // l'onglet s'est réaffiché derrière le voile
   const e = d.etapes[d.i], c = e && e.cible && cibleVisible(e.cible);
   if (!c) {
     Object.assign(d.trou.style, { left: "50%", top: "50%", width: "0", height: "0" });
