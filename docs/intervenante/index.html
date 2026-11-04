@@ -410,6 +410,48 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .alerte-mission{border-radius:18px;font-weight:600}
 .mission-ligne{border-radius:16px;background:var(--carte);-webkit-backdrop-filter:var(--flou);backdrop-filter:var(--flou)}
 @media (prefers-reduced-motion: reduce){.coche.anime,.coche.anime path,.passage .chev{animation:none;transition:none}}
+/* Didacticiel : le voile noir laisse un trou sur le point d'intérêt, Olive parle dans sa bulle */
+.olive{--ol-trait:#23241F;--ol-corps:#BFC89A;--ol-feuille:#7F8A58;display:block;overflow:visible}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .olive{--ol-trait:#F3F1E7;--ol-corps:#C9D4AA;--ol-feuille:#8E9A66}}
+:root[data-theme="dark"] .olive{--ol-trait:#F3F1E7;--ol-corps:#C9D4AA;--ol-feuille:#8E9A66}
+.ol-t{fill:none;stroke:var(--ol-trait);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.ol-fin{stroke-width:1.7}
+.ol-c{fill:var(--ol-corps)}
+.ol-main{fill:var(--ol-corps);stroke:var(--ol-trait);stroke-width:1.6}
+.ol-f{fill:var(--ol-feuille)}
+.ol-j{fill:#E8B9A0}
+.ol-y{fill:#23241F}
+.ol-b{fill:#FFFFFF}
+.ol-m{fill:#7A3B2E}
+.ol-v{fill:none;stroke:#23241F;stroke-width:2.2;stroke-linecap:round}
+.did{position:fixed;inset:0;z-index:35;touch-action:none}
+.did-trou{position:fixed;left:50%;top:50%;width:0;height:0;border-radius:16px;box-shadow:0 0 0 200vmax rgb(10 11 7 / .76);transition:left .38s cubic-bezier(.3,1,.4,1),top .38s cubic-bezier(.3,1,.4,1),width .38s,height .38s,box-shadow .3s;pointer-events:none}
+.did-trou.repos{box-shadow:0 0 0 200vmax rgb(10 11 7 / 0)}
+.did-trou.vise::after{content:"";position:absolute;inset:-4px;border-radius:20px;border:2px solid #E7E8DA;animation:did-pouls 1.4s ease-out infinite}
+.did-trou.secoue{animation:did-secoue .34s}
+.did-zone{position:fixed;background:none;border:0;padding:0;margin:0;border-radius:16px;cursor:pointer}
+.did-bulle{position:fixed;left:50%;transform:translateX(-50%);width:min(calc(100vw - 24px),420px);max-height:calc(100dvh - 90px);overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:20px;padding:14px 16px;display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px 12px;align-items:start}
+.did-bulle.centre{top:50%;transform:translate(-50%,-50%);overflow:visible}
+.did-bulle.repos{visibility:hidden}
+.did-queue{position:fixed;width:18px;height:10px;background:var(--surface);transition:left .38s,top .38s}
+.did-queue.bas{clip-path:polygon(0 0,100% 0,50% 100%)}
+.did-queue.haut{clip-path:polygon(50% 0,100% 100%,0 100%)}
+.did-queue.cache{visibility:hidden}
+.did-passer{position:absolute;top:8px;right:8px;background:none;border:0;color:var(--muted);font:inherit;font-size:14px;padding:6px 8px;cursor:pointer}
+.did-txt h2{margin:0 52px 4px 0;font-size:20px}
+.did-txt p{margin:0;font-size:16px;line-height:1.4}
+.did-txt .did-aide{margin-top:6px;font-size:13px;color:var(--muted)}
+.did-btns{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end}
+.did-btns .btn{min-height:46px;font-size:16px;flex:1}
+.did-chute{animation:did-chute .95s cubic-bezier(.3,0,.5,1) backwards}
+.did-pose{animation:did-pose .34s cubic-bezier(.3,1.5,.5,1) backwards}
+.inst-olive{width:96px;margin:0 auto 6px}
+.inst-liste{margin:12px 0;padding-left:22px;display:grid;gap:8px}
+@keyframes did-pouls{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.14)}}
+@keyframes did-secoue{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes did-pose{from{opacity:0;transform:scale(.8)}}
+@keyframes did-chute{0%{opacity:0;transform:translateY(-240px)}55%{opacity:1;transform:translateY(0)}72%{transform:translateY(-22px)}88%{transform:translateY(0)}94%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.did-trou,.did-queue{transition:none}.did-trou.vise::after,.did-trou.secoue,.did-chute,.did-pose{animation:none}}
 </style>
 </head>
 <body>
@@ -498,6 +540,7 @@ async function demarrer() {
 async function suite() {
   if (!(await chargerMoi())) return;
   if (moi.mdp_provisoire) return ecranNouveauMdp(true);
+  if (didacticielAFaire() && inviterInstall()) return;
   if (!LS.get("pin")) return ecranChoisirPin();
   if (!moi.profil_complet) return ecranProfil(true);
   accueil();
@@ -700,6 +743,7 @@ function ecranProfil(premiere) {
   page(`<h1>${premiere ? "Tes informations" : "Mes informations"}</h1>
     <p class="muted">${premiere ? "Une seule fois : OIKOS en a besoin pour travailler avec toi." : "Modifie ce qui a changé."}</p>
     <form class="stack" id="f" style="margin-top:14px">
+      ${"civilite" in moi ? `<div class="row">${["Madame", "Monsieur"].map(c => `<label class="chk"><input type="radio" name="civilite" value="${c}" required ${moi.civilite === c ? "checked" : ""}>${c}</label>`).join("")}</div>` : ""}
       <div class="grid2"><label class="f">Prénom<input name="prenom" value="${v("prenom")}" required autocomplete="given-name"></label>
       <label class="f">Nom<input name="nom" value="${v("nom")}" required autocomplete="family-name"></label></div>
       <label class="f">Téléphone<input name="telephone" type="tel" value="${v("telephone")}" required autocomplete="tel"></label>
@@ -787,6 +831,7 @@ async function accueil(o) {
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
     if (onglet === "agenda" || onglet === "jour") rappelsMission().catch(() => {});
     if (animer) entree(sens);
+    didacticielSiBesoin();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
@@ -2058,11 +2103,13 @@ async function vueMoi() {
       <button class="btn" id="infos"><span class="ic">${ico("stylo")}</span>Modifier mes informations</button>
       <button class="btn" id="pin"><span class="ic">${ico("code")}</span>Changer mon code à 4 chiffres</button>
       <button class="btn" id="mdp"><span class="ic">${ico("cle")}</span>Changer mon mot de passe</button>
+      <button class="btn" id="revoir"><span class="ic">${ico("jour")}</span>Revoir la visite de l'appli</button>
       <button class="btn" id="sortir"><span class="ic">${ico("sortie")}</span>Me déconnecter de ce téléphone</button>
     </div>
     <button class="btn primary" id="papiers" style="margin-top:14px;width:100%"><span class="ic">${ico("doc")}</span>Mes papiers pour OIKOS</button>
     <p class="muted small" style="margin-top:18px">Mes factures arriveront ici prochainement.</p>`);
   document.getElementById("papiers").onclick = () => accueil("papiers");
+  document.getElementById("revoir").onclick = () => lancerDidacticiel();
   document.getElementById("infos").onclick = () => ecranProfil(false);
   document.getElementById("pin").onclick = () => ecranChoisirPin(true);
   document.getElementById("mdp").onclick = () => ecranNouveauMdp(false);
@@ -2072,13 +2119,188 @@ async function vueMoi() {
   });
 }
 
+/* ===================== Didacticiel : Olive fait visiter l'appli, une seule fois ===================== */
+const estInstalle = () => !!navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+const surIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const surTelephone = () => surIOS() || /android/i.test(navigator.userAgent);
+/* Base pas encore à jour (colonne absente) : ni invitation ni visite */
+const didacticielAFaire = () => !!moi && moi.role !== "gerant" && moi.didacticiel_vu_le === null && !LS.get("didacticiel-vu");
+let invitInstall = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); invitInstall = e; });
+
+function olive(pose, classe = "") {
+  const a = s => moinsDeMouvement() ? "" : s;
+  const bouge = (type, values, dur) => a(`<animateTransform attributeName="transform" type="${type}" values="${values}" dur="${dur}" repeatCount="indefinite"/>`);
+  const cligne = a(`<animate attributeName="ry" values="6;6;0.6;6" keyTimes="0;0.92;0.96;1" dur="3.4s" repeatCount="indefinite"/>`);
+  const corps = `<path class="ol-t" d="M-13 46 L-14 60 H-22 M13 46 L14 60 H22"/><ellipse class="ol-c" cx="3" cy="3" rx="37" ry="47"/><ellipse class="ol-t ol-fin" cx="-2" cy="-2" rx="37" ry="47" transform="rotate(8)"/><ellipse class="ol-j" cx="-22" cy="10" rx="7" ry="4.5"/><ellipse class="ol-j" cx="25" cy="10" rx="7" ry="4.5"/>`;
+  const feuille = (b = "") => `<g>${b}<path class="ol-f" d="M6 -48 L36 -70 L42 -46 Z"/><path class="ol-t ol-fin" d="M2 -52 L32 -73 L38 -50 Z"/></g>`;
+  const brasRepos = `<path class="ol-t" d="M-36 8 C-44 12 -48 20 -48 28"/>`;
+  const yeux = (g, d) => `<ellipse class="ol-y" cx="${g}" cy="-6" rx="4.5" ry="6">${cligne}</ellipse><ellipse class="ol-y" cx="${d}" cy="-6" rx="4.5" ry="6">${cligne}</ellipse><circle class="ol-b" cx="${g + 1.5}" cy="-8.5" r="1.5"/><circle class="ol-b" cx="${d + 1.5}" cy="-8.5" r="1.5"/>`;
+  const poses = {
+    bonjour: `<g>${bouge("translate", "0 0;0 -4;0 0", "1.8s")}${brasRepos}<g>${bouge("rotate", "-14 36 2;16 36 2;-14 36 2", "0.9s")}<path class="ol-t" d="M36 2 C46 -4 52 -14 54 -26"/><circle class="ol-main" cx="54" cy="-29" r="3.5"/></g>${corps}${feuille(bouge("rotate", "-5 4 -50;6 4 -50;-5 4 -50", "1.8s"))}${yeux(-11, 14)}<path class="ol-m" d="M-8 9 Q2 24 12 9 Z"/></g>`,
+    regarde: `<g>${bouge("translate", "0 0;3 0;0 0", "1.2s")}${brasRepos}<path class="ol-t" d="M36 0 H56"/><circle class="ol-main" cx="58" cy="0" r="3.5"/>${corps}${feuille()}<path class="ol-v" d="M-14 -18 Q-8 -23 -2 -19 M11 -20 Q17 -24 23 -19"/>${yeux(-5, 20)}<ellipse class="ol-m" cx="7" cy="14" rx="5" ry="6"/></g>`,
+    bravo: `<path class="ol-f" d="M-56 -46 l7 -3 l-1 8 Z"/><path class="ol-m" d="M58 -50 l7 3 l-6 5 Z"/><path class="ol-m" d="M-62 2 l7 1 l-4 6 Z"/><path class="ol-f" d="M60 8 l7 -1 l-2 7 Z"/><g>${bouge("translate", "0 2;0 -10;0 2", "0.8s")}<path class="ol-t" d="M-36 0 C-46 -6 -50 -18 -50 -30 M36 0 C46 -6 50 -18 50 -30"/><circle class="ol-main" cx="-50" cy="-33" r="3.5"/><circle class="ol-main" cx="50" cy="-33" r="3.5"/>${corps}${feuille()}<path class="ol-v" d="M-18 -4 Q-11 -13 -4 -4 M8 -4 Q15 -13 22 -4"/><path class="ol-m" d="M-11 7 Q2 30 15 7 Z"/></g>`,
+    documents: `<g>${bouge("rotate", "-3 0 40;3 0 40;-3 0 40", "2s")}${brasRepos}${corps}${feuille()}<path class="ol-v" d="M-18 -8 Q-11 -13 -4 -8 M-6 12 Q4 20 13 11"/><ellipse class="ol-y" cx="15" cy="-6" rx="4.5" ry="6"/><circle class="ol-b" cx="16.5" cy="-8.5" r="1.5"/><g transform="rotate(8 52 -6)"><rect class="ol-b" x="40" y="-26" width="28" height="36" rx="2"/><rect class="ol-t ol-fin" x="40" y="-26" width="28" height="36" rx="2"/><path class="ol-v" style="stroke:#7F8A58" d="M46 -17 H62 M46 -10 H62 M46 -3 H56"/></g><path class="ol-t" d="M35 8 C39 8 42 7 44 5"/></g>`,
+    notification: `<g>${bouge("translate", "0 0;0 -3;0 0", "1.4s")}${brasRepos}${corps}${feuille()}<path class="ol-v" d="M-17 -19 Q-11 -24 -5 -20 M9 -20 Q15 -24 21 -19"/>${yeux(-11, 14)}<ellipse class="ol-m" cx="2" cy="14" rx="5" ry="6"/><path class="ol-t" d="M36 4 C42 2 46 -2 48 -6"/><g><animateTransform attributeName="transform" type="rotate" values="${moinsDeMouvement() ? "0 52 -30" : "-14 52 -30;14 52 -30;-14 52 -30"}" dur="0.5s" repeatCount="indefinite"/><path class="ol-b" style="stroke:var(--ol-trait);stroke-width:1.7;stroke-linejoin:round" d="M42 -10 V-18 a10 10 0 0 1 20 0 V-10 l4 4 H38 Z"/><path class="ol-t ol-fin" d="M49 -2 h6"/></g></g>`
+  };
+  return `<svg class="olive ${classe}" viewBox="-72 -82 144 146" aria-hidden="true">${poses[pose]}</svg>`;
+}
+
+/* Après la première connexion sur un téléphone : installer l'appli avant la visite */
+function inviterInstall() {
+  if (!surTelephone() || estInstalle() || LS.get("install-vu")) return false;
+  ecranInstaller();
+  return true;
+}
+function ecranInstaller() {
+  const ios = surIOS();
+  const consignes = ios
+    ? `<ol class="inst-liste"><li>Touchez <b>Partager</b> ${ico("envoi")} en bas de l'écran.</li><li>Choisissez <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône et reconnectez-vous avec votre e-mail et votre mot de passe.</li></ol>`
+    : invitInstall ? "" : `<ol class="inst-liste"><li>Touchez le menu du navigateur, en haut à droite.</li><li>Choisissez <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol>`;
+  page(`<div class="inst-olive">${olive("bonjour")}</div>
+    <h1>Installez l'appli OIKOS</h1>
+    <p class="muted">Elle se range sur votre écran d'accueil, s'ouvre d'un seul geste et vous prévient dès qu'une mission arrive.</p>
+    <div id="inst-suite">${consignes}${!ios && invitInstall ? `<button class="btn primary big" id="installer" style="width:100%;margin-top:14px">Installer l'appli</button>` : ""}</div>
+    <button class="btn flat" id="sans" style="width:100%;margin-top:8px">Continuer sans installer</button>`, true);
+  const continuer = () => { LS.set("install-vu", 1); suite(); };
+  document.getElementById("sans").onclick = continuer;
+  const b = document.getElementById("installer");
+  if (b) b.onclick = async () => {
+    invitInstall.prompt();
+    const { outcome } = await invitInstall.userChoice;
+    invitInstall = null;
+    if (outcome !== "accepted") return ecranInstaller();
+    LS.set("install-vu", 1);
+    document.getElementById("inst-suite").innerHTML = `<p class="fdr-mot" style="margin-top:14px">${ico("ok")} <b>C'est installé.</b> Ouvrez l'appli depuis sa nouvelle icône, sur votre écran d'accueil.</p>`;
+    document.getElementById("sans").textContent = "Continuer ici";
+  };
+}
+
+function didacticielSiBesoin() {
+  if (did || !didacticielAFaire() || inviterInstall()) return;
+  lancerDidacticiel();
+}
+function etapesDidacticiel() {
+  const nomComplet = moi.civilite && moi.nom ? moi.civilite + " " + moi.nom : moi.prenom || "";
+  const onglet = (k, titre, texte) => ({ cible: `[data-onglet="${k}"]`, pose: "regarde", titre, texte, aide: "Touchez l'onglet éclairé pour continuer.", action: () => accueil(k) });
+  const finir = () => { fermerDidacticiel(true); accueil("jour"); };
+  const etat = pushEtat();
+  const notif = etat === "default" ? { pose: "notification", titre: "Activez les notifications", texte: "Très important : c'est comme ça que vous saurez dès qu'une mission arrive, et la première personne qui accepte l'obtient.", boutons: [["Plus tard", false], ["Activer", true, async () => {
+      try { if (await Notification.requestPermission() === "granted") { await abonnerPush(); toast("Notifications activées"); } }
+      catch (x) { toast(x.message || "Notifications impossibles pour l'instant"); }
+    }]] }
+    : etat === "iphone" ? { pose: "notification", titre: "Les notifications", texte: "Sur iPhone, elles ne marchent que dans l'appli installée. Touchez Partager puis « Sur l'écran d'accueil », et ouvrez l'appli depuis cette icône. Sinon, vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
+    : etat === "denied" ? { pose: "notification", titre: "Les notifications", texte: "Elles sont bloquées sur ce téléphone. Autorisez-les pour cette appli dans vos réglages, sinon vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
+    : null;
+  return [
+    { pose: "bonjour", chute: true, titre: nomComplet ? `Bienvenue ${esc(nomComplet)} !` : "Bienvenue !", texte: "Je suis Olive. Je vous fais visiter votre espace OIKOS, ça ne prend qu'une minute.", boutons: [["C'est parti", true]] },
+    onglet("jour", "Aujourd'hui", "Votre journée d'un coup d'œil : vos passages et le bouton pour déclarer vos heures."),
+    onglet("missions", "Missions", "Les missions proposées arrivent ici. Répondez vite : la première personne qui accepte l'obtient."),
+    onglet("agenda", "Agenda", "Tous vos passages et vos rendez-vous, au même endroit."),
+    onglet("clients", "Clients", "Les fiches de vos clients : adresse, téléphone et consignes."),
+    onglet("mois", "Reporting", "Vos heures du mois, à déclarer et à retrouver ici."),
+    onglet("moi", "Moi", "Vos informations et vos papiers."),
+    { cible: "#papiers", pose: "documents", titre: "Vos documents, c'est important !", texte: `Ils sont obligatoires pour travailler avec OIKOS : ils nous protègent, vous comme nous.${sousTraitante() ? " Nous pourrons aussi vous redemander une attestation URSSAF de temps en temps, pour vérifier que votre micro-entreprise est toujours active." : ""} Déposez-les ici, je vous rappellerai s'il en manque un.`, aide: "Touchez le bouton éclairé pour continuer.", action: () => accueil("papiers") },
+    notif,
+    { pose: "bravo", titre: "C'est parti !", texte: `Vous êtes ${moi.civilite === "Madame" ? "prête" : moi.civilite === "Monsieur" ? "prêt" : "prêt(e)"}. Vous pourrez revoir cette visite dans l'onglet Moi.`, boutons: [["Commencer", true, finir]] }
+  ].filter(Boolean);
+}
+let did = null;
+function lancerDidacticiel() {
+  if (did) return;
+  const el = document.createElement("div");
+  el.className = "did"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "Visite de l'appli");
+  el.innerHTML = `<div class="did-trou"></div><button class="did-zone" type="button" hidden></button><div class="did-queue cache"></div><div class="did-bulle"></div>`;
+  document.body.append(el);
+  did = { el, etapes: etapesDidacticiel(), i: -1, trou: el.querySelector(".did-trou"), zone: el.querySelector(".did-zone"), queue: el.querySelector(".did-queue"), bulle: el.querySelector(".did-bulle") };
+  /* Toute la page est sous le voile : seuls la zone éclairée et les boutons de la bulle répondent, jamais un vrai bouton de l'appli */
+  el.addEventListener("click", e => {
+    if (e.target.closest(".did-bulle,.did-zone")) return;
+    did.trou.classList.remove("secoue"); void did.trou.offsetWidth; did.trou.classList.add("secoue");
+  });
+  did.zone.onclick = () => { const e = did.etapes[did.i]; if (e.action) passerEtape(e.action); };
+  did.minuteur = setInterval(placerDidacticiel, 250);
+  addEventListener("resize", placerDidacticiel);
+  afficherEtape(0);
+}
+/* Marque la visite comme vue (une fin ou « Passer ») ; sans marque, elle reprendra à la prochaine ouverture */
+function fermerDidacticiel(vu) {
+  if (did) { clearInterval(did.minuteur); removeEventListener("resize", placerDidacticiel); did.el.remove(); did = null; }
+  if (vu && moi) {
+    LS.set("didacticiel-vu", 1);
+    moi.didacticiel_vu_le = new Date().toISOString();
+    sb.from("profils").update({ didacticiel_vu_le: moi.didacticiel_vu_le }).eq("id", moi.id).then(() => {}, () => {});
+  }
+}
+/* L'écran voulu apparaît sans voile un court instant, puis la lumière part vers le point suivant */
+async function passerEtape(action) {
+  const d = did; if (d.occupe) return;
+  d.occupe = true; vibre(5);
+  d.trou.classList.add("repos"); d.trou.classList.remove("vise"); d.bulle.classList.add("repos"); d.queue.classList.add("cache"); d.zone.hidden = true;
+  try { if (action) await action(); } catch (x) {}
+  if (did !== d) return;
+  await new Promise(r => setTimeout(r, action ? 750 : 0));
+  if (did !== d) return;
+  d.occupe = false;
+  afficherEtape(d.i + 1);
+}
+async function afficherEtape(i) {
+  const d = did, e = d.etapes[i];
+  if (!e) { fermerDidacticiel(true); return; }
+  d.i = i;
+  if (e.cible) {
+    for (let n = 0; n < 16 && !document.querySelector(e.cible); n++) await new Promise(r => setTimeout(r, 125));
+    if (did !== d) return;
+    const c = document.querySelector(e.cible);
+    if (!c) return afficherEtape(i + 1);   // bouton absent : on ne reste jamais bloqué
+    c.scrollIntoView({ block: "center" });
+  }
+  d.bulle.innerHTML = `<button class="did-passer" type="button">Passer</button>
+    <div class="${e.chute ? "did-chute" : "did-pose"}">${olive(e.pose)}</div>
+    <div class="did-txt"><h2>${e.titre}</h2><p>${e.texte}</p>${e.aide ? `<p class="did-aide">${e.aide}</p>` : ""}</div>
+    ${e.boutons ? `<div class="did-btns">${e.boutons.map(([t, principal], n) => `<button class="btn${principal ? " primary" : ""}" type="button" data-b="${n}">${t}</button>`).join("")}</div>` : ""}`;
+  d.bulle.querySelector(".did-passer").onclick = () => { fermerDidacticiel(true); toast("Vous pourrez revoir la visite dans l'onglet Moi."); };
+  d.bulle.querySelectorAll("[data-b]").forEach(b => b.onclick = async () => {
+    const f = e.boutons[b.dataset.b][2];
+    if (f === undefined) return passerEtape();
+    await f();
+    if (did === d) passerEtape();
+  });
+  d.trou.classList.remove("repos"); d.bulle.classList.remove("repos");
+  placerDidacticiel();
+  (d.bulle.querySelector(".btn.primary") || d.zone).focus({ preventScroll: true });
+}
+function placerDidacticiel() {
+  const d = did; if (!d || d.occupe || d.i < 0) return;
+  const e = d.etapes[d.i], c = e && e.cible && document.querySelector(e.cible);
+  if (!c) {
+    Object.assign(d.trou.style, { left: "50%", top: "50%", width: "0", height: "0" });
+    d.trou.classList.remove("vise"); d.zone.hidden = true; d.queue.classList.add("cache");
+    d.bulle.classList.add("centre"); d.bulle.style.top = ""; d.bulle.style.bottom = "";
+    return;
+  }
+  const r = c.getBoundingClientRect(), m = 4;
+  const zone = { left: r.left - m + "px", top: r.top - m + "px", width: r.width + 2 * m + "px", height: r.height + 2 * m + "px" };
+  Object.assign(d.trou.style, zone); Object.assign(d.zone.style, zone);
+  d.trou.classList.add("vise"); d.zone.hidden = false;
+  d.zone.setAttribute("aria-label", e.titre.replace(/ !$/, ""));
+  d.bulle.classList.remove("centre");
+  const dessus = r.top > innerHeight / 2, ecart = 18;
+  d.bulle.style.top = dessus ? "" : r.bottom + m + ecart + "px";
+  d.bulle.style.bottom = dessus ? innerHeight - r.top + m + ecart + "px" : "";
+  const b = d.bulle.getBoundingClientRect();
+  d.queue.className = "did-queue " + (dessus ? "bas" : "haut");
+  d.queue.style.left = Math.max(b.left + 14, Math.min(b.right - 32, r.left + r.width / 2 - 9)) + "px";
+  d.queue.style.top = (dessus ? b.bottom - 1 : b.top - 9) + "px";
+}
+
 /* ===================== Verrou quand l'appli revient au premier plan ===================== */
 let cachee = 0, verrouille = false;
 document.addEventListener("visibilitychange", async () => {
   if (document.hidden) { cachee = Date.now(); return; }
   if (!cachee || Date.now() - cachee < VERROU_MIN * 60000 || verrouille) return;
   const { data: { session } } = await sb.auth.getSession();
-  if (session && LS.get("pin")) { verrouille = true; document.querySelectorAll(".voile").forEach(v => v.remove()); demarrer(); }
+  if (session && LS.get("pin")) { verrouille = true; document.querySelectorAll(".voile").forEach(v => v.remove()); fermerDidacticiel(); demarrer(); }
 });
 
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
