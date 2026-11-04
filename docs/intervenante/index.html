@@ -454,6 +454,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 @media (prefers-reduced-motion:reduce){.did-trou,.did-queue{transition:none}.did-trou.vise::after,.did-trou.secoue,.did-chute,.did-pose{animation:none}}
 /* Ouverture de l'appli : le logo se trace en lumière, puis s'efface sur le premier écran. Toujours sombre, comme l'écran du code. */
 .intro{position:fixed;inset:0;z-index:9999;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(90% 62% at 50% 46%,#30351F 0%,#1B1D15 52%,#0D0E09 100%);transition:opacity .6s ease;-webkit-tap-highlight-color:transparent}
+.intro::before{content:"";position:absolute;inset:0;background:#1B1D15;opacity:0;animation:i-raccord .7s ease-out}
 .intro.sort{opacity:0;pointer-events:none}
 .intro .i-scene{transition:transform .6s cubic-bezier(.4,0,.6,1)}
 .intro.sort .i-scene{transform:scale(1.07)}
@@ -472,6 +473,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .i-mot i{position:absolute;inset:0;-webkit-mask:url(logo-mot.png) center/100% 100% no-repeat;mask:url(logo-mot.png) center/100% 100% no-repeat;background:linear-gradient(105deg,transparent 40%,#FFF7D8 50%,transparent 60%) 140% 0/300% 100% no-repeat;animation:i-reflet 3.4s 1.7s ease-in-out infinite}
 .i-eclat{position:absolute;left:-30%;right:-30%;top:50%;height:3px;margin-top:-1.5px;background:linear-gradient(90deg,transparent,rgb(255 240 200 / .55) 34%,#FFF9E8 50%,rgb(255 240 200 / .55) 66%,transparent);box-shadow:0 0 18px 3px rgb(255 236 190 / .4);opacity:0;animation:i-eclat .95s 1.28s cubic-bezier(.2,.7,.3,1) both}
 .i-sous{position:relative;margin-top:clamp(10px,3vh,28px);font:500 11px/1 "Inter Tight",system-ui,sans-serif;letter-spacing:.34em;padding-left:.34em;text-transform:uppercase;color:rgb(243 241 231 / .82);animation:i-sous .8s 1.55s ease-out both}
+@keyframes i-raccord{from{opacity:1}}
 @keyframes i-rayons-in{from{opacity:0}}
 @keyframes i-tourne{to{transform:rotate(360deg)}}
 @keyframes i-halo{from{opacity:0;transform:scale(.35)}}
@@ -488,9 +490,6 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 </style>
 </head>
 <body>
-<div class="fond" aria-hidden="true"><i></i><i></i><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg></div>
-<div id="app"></div>
-<div class="toast" id="toast" role="status" hidden></div>
 <div class="intro" id="intro" aria-hidden="true">
   <div class="i-rayons"></div><div class="i-halo"></div>
   <div class="i-scene">
@@ -506,6 +505,9 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
   </div>
   <div class="i-sous">Espace intervenant</div>
 </div>
+<div class="fond" aria-hidden="true"><i></i><i></i><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg></div>
+<div id="app"></div>
+<div class="toast" id="toast" role="status" hidden></div>
 <script>
 /* L'ouverture ne passe la main qu'une fois le premier écran prêt ; un toucher l'écourte. */
 window.introOuverte = true;
