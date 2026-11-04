@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#7A8568">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Pilotage</title>
 <link rel="icon" href="logo-oikos.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -196,8 +197,8 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 <body>
 <div id="app"></div>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" integrity="sha384-2zrRDgDHSYB/GN3nFW3fsZXoxEhKIr3N2h63Tc6DEOB9JJdFIu8xMJT2Cph/gBil" crossorigin="anonymous"></script>
+<script src="xlsx-0.20.3.full.min.js"></script>
 <script>
 /* ===================== Réglages ===================== */
 const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
@@ -269,7 +270,51 @@ async function demarrer() {
   const p = await sb.from("profils").select("*").eq("id", session.user.id).maybeSingle();
   if (p.error) return ecranConnexion("Pas de réseau ou base en pause : " + p.error.message);
   if (!p.data || p.data.role !== "gerant" || !p.data.actif) { await sb.auth.signOut(); return ecranConnexion("Ce compte n'est pas le compte gérant."); }
-  moi = p.data; afficher();
+  moi = p.data;
+  const { data: niveau, error: errNiveau } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (errNiveau) return ecranConnexion("Pas de réseau : " + errNiveau.message);
+  if (niveau.currentLevel === "aal2") return afficher();
+  if (niveau.nextLevel === "aal2") return ecranCodeMfa();
+  ecranActiverMfa();
+}
+/* Double authentification : le code à 6 chiffres de l'appli d'authentification, après le mot de passe */
+function pageMfa(html) {
+  app.innerHTML = `<form class="connexion card" id="f"><div class="marque"><img src="logo-oikos.png" alt=""><span><b>Oikos</b> Pilotage</span></div>${html}</form>`;
+  const sortir = document.getElementById("mfa-sortir");
+  if (sortir) sortir.onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
+  const code = document.getElementById("mfa-code"); if (code) code.focus();
+}
+const champCode = `<label class="f">Code à 6 chiffres<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>`;
+async function ecranCodeMfa(msg) {
+  const { data, error } = await sb.auth.mfa.listFactors();
+  if (error) return ecranConnexion("Pas de réseau : " + error.message);
+  const facteur = data.totp[0];
+  if (!facteur) return ecranActiverMfa();
+  pageMfa(`<p class="muted">Ouvre ton appli d'authentification et entre le code affiché pour OIKOS Pilotage.</p>${msg ? `<p class="err">${esc(msg)}</p>` : ""}${champCode}
+    <button class="btn primary" type="submit">Valider</button><button class="btn flat" type="button" id="mfa-sortir">Changer de compte</button>`);
+  document.getElementById("f").onsubmit = async ev => {
+    ev.preventDefault();
+    const { error: e } = await sb.auth.mfa.challengeAndVerify({ factorId: facteur.id, code: document.getElementById("mfa-code").value.trim() });
+    if (e) return ecranCodeMfa("Code incorrect ou expiré : réessaie avec le code suivant.");
+    demarrer();
+  };
+}
+async function ecranActiverMfa(msg) {
+  const liste = await sb.auth.mfa.listFactors();
+  for (const f of (liste.data && liste.data.all) || []) if (f.status !== "verified") await sb.auth.mfa.unenroll({ factorId: f.id });   // essai abandonné
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "OIKOS Pilotage " + Date.now() });
+  if (error) { pageMfa(`<p class="err">Activation impossible : ${esc(error.message)}</p><button class="btn flat" type="button" id="mfa-sortir">Retour</button><button class="btn flat" type="button" id="mfa-tard">Plus tard</button>`); document.getElementById("mfa-tard").onclick = () => afficher(); return; }
+  pageMfa(`<h2 style="margin:0">Protège le pilotage</h2><p class="muted">Dans ton appli d'authentification, ajoute un compte en scannant ce carré, puis entre le code affiché.</p>
+    ${msg ? `<p class="err">${esc(msg)}</p>` : ""}<img src="${esc(data.totp.qr_code)}" alt="Carré à scanner" style="width:220px;height:220px;background:#fff;border-radius:12px;align-self:center">
+    <details><summary>Impossible de scanner, ou garder une copie</summary><p class="muted small" style="overflow-wrap:anywhere;margin:6px 0">Clé à taper dans l'appli : <b>${esc(data.totp.secret)}</b><br>Garde-la dans ton gestionnaire de mots de passe : elle remplace le téléphone s'il est perdu.</p></details>
+    ${champCode}<button class="btn primary" type="submit">Activer</button><button class="btn flat" type="button" id="mfa-tard">Plus tard</button>`);
+  document.getElementById("mfa-tard").onclick = () => afficher();
+  document.getElementById("f").onsubmit = async ev => {
+    ev.preventDefault();
+    const { error: e } = await sb.auth.mfa.challengeAndVerify({ factorId: data.id, code: document.getElementById("mfa-code").value.trim() });
+    if (e) return ecranActiverMfa("Code refusé : on recommence avec un nouveau carré. Supprime l'ancienne ligne dans ton appli.");
+    toast("Double authentification activée"); demarrer();
+  };
 }
 function ecranConnexion(msg) {
   app.innerHTML = `<form class="connexion card" id="f"><div class="marque"><img src="logo-oikos.png" alt=""><span><b>Oikos</b> Pilotage</span></div>

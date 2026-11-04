@@ -1061,6 +1061,16 @@ async function piloteAuth(type,corps){
   if(!r.ok){const e=new Error("refus");e.refus=r.status>=400&&r.status<500;throw e}
   return j;
 }
+async function piloteCode(jeton,facteur,code){
+  const envoi=async(fin,corps)=>{
+    const r=await fetch(PILOTE_URL+"/auth/v1/factors/"+facteur+fin,{method:"POST",headers:{apikey:PILOTE_CLE,Authorization:"Bearer "+jeton,"Content-Type":"application/json"},body:JSON.stringify(corps)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){const e=new Error("refus");e.refus=r.status>=400&&r.status<500;throw e}
+    return j;
+  };
+  const defi=await envoi("/challenge",{});
+  return envoi("/verify",{challenge_id:defi.id,code});
+}
 async function piloteBase(jeton,chemin,methode,corps){
   const r=await fetch(PILOTE_URL+"/rest/v1/"+chemin,{method:methode||"GET",headers:{apikey:PILOTE_CLE,Authorization:"Bearer "+jeton,"Content-Type":"application/json",Prefer:"return=minimal"},body:corps?JSON.stringify(corps):undefined});
   if(!r.ok)throw new Error("base "+r.status);
@@ -1121,13 +1131,16 @@ function openPilote(){
    <div class="pnote" style="padding:0">Ton compte gérant, une seule fois. Le mot de passe n'est pas gardé sur le téléphone.</div>
    <label class="field">E-mail<input type="email" id="pi-e" autocomplete="username" required></label>
    <label class="field">Mot de passe<input type="password" id="pi-m" autocomplete="current-password" required></label>
+   <label class="field">Code à 6 chiffres de ton appli d'authentification<input id="pi-c" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>
    <div class="status" id="pi-s"></div>
    <button class="btn primary" type="submit">Relier</button><button class="btn" type="button" id="pi-close">Fermer</button></form></div>`;
   const b=$("#sheet-bg");b.addEventListener("click",ev=>{if(ev.target===b||ev.target.id==="pi-close")root.innerHTML=""});
   $("#pi-form").addEventListener("submit",async ev=>{ev.preventDefault();
-    try{const a=await piloteAuth("password",{email:$("#pi-e").value.trim().toLowerCase(),password:$("#pi-m").value});
+    try{let a=await piloteAuth("password",{email:$("#pi-e").value.trim().toLowerCase(),password:$("#pi-m").value});
+      const facteur=((a.user&&a.user.factors)||[]).find(f=>f.factor_type==="totp"&&f.status==="verified");
+      if(facteur)a=await piloteCode(a.access_token,facteur.id,$("#pi-c").value.trim());
       piloteNote({refresh:a.refresh_token});root.innerHTML="";await envoyerProspects(true);render()}
-    catch(e){$("#pi-s").textContent=e.refus?"E-mail ou mot de passe incorrect.":"Pas de réseau."}});
+    catch(e){$("#pi-s").textContent=e.refus?"E-mail, mot de passe ou code incorrect.":"Pas de réseau."}});
 }
 async function openCalPicker(){
   const list=await NATIVE.calendars();const cur=NATIVE.chosenCalendarId();

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#7A8568">
 <meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Intervenant</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icone-192.png">
@@ -350,7 +351,7 @@ body.gele #ft{pointer-events:none}
 <div class="fond" aria-hidden="true"><i></i><i></i><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg></div>
 <div id="app"></div>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" integrity="sha384-2zrRDgDHSYB/GN3nFW3fsZXoxEhKIr3N2h63Tc6DEOB9JJdFIu8xMJT2Cph/gBil" crossorigin="anonymous"></script>
 <script>
 /* ===================== Réglages ===================== */
 /* Adresse et clé PUBLIQUE du projet (faites pour être dans l'appli : la base protège les données elle-même) */
@@ -708,9 +709,8 @@ async function accueil(o) {
       document.getElementById("gel-completer").onclick = () => accueil("moi");
     }
     majAlerteMissions();
-    let c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,eleves,acces,cle,consignes,temps_semaine_min,meteo").order("nom");
-    if (c.error && /eleves/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes,temps_semaine_min,meteo").order("nom");   // base pas encore à jour (SQL 20)
-    if (c.error && /temps_semaine_min|meteo/.test(c.error.message || "")) c = await sb.from("clients").select("id,nom,telephone,email,adresse,zone,activite,acces,cle,consignes").order("nom");   // base pas encore à jour (SQL 14)
+    let c = await sb.from("clients_presta").select("*").order("nom");
+    if (c.error) c = await sb.from("clients").select("id,nom,telephone,adresse,zone,activite,eleves,acces,cle,consignes,temps_semaine_min,meteo").order("nom");   // base pas encore à jour (SQL 34)
     if (c.error) throw c.error;
     clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();

@@ -1,1 +1,1 @@
-Réglages visibles même sans routine, dont « Relier à OIKOS Pilotage »
+Relier à OIKOS Pilotage : code à 6 chiffres

@@ -1,4 +1,4 @@
 {
- "version": 21,
- "notes": "Réglages visibles même sans routine, dont « Relier à OIKOS Pilotage »"
+ "version": 22,
+ "notes": "Relier à OIKOS Pilotage : code à 6 chiffres"
 }
