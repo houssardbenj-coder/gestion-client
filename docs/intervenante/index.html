@@ -447,11 +447,25 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .did-pose{animation:did-pose .34s cubic-bezier(.3,1.5,.5,1) backwards}
 .inst-olive{width:96px;margin:0 auto 6px}
 .inst-liste{margin:12px 0;padding-left:22px;display:grid;gap:8px}
+.inst-icone{width:24px;height:24px;border-radius:6px;vertical-align:-.4em}
+.inst-place{height:76px;flex:none}
+.inst-titre{font-size:27px;margin:0}
+.inst-btns{display:flex;gap:8px;align-items:stretch}
+.inst-btns .btn{flex:1;min-width:0}
+@media (max-height:700px){.inst-olive.petite{display:none}.page.solo:has(#inst-guide){justify-content:flex-start;padding-top:14px;gap:8px}}
+.inst-fleche{position:fixed;z-index:5;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--accent);pointer-events:none;animation:inst-fleche .8s ease-in-out infinite alternate}
+.inst-fleche .inst-repere{display:grid;place-items:center;min-width:38px;height:38px;padding:0 6px;border-radius:12px;background:var(--surface);border:1.5px solid currentColor;font-weight:700}
+.inst-fleche svg.fl{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.inst-fleche.bas{left:50%;margin-left:-25px;bottom:calc(env(safe-area-inset-bottom,0px) + 6px);--dy:6px}
+.inst-fleche.bas-droite{right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);--dy:6px}
+.inst-fleche.haut-droite{right:12px;top:calc(env(safe-area-inset-top,0px) + 6px);flex-direction:column-reverse;--dy:-6px}
+.inst-fleche.haut-droite svg.fl{transform:rotate(180deg)}
+@keyframes inst-fleche{to{translate:0 var(--dy)}}
 @keyframes did-pouls{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.14)}}
 @keyframes did-secoue{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 @keyframes did-pose{from{opacity:0;transform:scale(.8)}}
 @keyframes did-chute{0%{opacity:0;transform:translateY(-240px)}55%{opacity:1;transform:translateY(0)}72%{transform:translateY(-22px)}88%{transform:translateY(0)}94%{transform:translateY(-6px)}}
-@media (prefers-reduced-motion:reduce){.did-trou,.did-queue{transition:none}.did-trou.vise::after,.did-trou.secoue,.did-chute,.did-pose{animation:none}}
+@media (prefers-reduced-motion:reduce){.did-trou,.did-queue{transition:none}.did-trou.vise::after,.did-trou.secoue,.did-chute,.did-pose,.inst-fleche{animation:none}}
 /* Ouverture de l'appli : le logo se trace en lumière, puis s'efface sur le premier écran. Toujours sombre, comme l'écran du code. */
 .intro{position:fixed;inset:0;z-index:9999;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(90% 62% at 50% 46%,#30351F 0%,#1B1D15 52%,#0D0E09 100%);transition:opacity .6s ease;-webkit-tap-highlight-color:transparent}
 .intro::before{content:"";position:absolute;inset:0;background:#1B1D15;opacity:0;animation:i-raccord .7s ease-out}
@@ -546,7 +560,7 @@ const sb = window.supabase.createClient(SB_URL, SB_CLE, {
 
 /* ===================== Outils ===================== */
 /* Icônes dessinées (trait fin) : les mêmes sur tous les téléphones, à la place des émojis */
-const ICONES = { jour: "M12 4 21 20H3Z", mission: "M4 8h16v11H4zM9 8V5h6v3", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", clients: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 5a3.5 3.5 0 0 1 0 6.5M18 14.5c1.9.8 3 2.8 3 5.5", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", itineraire: "M21 3 3 10.5l7.5 3L13.5 21z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", cloche: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", clocheoff: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4M4 4l16 16", whatsapp: "M4 20l1.3-4.2A8.5 8.5 0 1 1 8.5 19zM9 9c0 3.3 2.7 6 6 6", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", voiture: "M5 16V11l2-5h10l2 5v5M3 16h18v3H3zM5 11h14", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", code: "M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01", cle: "M15 9a4 4 0 1 0-3.3 3.9L9 16H6v3H3v-3l6.1-6.1A4 4 0 0 0 15 9zM16 8v.01", sortie: "M14 4H5v16h9M10 12h10M16 8l4 4-4 4", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", croix: "M6 6l12 12M18 6 6 18", fleche: "M5 12h14M13 6l6 6-6 6", chevron: "M9 6l6 6-6 6", valide: "M5 12.5 10 17.5 19 7.5" };
+const ICONES = { partage: "M12 15V3M8 7l4-4 4 4M8 10H5v11h14V10h-3", ecranaccueil: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM12 8v8M8 12h8", jour: "M12 4 21 20H3Z", mission: "M4 8h16v11H4zM9 8V5h6v3", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", clients: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 5a3.5 3.5 0 0 1 0 6.5M18 14.5c1.9.8 3 2.8 3 5.5", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", itineraire: "M21 3 3 10.5l7.5 3L13.5 21z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", cloche: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", clocheoff: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4M4 4l16 16", whatsapp: "M4 20l1.3-4.2A8.5 8.5 0 1 1 8.5 19zM9 9c0 3.3 2.7 6 6 6", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", voiture: "M5 16V11l2-5h10l2 5v5M3 16h18v3H3zM5 11h14", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", code: "M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01", cle: "M15 9a4 4 0 1 0-3.3 3.9L9 16H6v3H3v-3l6.1-6.1A4 4 0 0 0 15 9zM16 8v.01", sortie: "M14 4H5v16h9M10 12h10M16 8l4 4-4 4", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", croix: "M6 6l12 12M18 6 6 18", fleche: "M5 12h14M13 6l6 6-6 6", chevron: "M9 6l6 6-6 6", valide: "M5 12.5 10 17.5 19 7.5" };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[n]}"/></svg>`;
 const MONO = `<svg class="mono" viewBox="0 0 30 28" aria-hidden="true"><path d="M17 3 28 26H6Z"/><path d="M9 2 28 21 2 26Z"/></svg>`;
 const COCHE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES.valide}"/></svg>`;
@@ -1227,11 +1241,12 @@ function pushErreur(x) {
 function blocPush() {
   const e = pushEtat();
   if (e === "impossible" || (e === "granted" && !pushEchec)) return "";
-  if (e === "iphone") return `<div class="fdr-mot" style="margin-bottom:14px">${ico("cloche")} <b>Pour recevoir les missions en notification</b> : touche Partager puis « Sur l'écran d'accueil », et ouvre l'appli depuis cette icône.</div>`;
+  if (e === "iphone") return `<button class="alerte-mission" style="background:var(--accent)" data-guide-install>${ico("cloche")} Installer l'appli pour recevoir les missions<small>Sur iPhone, les notifications ne marchent que dans l'appli installée</small></button>`;
   if (e === "denied") return `<div class="fdr-mot" style="margin-bottom:14px">${ico("clocheoff")} <b>Notifications bloquées</b> : autorise-les pour cette appli dans les réglages de ton téléphone, sinon tu ne seras pas prévenu des missions.</div>`;
   return `<button class="alerte-mission" style="background:var(--accent)" data-activer-push>${ico("cloche")} Activer les notifications<small>Pour être prévenu dès qu'une mission arrive</small></button>`;
 }
 document.addEventListener("click", async e => {
+  if (e.target.closest("[data-guide-install]")) return ecranInstaller(() => accueil(), "Retour");
   const b = e.target.closest("[data-activer-push]"); if (!b) return;
   try {
     if (await Notification.requestPermission() !== "granted") { toast("Notifications refusées"); return accueil(); }
@@ -2238,7 +2253,18 @@ const surTelephone = () => surIOS() || /android/i.test(navigator.userAgent);
 /* Base pas encore à jour (colonne absente) : ni invitation ni visite */
 const didacticielAFaire = () => !!moi && moi.role !== "gerant" && moi.didacticiel_vu_le === null && !LS.get("didacticiel-vu");
 let invitInstall = null;
-window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); invitInstall = e; });
+let retourInstall = null, libelleInstall = "";
+/* Le navigateur peut préparer son installation après l'affichage de l'écran : le bouton apparaît alors */
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); invitInstall = e; if (document.getElementById("inst-suite")) ecranInstaller(retourInstall, libelleInstall); });
+/* Sur iPhone, seul Safari a un menu Partager dont on connaît la place à coup sûr */
+const safariIOS = () => surIOS() && /Version\/\d+.*Safari\//.test(navigator.userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|GSA\/|DuckDuckGo|Brave/.test(navigator.userAgent);
+const surIPad = () => /ipad|macintosh/i.test(navigator.userAgent);
+/* Safari 26 cache Partager derrière les trois points ; il annonce toujours sa vraie version après « Version/ » */
+const safari26 = () => +(navigator.userAgent.match(/Version\/(\d+)/) || [])[1] >= 26;
+function copierLienAppli() {
+  const lien = location.origin + location.pathname;
+  (navigator.clipboard ? navigator.clipboard.writeText(lien) : Promise.reject()).then(() => toast("Lien copié : collez-le dans Safari."), () => toast("Adresse à recopier dans Safari : " + lien));
+}
 
 function olive(pose, classe = "") {
   const a = s => moinsDeMouvement() ? "" : s;
@@ -2264,32 +2290,83 @@ function inviterInstall() {
   ecranInstaller();
   return true;
 }
-function ecranInstaller() {
-  const ios = surIOS();
-  const consignes = ios
-    ? `<ol class="inst-liste"><li>Touchez <b>Partager</b> ${ico("envoi")} en bas de l'écran.</li><li>Choisissez <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône et reconnectez-vous avec votre e-mail et votre mot de passe.</li></ol>`
-    : invitInstall ? "" : `<ol class="inst-liste"><li>Touchez le menu du navigateur, en haut à droite.</li><li>Choisissez <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol>`;
-  page(`<div class="inst-olive">${olive("bonjour")}</div>
+function ecranInstaller(retour = () => { LS.set("install-vu", 1); suite(); }, libelle = "Continuer sans installer") {
+  retourInstall = retour; libelleInstall = libelle;
+  fermerDidacticiel();
+  if (surIOS()) return guideIphone(retour, libelle);
+  /* Android : le navigateur sait installer, Olive montre le vrai bouton */
+  if (invitInstall) {
+    page(`<h1>Installez l'appli OIKOS</h1>
+      <p class="muted">Elle se range sur votre écran d'accueil, s'ouvre d'un seul geste et vous prévient dès qu'une mission arrive.</p>
+      <div id="inst-suite"><button class="btn primary big" id="installer" style="width:100%;margin-top:14px"><span class="ic">${ico("telecharger")}</span>Installer l'appli</button></div>
+      <button class="btn flat" id="sans" style="width:100%;margin-top:8px">${libelle}</button>`, true);
+    document.getElementById("sans").onclick = retour;
+    document.getElementById("installer").onclick = () => lancerInstall(retour, libelle);
+    lancerDidacticiel({ passer: retour, etapes: [{ cible: "#installer", pose: "regarde", titre: "Installez l'appli OIKOS", texte: "Touchez ce bouton : votre téléphone s'occupe du reste. L'appli s'ouvrira d'un seul geste et vous préviendra dès qu'une mission arrive.", aide: "Touchez le bouton éclairé.", action: () => lancerInstall(retour, libelle) }] });
+    return;
+  }
+  /* Android sans fenêtre d'installation (déjà refusée, autre navigateur) : la marche à suivre, le menu du navigateur est hors de la page */
+  const samsung = /SamsungBrowser/.test(navigator.userAgent), place = samsung ? "en bas à droite" : "en haut à droite";
+  page(`<div class="inst-olive">${olive("regarde")}</div>
     <h1>Installez l'appli OIKOS</h1>
-    <p class="muted">Elle se range sur votre écran d'accueil, s'ouvre d'un seul geste et vous prévient dès qu'une mission arrive.</p>
-    <div id="inst-suite">${consignes}${!ios && invitInstall ? `<button class="btn primary big" id="installer" style="width:100%;margin-top:14px">Installer l'appli</button>` : ""}</div>
-    <button class="btn flat" id="sans" style="width:100%;margin-top:8px">Continuer sans installer</button>`, true);
-  const continuer = () => { LS.set("install-vu", 1); suite(); };
-  document.getElementById("sans").onclick = continuer;
-  const b = document.getElementById("installer");
-  if (b) b.onclick = async () => {
-    invitInstall.prompt();
-    const { outcome } = await invitInstall.userChoice;
-    invitInstall = null;
-    if (outcome !== "accepted") return ecranInstaller();
-    LS.set("install-vu", 1);
-    document.getElementById("inst-suite").innerHTML = `<p class="fdr-mot" style="margin-top:14px">${ico("ok")} <b>C'est installé.</b> Ouvrez l'appli depuis sa nouvelle icône, sur votre écran d'accueil.</p>`;
-    document.getElementById("sans").textContent = "Continuer ici";
-  };
+    <div id="inst-suite"><ol class="inst-liste"><li>Touchez le menu du navigateur, ${place}.</li><li>Choisissez <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône <img class="inst-icone" src="icone-192.png" alt="">.</li></ol></div>
+    <button class="btn flat" id="sans" style="width:100%;margin-top:8px">${libelle}</button>
+    ${/Firefox/.test(navigator.userAgent) ? "" : `<div class="inst-place"></div>${flecheInstall(samsung ? "bas-droite" : "haut-droite", "<b>⋮</b>")}`}`, true);
+  document.getElementById("sans").onclick = retour;
+}
+const flecheInstall = (cote, repere) => `<div class="inst-fleche ${cote}" aria-hidden="true"><span class="inst-repere">${repere}</span><svg class="fl" viewBox="0 0 24 24"><path d="M12 3v17M5 13l7 7 7-7"/></svg></div>`;
+
+async function lancerInstall(retour, libelle) {
+  const invit = invitInstall; if (!invit) return;
+  invitInstall = null;
+  let accepte = false;
+  try { invit.prompt(); accepte = (await invit.userChoice).outcome === "accepted"; } catch (x) {}
+  if (!accepte) return ecranInstaller(retour, libelle);
+  fermerDidacticiel();
+  LS.set("install-vu", 1);
+  page(`<div class="inst-olive">${olive("bravo")}</div>
+    <h1>C'est installé !</h1>
+    <p class="muted">Ouvrez l'appli depuis sa nouvelle icône <img class="inst-icone" src="icone-192.png" alt="">, sur votre écran d'accueil.</p>
+    <button class="btn flat" id="sans" style="width:100%;margin-top:8px">Continuer ici</button>`, true);
+  document.getElementById("sans").onclick = retour;
+}
+
+/* iPhone : aucune page web ne peut s'installer d'un bouton ni éclairer le menu de Safari.
+   Les consignes restent en haut de l'écran : le menu Partager n'en couvre que le bas. */
+function guideIphone(retour, libelle) {
+  const safari = safariIOS(), ipad = surIPad(), recent = safari26();
+  const coin = ipad ? "haut-droite" : recent ? "bas-droite" : "bas";
+  const premier = recent && !ipad
+    ? `Touchez les trois points <b>•••</b> à côté de la barre d'adresse, puis <b>Partager</b> ${ico("partage")}.`
+    : `Touchez <b>Partager</b> ${ico("partage")} ${ipad ? "en haut à droite" : "en bas de l'écran"}.`;
+  const etapes = safari
+    ? `<ol class="inst-liste"><li>${premier}</li>
+        <li>Descendez dans le menu${recent ? " (ou touchez <b>Plus</b>)" : ""} jusqu'à <b>Sur l'écran d'accueil</b> ${ico("ecranaccueil")}.</li>
+        <li>Touchez <b>Ajouter</b>, en haut à droite. Si une option « app web » apparaît, laissez-la activée.</li>
+        <li>Ouvrez la nouvelle icône <img class="inst-icone" src="icone-192.png" alt=""> et reconnectez-vous : pour ${ipad ? "l'iPad" : "l'iPhone"}, c'est une nouvelle appli.</li></ol>`
+    : `<ol class="inst-liste"><li>Copiez le lien de l'appli avec le bouton ci-dessous.</li>
+        <li>Ouvrez <b>Safari</b>, collez le lien dans la barre d'adresse et connectez-vous.</li>
+        <li>Je vous retrouve là-bas pour la suite.</li></ol>
+        <button class="btn primary big" id="copier" style="width:100%">Copier le lien</button>`;
+  page(`<div class="inst-olive petite" style="width:64px">${olive("regarde")}</div>
+    <h1 class="inst-titre">Installer l'appli sur ${ipad ? "iPad" : "iPhone"}</h1>
+    <div id="inst-guide">${etapes}</div>
+    <div class="inst-btns">${safari ? `<button class="btn" id="introuvable">Je ne trouve pas</button>` : ""}<button class="btn flat" id="sans">${libelle}</button></div>
+    ${safari ? `<div class="inst-place"></div>${flecheInstall(coin, recent && !ipad ? "<b>•••</b>" : ico("partage"))}` : ""}`, true);
+  document.getElementById("sans").onclick = retour;
+  const copier = document.getElementById("copier");
+  if (copier) copier.onclick = copierLienAppli;
+  const introuvable = document.getElementById("introuvable");
+  if (introuvable) introuvable.onclick = () => feuille(`<h2 style="margin:0">Vous ne trouvez pas ?</h2>
+    <p><b>Sur l'écran d'accueil</b> est souvent tout en bas du menu Partager : faites-le défiler jusqu'au bout.</p>
+    <p>Toujours rien ? La page s'est sans doute ouverte dans une autre appli, comme votre messagerie. Copiez le lien, ouvrez Safari et collez-le dans la barre d'adresse.</p>
+    <button class="btn primary big" id="copier-lien">Copier le lien</button><button class="btn flat" data-fermer>Fermer</button>`, el => { el.querySelector("#copier-lien").onclick = copierLienAppli; });
+  lancerDidacticiel({ passer: retour, etapes: [{ pose: "bonjour", chute: true, titre: "Pourquoi pas un simple bouton ?", texte: `Apple ne laisse pas une appli hors App Store s'installer d'un bouton : seul le menu Partager de Safari le peut, et je ne peux pas le toucher à votre place. On le fait ensemble, une seule fois. Sans cela, pas de notification de mission sur ${ipad ? "iPad" : "iPhone"}.`, boutons: [[safari ? "Me guider" : "Passer par Safari", true]] }] });
 }
 
 /* Bouton de l'onglet Moi : la fenêtre d'installation si le navigateur l'a préparée, sinon la marche à suivre */
 async function installerAppli() {
+  if (surIOS()) return ecranInstaller(() => accueil("moi"), "Retour");
   if (invitInstall) {
     invitInstall.prompt();
     const { outcome } = await invitInstall.userChoice;
@@ -2301,10 +2378,7 @@ async function installerAppli() {
     }
     return;
   }
-  const consignes = surIOS()
-    ? `<ol class="inst-liste"><li>Touchez <b>Partager</b> ${ico("envoi")} en bas de l'écran.</li><li>Choisissez <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol>`
-    : `<ol class="inst-liste"><li>Si une ancienne icône OIKOS est sur le téléphone, supprimez-la d'abord.</li><li>Touchez le menu du navigateur, les trois points.</li><li>Choisissez <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol>`;
-  feuille(`<h2 style="margin:0">Installer l'appli OIKOS</h2>${consignes}<button class="btn flat" data-fermer>Fermer</button>`);
+  feuille(`<h2 style="margin:0">Installer l'appli OIKOS</h2><ol class="inst-liste"><li>Si une ancienne icône OIKOS est sur le téléphone, supprimez-la d'abord.</li><li>Touchez le menu du navigateur, les trois points.</li><li>Choisissez <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b>.</li><li>Ouvrez l'appli depuis sa nouvelle icône.</li></ol><button class="btn flat" data-fermer>Fermer</button>`);
 }
 
 function didacticielSiBesoin() {
@@ -2349,7 +2423,7 @@ function etapesDidacticiel() {
       try { if (await Notification.requestPermission() === "granted") { await abonnerPush(); toast("Notifications activées"); } }
       catch (x) { toast(pushErreur(x)); }
     }]] }
-    : etat === "iphone" ? { pose: "notification", titre: "Les notifications", texte: "Sur iPhone, elles ne marchent que dans l'appli installée. Touchez Partager puis « Sur l'écran d'accueil », et ouvrez l'appli depuis cette icône. Sinon, vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
+    : etat === "iphone" ? { pose: "notification", titre: "Les notifications", texte: "Sur iPhone, elles ne marchent que dans l'appli installée. Touchez « Installer l'appli » dans l'onglet Moi, je vous montrerai comment. Sinon, vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
     : etat === "denied" ? { pose: "notification", titre: "Les notifications", texte: "Elles sont bloquées sur ce téléphone. Autorisez-les pour cette appli dans vos réglages, sinon vous ne serez pas prévenu des missions.", boutons: [["J'ai compris", true]] }
     : null;
   return [
@@ -2369,6 +2443,7 @@ function etapesDidacticiel() {
     bouton(".card:has(> #dire)", "Écrivez ce que vous avez fait", "Écrivez simplement « Bibas 3h ce matin », puis Vérifier. L'appli prépare la ligne, vous n'avez plus qu'à l'envoyer."),
     bouton(".card:has(> .compteur)", "Votre total du mois", `${sousTraitante() ? "OIKOS fait votre facture à partir de ces heures. " : ""}Vérifiez qu'elles sont justes.`),
     onglet("moi", "Moi", "Vos informations et vos papiers."),
+    bouton("#installer-appli", "Installer l'appli", "Elle n'est pas encore installée sur ce téléphone. Ce bouton s'en occupe, quand vous voudrez."),
     { cible: "#papiers", pose: "documents", titre: "Vos documents, c'est important !", texte: `Ils sont obligatoires pour travailler avec OIKOS : ils nous protègent, vous comme nous.${sousTraitante() ? " Nous pourrons aussi vous redemander une attestation URSSAF de temps en temps, pour vérifier que votre micro-entreprise est toujours active." : ""} Déposez-les ici, je vous rappellerai s'il en manque un.`, aide: "Touchez le bouton éclairé pour continuer.", action: () => accueil("papiers") },
     bouton("[data-envoi]", "Envoyer un papier", "Touchez Envoyer sur chaque papier : une photo nette suffit.", "documents"),
     notif,
@@ -2377,13 +2452,13 @@ function etapesDidacticiel() {
 }
 let did = null;
 const cibleVisible = sel => [...document.querySelectorAll(sel)].find(el => el.getClientRects().length);
-function lancerDidacticiel() {
+function lancerDidacticiel(guide) {
   if (did) return;
   const el = document.createElement("div");
   el.className = "did"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "Visite de l'appli");
   el.innerHTML = `<div class="did-trou"></div><button class="did-zone" type="button" hidden></button><div class="did-queue cache"></div><div class="did-bulle"></div>`;
   document.body.append(el);
-  did = { el, etapes: etapesDidacticiel(), i: -1, trou: el.querySelector(".did-trou"), zone: el.querySelector(".did-zone"), queue: el.querySelector(".did-queue"), bulle: el.querySelector(".did-bulle") };
+  did = { el, etapes: guide ? guide.etapes : etapesDidacticiel(), guide, i: -1, trou: el.querySelector(".did-trou"), zone: el.querySelector(".did-zone"), queue: el.querySelector(".did-queue"), bulle: el.querySelector(".did-bulle") };
   /* Toute la page est sous le voile : seuls la zone éclairée et les boutons de la bulle répondent, jamais un vrai bouton de l'appli */
   el.addEventListener("click", e => {
     if (e.target.closest(".did-bulle,.did-zone")) return;
@@ -2417,7 +2492,7 @@ async function passerEtape(action) {
 }
 async function afficherEtape(i) {
   const d = did, e = d.etapes[i];
-  if (!e) { fermerDidacticiel(true); return; }
+  if (!e) { fermerDidacticiel(!d.guide); return; }
   d.i = i;
   if (e.exemple) e.exemple();
   if (e.cible) {
@@ -2431,7 +2506,7 @@ async function afficherEtape(i) {
     <div class="${e.chute ? "did-chute" : "did-pose"}">${olive(e.pose)}</div>
     <div class="did-txt"><h2>${e.titre}</h2><p>${e.texte}</p>${e.aide ? `<p class="did-aide">${e.exemple && cibleVisible(e.cible)?.closest(".did-exemple") ? "Ceci est un exemple pour la visite, il disparaîtra ensuite. Touchez-le pour continuer." : e.aide}</p>` : ""}</div>
     ${e.boutons ? `<div class="did-btns">${e.boutons.map(([t, principal], n) => `<button class="btn${principal ? " primary" : ""}" type="button" data-b="${n}">${t}</button>`).join("")}</div>` : ""}`;
-  d.bulle.querySelector(".did-passer").onclick = () => { const exemple = document.querySelector(".did-exemple"); fermerDidacticiel(true); if (exemple) accueil(); toast("Vous pourrez revoir la visite dans l'onglet Moi."); };
+  d.bulle.querySelector(".did-passer").onclick = () => { if (d.guide) { fermerDidacticiel(); return d.guide.passer(); } const exemple = document.querySelector(".did-exemple"); fermerDidacticiel(true); if (exemple) accueil(); toast("Vous pourrez revoir la visite dans l'onglet Moi."); };
   d.bulle.querySelectorAll("[data-b]").forEach(b => b.onclick = async () => {
     const f = e.boutons[b.dataset.b][2];
     if (f === undefined) return passerEtape();
