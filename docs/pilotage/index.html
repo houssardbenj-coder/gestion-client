@@ -237,6 +237,28 @@ input[type=date],input[type=time],input[type=datetime-local],input[type=search]{
 @keyframes p-fondu{from{opacity:0}}
 @keyframes p-monte{from{opacity:0;transform:translateY(14px)}}
 @media (prefers-reduced-motion: reduce){.voile,.fenetre{animation:none}.btn,.chip,.cliquable,nav.onglets button{transition:none}}
+
+/* Messagerie (SQL 39) */
+.ms-fil{display:flex;flex-direction:column;gap:8px;overflow-y:auto;overscroll-behavior:contain;padding:14px}
+.ms-b{max-width:80%;padding:9px 12px;border-radius:14px;background:var(--bg);border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere;align-self:flex-start}
+.ms-b.moi{align-self:flex-end;background:var(--accent-soft);border-color:transparent}
+.ms-b small{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+.ms-vide{margin:auto;text-align:center;color:var(--muted)}
+.ms-form{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
+.ms-form textarea{flex:1;min-width:0;resize:vertical}
+.ms-grille{display:grid;grid-template-columns:290px minmax(0,1fr);gap:12px;margin-top:12px;align-items:start}
+.ms-liste{padding:6px;display:flex;flex-direction:column;gap:2px;max-height:72vh;overflow-y:auto}
+.ms-pers{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:9px 10px;border-radius:10px;cursor:pointer}
+.ms-pers:hover{background:var(--accent-soft)}
+.ms-pers[aria-current="true"]{background:var(--accent-soft)}
+.ms-pers b{font-weight:600}
+.ms-pers span.apercu{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms-sans{padding:9px 10px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);margin-top:6px}
+.ms-conv .ms-fil{height:min(56vh,560px);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ms-tete{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;flex-wrap:wrap}
+.ms-conv form{padding:0 14px 14px}
+#ms-retour{display:none}
+@media (max-width:720px){.ms-grille{grid-template-columns:minmax(0,1fr)}.ms-grille.ouverte .ms-liste{display:none}.ms-grille:not(.ouverte) .ms-conv{display:none}#ms-retour{display:inline-flex}}
 </style>
 </head>
 <body>
@@ -387,7 +409,7 @@ function ecranConnexion(msg) {
 }
 
 /* ===================== Cadre et onglets ===================== */
-const ONGLETS = [["avoir", "À voir"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenants"], ["clients", "Clients"], ["dossiers", "Dossiers clients"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["avoir", "À voir"], ["messages", "Messages"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenants"], ["clients", "Clients"], ["dossiers", "Dossiers clients"], ["papiers", "Papiers demandés"]];
 async function afficher(o) {
   if (o) onglet = o;
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}OIKOS<span>Pilotage</span></div>
@@ -397,11 +419,18 @@ async function afficher(o) {
   app.querySelector("nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) afficher(b.dataset.o); };
   document.getElementById("sortir").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers })[onglet](); }
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers })[onglet](); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
+async function compteurMessages() {
+  const r = await sb.from("messages").select("id", { count: "exact", head: true }).eq("de_gerant", false).is("lu_le", null);
+  const e = document.getElementById("b-messages"); if (e) e.innerHTML = r.count ? `<span class="bulle">${r.count}</span>` : "";
+  return r.count || 0;
+}
+setInterval(() => { if (!document.hidden && document.getElementById("b-messages")) compteurMessages().catch(() => {}); }, 30000);
 async function compteurAVoir() {
+  compteurMessages().catch(() => {});
   try {
     const [n, d, c, ta, ph, ju, td, dv, rt] = await Promise.all([
       sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
@@ -460,6 +489,112 @@ function optionsClients(liste, choisi) {
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
 const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
 
+/* ===================== Messages (SQL 39) : une conversation par presta ===================== */
+const motsNom = n => String(n || "").toLowerCase().trim().split(/\s+/).sort().join(" ");
+/* Prestataires notés à la main dans les clients, sans compte dans l'appli : ni message ni tâche possible pour eux */
+function prestaSansCompte() {
+  const avec = new Set(cacheProfils.map(p => motsNom(nomPers(p))));
+  return [...new Set(cacheAttrib.filter(a => !a.intervenante_id && a.nom_libre && prestaEnCours(a)).map(a => a.nom_libre))].filter(n => !avec.has(motsNom(n))).sort((a, b) => a.localeCompare(b, "fr"));
+}
+const avisTache = (ids, texte, echeance) => sb.from("messages").insert(ids.map(id => ({ intervenante_id: id, texte: "Nouvelle tâche : " + texte + (echeance ? " (pour le " + echeance.split("-").reverse().join("/") + ")" : "") + ". Tu la retrouves dans ton À faire." })));
+const msHeure = d => new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+let msQui = "", msMinuteur = null;
+async function vueMessages() {
+  clearInterval(msMinuteur);
+  await chargerBase();
+  const charger = () => q(sb.from("messages").select("id,intervenante_id,de_gerant,texte,cree_le,lu_le").order("cree_le", { ascending: false }).limit(3000));
+  let tous = await charger();
+  const dernier = id => tous.find(m => m.intervenante_id === id);
+  const nonLus = id => tous.filter(m => m.intervenante_id === id && !m.de_gerant && !m.lu_le).length;
+  const gens = cacheProfils.filter(p => p.role === "intervenante" && (p.actif || dernier(p.id))).sort((a, b) => {
+    const x = dernier(a.id), y = dernier(b.id);
+    return x && y ? y.cree_le.localeCompare(x.cree_le) : x ? -1 : y ? 1 : nomPers(a).localeCompare(nomPers(b), "fr");
+  });
+  const sans = prestaSansCompte();
+  if (msQui && !gens.some(p => p.id === msQui)) msQui = "";
+  if (!msQui && gens.length && innerWidth > 720) msQui = gens[0].id;
+  const el = contenu(`<h1>Messages</h1>
+    <div class="ms-grille ${msQui ? "ouverte" : ""}" id="ms-grille">
+      <div class="card ms-liste" id="ms-liste"></div>
+      <section class="card ms-conv" id="ms-conv" style="padding:0"></section></div>`);
+  const liste = el.querySelector("#ms-liste"), conv = el.querySelector("#ms-conv"), grille = el.querySelector("#ms-grille");
+  const dessinerListe = () => {
+    liste.innerHTML = gens.map(p => { const m = dernier(p.id), n = nonLus(p.id);
+      return `<button class="ms-pers" data-qui="${p.id}" aria-current="${p.id === msQui}"><span class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>${esc(nomPers(p))}</b>${n ? `<span class="bulle">${n}</span>` : ""}</span>
+        <span class="apercu">${m ? (m.de_gerant ? "Toi : " : "") + esc(m.texte) : "Aucun message"}</span></button>`; }).join("")
+      || `<p class="muted small" style="padding:10px">Aucun presta n'a de compte pour l'instant.</p>`;
+    if (sans.length) liste.insertAdjacentHTML("beforeend", `<div class="ms-sans">Sans compte, pas de messagerie : ${esc(sans.join(", "))}<button class="btn" id="ms-compte" style="display:flex;margin-top:8px">${ico("plus")} Nouveau presta</button></div>`);
+  };
+  const dessinerFil = () => {
+    const f = conv.querySelector("#ms-fil"); if (!f) return;
+    const l = tous.filter(m => m.intervenante_id === msQui).reverse();
+    f.innerHTML = l.map(m => `<div class="ms-b ${m.de_gerant ? "moi" : ""}">${esc(m.texte)}<small>${msHeure(m.cree_le)}${m.de_gerant && m.lu_le ? " · lu" : ""}</small></div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.<br>Écris le premier ci-dessous.</p>`;
+    f.scrollTop = f.scrollHeight;
+  };
+  const marquerLu = async () => {
+    if (!msQui || !nonLus(msQui)) return;
+    const { error } = await sb.from("messages").update({ lu_le: new Date().toISOString() }).eq("intervenante_id", msQui).eq("de_gerant", false).is("lu_le", null);
+    if (!error) { tous.forEach(m => { if (m.intervenante_id === msQui && !m.de_gerant && !m.lu_le) m.lu_le = new Date().toISOString(); }); dessinerListe(); compteurMessages().catch(() => {}); }
+  };
+  const dessinerConv = () => {
+    const p = gens.find(x => x.id === msQui);
+    grille.classList.toggle("ouverte", !!p);
+    if (!p) { conv.innerHTML = `<p class="muted" style="padding:16px">Choisis un presta.</p>`; return; }
+    conv.innerHTML = `<div class="ms-tete"><span class="row"><button class="btn" id="ms-retour" aria-label="Retour à la liste">‹</button><b>${esc(nomPers(p))}</b>${p.gele ? `<span class="tag warn">gelé : il lit mais ne répond pas</span>` : ""}${p.actif ? "" : `<span class="tag warn">accès coupé</span>`}</span>
+        <button class="btn" id="ms-tache">${ico("plus")} Donner une tâche</button></div>
+      <div class="ms-fil" id="ms-fil"></div>
+      <form class="ms-form" id="ms-form"><textarea id="ms-texte" rows="2" maxlength="4000" required placeholder="Écrire à ${esc(p.prenom || "ce presta")}…" aria-label="Message"></textarea><button class="btn primary" type="submit">Envoyer</button></form>`;
+    dessinerFil();
+    const zone = conv.querySelector("#ms-texte");
+    zone.onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) conv.querySelector("#ms-form").requestSubmit(); };
+    conv.querySelector("#ms-retour").onclick = () => { msQui = ""; dessinerListe(); dessinerConv(); };
+    conv.querySelector("#ms-tache").onclick = () => tacheDepuisMessages(p, async () => { tous = await charger(); dessinerListe(); dessinerFil(); });
+    conv.querySelector("#ms-form").onsubmit = async e => {
+      e.preventDefault(); const texte = zone.value.trim(); if (!texte) return;
+      const b = e.submitter; if (b) b.disabled = true;
+      const { error } = await sb.from("messages").insert({ intervenante_id: p.id, texte });
+      if (b) b.disabled = false;
+      if (error) return souci(error);
+      zone.value = ""; tous = await charger(); dessinerListe(); dessinerFil();
+    };
+    marquerLu();
+  };
+  liste.onclick = e => {
+    if (e.target.closest("#ms-compte")) return nouveauPresta();
+    const b = e.target.closest("[data-qui]"); if (!b) return;
+    msQui = b.dataset.qui; dessinerListe(); dessinerConv();
+  };
+  dessinerListe(); dessinerConv();
+  msMinuteur = setInterval(async () => {
+    if (onglet !== "messages" || !document.getElementById("ms-grille")) return clearInterval(msMinuteur);
+    if (document.hidden) return;
+    try {
+      const n = await charger(), signe = l => l.map(m => m.id + (m.lu_le ? "l" : "")).join();
+      if (signe(n) === signe(tous)) return;
+      tous = n; dessinerListe(); dessinerFil(); marquerLu();
+    } catch (e) {}
+  }, 15000);
+}
+function tacheDepuisMessages(p, apres) {
+  fenetre(`<h2 style="margin:0">Tâche pour ${esc(nomPers(p))}</h2>
+    <form id="mt" style="display:grid;gap:10px;margin-top:10px">
+      <label class="f">Ce qu'il y a à faire<input type="text" name="texte" required maxlength="500" autocomplete="off"></label>
+      <div class="row"><span class="muted small">Pour quand ?</span>${taChips("today", "")}</div>
+      <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${optionsClients(clientsEnCours())}</select></label>
+      <div class="row" style="justify-content:flex-end"><button class="btn flat" type="button" data-fermer>Annuler</button><button class="btn primary" type="submit">Donner la tâche</button></div></form>`, (z, fermer) => {
+    const form = z.querySelector("#mt"), lu = taBrancherChips(form, () => {});
+    form.onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(form), texte = String(f.get("texte")).trim(), { w, date } = lu();
+      if (!texte) return toast("Écris ce qu'il y a à faire");
+      if (w === "pick" && !date) return toast("Choisis la date");
+      const echeance = taEcheanceDe(w, date), { error } = await sb.from("taches").insert({ intervenante_id: p.id, texte, client_id: f.get("client_id") || null, echeance });
+      if (error) return souci(error);
+      await avisTache([p.id], texte, echeance);
+      toast("Tâche donnée : il la voit dans son appli"); fermer(); apres();
+    };
+  });
+}
+
 /* ===================== À voir ===================== */
 async function vueAVoir() {
   await chargerBase();
@@ -486,7 +621,9 @@ async function vueAVoir() {
   const douteux = pts.filter(p => p.corrige_par_intervenante || [p.gps_arrivee, p.gps_depart].some(g => g && g.etat !== "ok"));
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const nonDeclares = prevus.filter(x => x.client_id && !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut)));
+  const nbMessages = await compteurMessages().catch(() => 0);
   const el = contenu(`<h1>À voir</h1>
+    ${nbMessages ? `<button class="card cliquable" data-o="messages" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)"><b>${ico("bulle")} ${nbMessages} message${nbMessages > 1 ? "s" : ""} non lu${nbMessages > 1 ? "s" : ""} ›</b></button>` : ""}
     ${tampon.length ? `<button class="card cliquable" data-o="clients" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
       <b>${ico("telecharger")} ${tampon.length} client${tampon.length > 1 ? "s" : ""} à traiter dans la zone tampon ›</b> <span class="muted small">(nouveaux clients VosFactures ou extraction)</span></button>` : ""}
     ${taches.some(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || "")) ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
@@ -1077,7 +1214,7 @@ const taLigne = (t, nb) => `<li class="${t.fait_le ? "is-done" : ""}" data-t="${
 let taQui = "", taQuand = "today", taDate = "", taOuverts = new Set(["late", "today", "week", "next", "later", "none", "done"]);
 async function vueTaches() {
   await chargerBase();
-  const gens = cacheProfils.filter(p => p.role === "intervenante" && p.actif);
+  const gens = cacheProfils.filter(p => p.role === "intervenante" && p.actif), sansCompte = prestaSansCompte();
   let r = sb.from("taches").select("*").or("fait_le.is.null,fait_le.gte." + plusJours(new Date(), 0).toISOString()).order("echeance", { nullsFirst: false }).order("cree_le");
   if (taQui) r = r.eq("intervenante_id", taQui);
   const [taches, docs] = await Promise.all([q(r), q(sb.from("tache_documents").select("tache_id"))]);
@@ -1095,13 +1232,15 @@ async function vueTaches() {
       <div class="row"><span class="muted small">Pour quand ?</span>${taChips(taQuand, taDate)}</div>
       <div class="deux"><label class="f">Pour<select name="qui" required>${gens.length > 1 ? `<option value="tous">Tous les intervenants</option>` : ""}${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label>
         <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${optionsClients(clientsEnCours())}</select></label></div>
-      <div><button class="btn" type="submit" data-avec-dossier ${gens.length ? "" : "disabled"}>${ico("dossier")} Ajouter et créer un dossier</button></div></form>
+      <div><button class="btn" type="submit" data-avec-dossier ${gens.length ? "" : "disabled"}>${ico("dossier")} Ajouter et créer un dossier</button></div>
+      ${sansCompte.length ? `<div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:10px"><span class="muted small">Sans compte, donc pas de tâche possible : ${esc(sansCompte.join(", "))}</span><button class="btn" type="button" id="ta-compte">${ico("plus")} Nouveau presta</button></div>` : ""}</form>
     ${parQui.map(([p, l]) => `<section class="card tkc" style="margin-top:12px"><h2 style="margin:0;padding:14px 16px 8px">${esc(nomPers(p))} <span class="tag">${l.filter(t => !t.fait_le).length} à faire</span></h2>
       ${groupes(l) || `<p class="muted small" style="padding:0 16px 14px">Aucune tâche en cours.</p>`}</section>`).join("") || `<p class="muted" style="margin-top:12px">Aucun intervenant actif.</p>`}`);
   const form = el.querySelector("#fa");
   const lu = taBrancherChips(form, x => { taQuand = x.w; taDate = x.date; });
   el.querySelector("#qui").onchange = e => { taQui = e.target.value; afficher("taches"); };
   el.querySelector("#archive").onclick = () => archiveTaches();
+  if (el.querySelector("#ta-compte")) el.querySelector("#ta-compte").onclick = () => nouveauPresta();
   form.onsubmit = async e => {
     e.preventDefault(); const f = new FormData(form), texte = String(f.get("texte")).trim(), avec = e.submitter && e.submitter.hasAttribute("data-avec-dossier");
     if (!texte) return toast("Écris ce qu'il y a à faire");
@@ -1110,6 +1249,7 @@ async function vueTaches() {
     if (avec && !f.get("client_id")) return toast("Choisis le client : le dossier est rangé chez lui");
     const pour = f.get("qui") === "tous" ? gens.map(p => p.id) : [f.get("qui")];
     const crees = await q(sb.from("taches").insert(pour.map(id => ({ intervenante_id: id, texte, client_id: f.get("client_id") || null, echeance: taEcheanceDe(w, date), dossier_nom: avec ? texte.slice(0, 200) : null }))).select());
+    await avisTache(pour, texte, taEcheanceDe(w, date));
     toast(pour.length > 1 ? "Ajouté pour " + pour.length + " intervenants" : "Ajouté : il le voit dans son appli");
     await afficher("taches");
     if (avec && crees.length === 1) ficheTache(crees[0]);

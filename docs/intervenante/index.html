@@ -332,7 +332,7 @@ a.lien.muted{color:var(--muted)}
 /* Compte gelé : les actions disparaissent, il ne reste que la consultation, Moi et Mes papiers. La base refuse le reste (SQL 30). */
 .gel-bandeau{margin:12px 16px 0;padding:12px 14px;border-radius:14px;background:var(--warn-soft);color:var(--warn)}
 .gel-bandeau .btn{margin-top:8px;width:100%}
-body.gele :is(#route-proposer,#declarer,[data-decl],#ajout-tache,button[data-coche],[data-ajout-route],#ajout-route,#ajout-photo,#fnote,#pr-oui,#pr-non,#creer,#ajout,#commenter,#suppr,#ajout-rdv,#annule,[data-c],[data-annule],#corr,#valider,#brouillon,#envoyer,#envoyer + p,h2:has(+ #brouillon),.card:has(> #dire),#ft [type=submit]){display:none!important}
+body.gele :is(#ms-form,#route-proposer,#declarer,[data-decl],#ajout-tache,button[data-coche],[data-ajout-route],#ajout-route,#ajout-photo,#fnote,#pr-oui,#pr-non,#creer,#ajout,#commenter,#suppr,#ajout-rdv,#annule,[data-c],[data-annule],#corr,#valider,#brouillon,#envoyer,#envoyer + p,h2:has(+ #brouillon),.card:has(> #dire),#ft [type=submit]){display:none!important}
 body.gele #ft{pointer-events:none}
 .alerte-mission{display:block;width:100%;text-align:left;border:0;border-radius:14px;background:#D0342C;color:#fff;padding:14px 16px;margin-bottom:14px;font-size:17px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgb(208 52 44 / .35)}
 .alerte-mission small{display:block;font-size:13px;font-weight:400;margin-top:2px}
@@ -501,6 +501,20 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 @keyframes i-eclat{0%{opacity:0;transform:scaleX(.08)}35%{opacity:1}100%{opacity:0;transform:scaleX(1)}}
 @keyframes i-sous{from{opacity:0;letter-spacing:.6em}}
 @media (prefers-reduced-motion:reduce){.intro *{animation:none!important;transition:none!important}.i-tete,.i-eclat,.i-grain{display:none}}
+
+/* Messagerie (SQL 39) */
+.ms-fil{display:flex;flex-direction:column;gap:8px;overflow-y:auto;overscroll-behavior:contain;padding:14px}
+.ms-b{max-width:80%;padding:9px 12px;border-radius:14px;background:var(--bg);border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere;align-self:flex-start}
+.ms-b.moi{align-self:flex-end;background:var(--accent-soft);border-color:transparent}
+.ms-b small{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+.ms-vide{margin:auto;text-align:center;color:var(--muted)}
+.ms-form{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
+.ms-form textarea{flex:1;min-width:0;resize:vertical}
+.entete-droite{display:flex;align-items:center;gap:10px}
+.entete-msg{position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border:0;border-radius:50%;background:var(--accent-soft);color:var(--ink);font-size:20px;cursor:pointer}
+.entete-msg .nav-badge{top:-3px;left:auto;right:-4px}
+#ms-fil{height:calc(100dvh - 330px);min-height:220px}
+#ms-texte{font-size:16px}
 </style>
 </head>
 <body>
@@ -610,6 +624,7 @@ async function sortir() { try { await sb.auth.signOut({ scope: "local" }); } cat
 /* ===================== État ===================== */
 let moi = null, clients = [], onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
 if (new URLSearchParams(location.search).get("onglet") === "missions") onglet = "missions";
+let notifAVerifier = onglet === "missions";   // ouverte par une notification : mission ou message, on regarde ce qui attend
 let cache = {};   // créneaux, pointages du mois… rechargés à chaque affichage
 const nomClient = id => (clients.find(c => c.id === id) || {}).nom || "Client";
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
@@ -901,30 +916,79 @@ async function accueil(o) {
   const avant = rangOnglet(ongletAffiche), apres = rangOnglet(onglet), change = onglet !== ongletAffiche;
   const sens = sensSuivant !== null ? sensSuivant : change && avant >= 0 && apres >= 0 ? Math.sign(apres - avant) : 0, animer = change || sensSuivant !== null;
   sensSuivant = null; ongletAffiche = onglet;
-  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-sous">Espace intervenant</div></header>
+  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite"><div class="entete-sous">Espace intervenant</div><button class="entete-msg" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}</button></div></header>
     <main class="page" id="contenu"><div class="charge" role="status" aria-label="Chargement"><svg viewBox="0 0 20 18" aria-hidden="true"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></main>
     <nav class="nav${change ? " change" : ""}" aria-label="Onglets"><div><span class="nav-ind${apres < 0 ? " cache" : ""}" style="--p:${avant >= 0 ? avant : Math.max(apres, 0)}"></span>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ico(ic)}</span>${t}</button>`).join("")}</div></nav>`;
+  app.querySelector("#ouvrir-messages").onclick = () => { vibre(5); accueil("messages"); };
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) { vibre(5); accueil(b.dataset.onglet); } };
   const ind = app.querySelector(".nav-ind"); void ind.offsetWidth; if (apres >= 0) ind.style.setProperty("--p", apres);
   try {
     if (!(await chargerMoi())) return;
+    if (notifAVerifier) { notifAVerifier = false; if (await nbMessagesNonLus()) return accueil("messages"); }
     if (moi.gele) {
       document.getElementById("contenu").insertAdjacentHTML("beforebegin", `<div class="gel-bandeau"><b>${ico("cadenas")} Ton compte est gelé par OIKOS</b><br>Tu peux tout regarder, mais rien modifier tant que tes informations et tes papiers ne sont pas complets.
         <button class="btn" id="gel-completer">Compléter mes informations et mes papiers ›</button></div>`);
       document.getElementById("gel-completer").onclick = () => accueil("moi");
     }
     majAlerteMissions();
+    majBadgeMessages();
     let c = await sb.from("clients_presta").select("*").order("nom");
     if (c.error) c = await sb.from("clients").select("id,nom,telephone,adresse,zone,activite,eleves,acces,cle,consignes,temps_semaine_min,meteo").order("nom");   // base pas encore à jour (SQL 34)
     if (c.error) throw c.error;
     clients = c.data;
-    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
+    await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, messages: vueMessages, moi: vueMoi, papiers: vuePapiers, taches: vueTaches })[onglet]();
     if (onglet === "agenda" || onglet === "jour") rappelsMission().catch(() => {});
     if (animer) entree(sens);
     didacticielSiBesoin();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
+
+/* ---------- Messages avec OIKOS (SQL 39) ---------- */
+const nbMessagesNonLus = () => sb.from("messages").select("id", { count: "exact", head: true }).eq("intervenante_id", moi.id).eq("de_gerant", true).is("lu_le", null).then(r => r.count || 0);
+async function majBadgeMessages() {
+  const n = await nbMessagesNonLus().catch(() => 0), b = document.getElementById("ouvrir-messages"); if (!b) return;
+  const v = b.querySelector(".nav-badge"); if (v) v.remove();
+  if (n) b.insertAdjacentHTML("beforeend", `<span class="nav-badge">${n}</span>`);
+}
+let msMinuteur = null;
+async function vueMessages() {
+  clearInterval(msMinuteur);
+  const charger = async () => { const { data, error } = await sb.from("messages").select("id,de_gerant,texte,cree_le,lu_le").eq("intervenante_id", moi.id).order("cree_le", { ascending: false }).limit(300); if (error) throw error; return data.reverse(); };
+  let l = await charger();
+  contenu(`<h1>Messages</h1><p class="muted" style="margin-bottom:10px">Tes échanges avec OIKOS.</p>
+    <div class="card ms-fil" id="ms-fil"></div>
+    <form class="ms-form" id="ms-form"><textarea id="ms-texte" rows="2" maxlength="4000" required placeholder="Écrire à OIKOS…" aria-label="Message"></textarea><button class="btn primary" type="submit">Envoyer</button></form>`);
+  const fil = document.getElementById("ms-fil"), zone = document.getElementById("ms-texte");
+  const heure = d => new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const dessiner = () => {
+    fil.innerHTML = l.map(m => `<div class="ms-b ${m.de_gerant ? "" : "moi"}">${esc(m.texte)}<small>${heure(m.cree_le)}${!m.de_gerant && m.lu_le ? " · lu" : ""}</small></div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.</p>`;
+    fil.scrollTop = fil.scrollHeight;
+  };
+  const marquerLu = async () => {
+    if (!l.some(m => m.de_gerant && !m.lu_le)) return;
+    const { error } = await sb.from("messages").update({ lu_le: new Date().toISOString() }).eq("intervenante_id", moi.id).eq("de_gerant", true).is("lu_le", null);
+    if (!error) majBadgeMessages();
+  };
+  dessiner(); marquerLu();
+  document.getElementById("ms-form").onsubmit = async e => {
+    e.preventDefault(); const texte = zone.value.trim(); if (!texte) return;
+    const b = e.submitter; if (b) b.disabled = true;
+    const { error } = await sb.from("messages").insert({ texte });
+    if (b) b.disabled = false;
+    if (error) return souci(error);
+    zone.value = ""; vibre(5); l = await charger(); dessiner();
+  };
+  msMinuteur = setInterval(async () => {
+    if (onglet !== "messages" || !document.getElementById("ms-fil")) return clearInterval(msMinuteur);
+    if (document.hidden) return;
+    try {
+      const n = await charger(), signe = x => x.map(m => m.id + (m.lu_le ? "l" : "")).join();
+      if (signe(n) === signe(l)) return;
+      l = n; dessiner(); marquerLu();
+    } catch (e) {}
+  }, 15000);
+}
 
 /* ---------- Aujourd'hui : son planning du jour, et ce qui reste à déclarer ---------- */
 async function vueJour() {
@@ -1254,7 +1318,7 @@ document.addEventListener("click", async e => {
     await abonnerPush(); toast("Notifications activées ✓"); accueil();
   } catch (x) { toast(pushErreur(x)); }
 });
-if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "missions") accueil("missions"); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "missions") nbMessagesNonLus().then(n => accueil(n ? "messages" : "missions")); });
 /* Mission acceptée ou confiée : le rappel reste dans l'emploi du temps tant qu'aucun passage n'est posé chez ce client */
 async function rappelsMission() {
   const { data, error } = await sb.from("taches").select("id,texte,client_id,demande_id,fait_le,commentaire,echeance,cree_le").eq("intervenante_id", moi.id).or("texte.like.Mission*,texte.like.Proposition*").order("cree_le", { ascending: false }).limit(40);
@@ -2510,6 +2574,7 @@ function etapesDidacticiel() {
     bouton("#installer-appli", "Installer l'appli", "Elle n'est pas encore installée sur ce téléphone. Ce bouton s'en occupe, quand vous voudrez."),
     { cible: "#papiers", pose: "documents", titre: "Vos documents, c'est important !", texte: `Ils sont obligatoires pour travailler avec OIKOS : ils nous protègent, vous comme nous.${sousTraitante() ? " Nous pourrons aussi vous redemander une attestation URSSAF de temps en temps, pour vérifier que votre micro-entreprise est toujours active." : ""} Déposez-les ici, je vous rappellerai s'il en manque un.`, aide: "Touchez le bouton éclairé pour continuer.", action: () => accueil("papiers") },
     bouton("[data-envoi]", "Envoyer un papier", "Touchez Envoyer sur chaque papier : une photo nette suffit.", "documents"),
+    bouton("#ouvrir-messages", "Vos messages", "Écrivez ici à OIKOS et retrouvez ses réponses."),
     notif,
     { pose: "bravo", titre: "C'est parti !", texte: `Vous êtes ${moi.civilite === "Madame" ? "prête" : moi.civilite === "Monsieur" ? "prêt" : "prêt(e)"}. Vous pourrez revoir cette visite dans l'onglet Moi.`, boutons: [["Commencer", true, finir]] }
   ].filter(Boolean);
