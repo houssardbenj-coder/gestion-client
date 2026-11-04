@@ -2361,6 +2361,22 @@ function pointsTache(t, meteo, maintenant = Date.now()) {
   if (types.some(k => (METEO_PLUS[k] || []).includes(t.categorie))) points *= 2;
   return { points, retard, etat: retard >= 1 ? "à faire" : retard >= 0.7 ? "bientôt" : "à jour" };
 }
+/* Rattrapage : une tâche régulière qui a sauté au moins un tour (absence sans remplaçant, passage sans coche). Rend le nombre de jours sans passage, 0 si tout va bien.
+   Une tâche de saison ne compte qu'à partir du début de sa saison, et une tâche jamais cochée qu'à partir de sa création. */
+function retardRoute(t, meteo, maintenant = Date.now()) {
+  const f = +t.frequence_jours;
+  if (!(f > 0) || pointsTache(t, meteo, maintenant).etat !== "à faire") return 0;
+  let vu = Math.max(...[t.derniere_fois, t.derniere_partielle, t.cree_le].filter(Boolean).map(d => +new Date(d)));
+  const m = (t.mois || []).filter(Boolean);
+  if (m.length && m.length < 12) {
+    const d = new Date(maintenant); d.setDate(1); d.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 11; i++) { const avant = new Date(d.getFullYear(), d.getMonth() - 1, 1); if (!m.includes(avant.getMonth() + 1)) break; d.setTime(+avant); }
+    vu = Math.max(vu, +d);
+  }
+  const jours = (maintenant - vu) / 864e5;
+  return jours / f >= 1.7 ? Math.round(jours) : 0;
+}
+const depuisTxt = j => j < 14 ? j + " jours" : j < 60 ? Math.round(j / 7) + " semaines" : Math.round(j / 30.4) + " mois";
 const quandTache = t => { const f = FREQS.find(([v]) => String(v) === String(t.frequence_jours || "")); const m = (t.mois || []).filter(Boolean);
   return (f ? f[1] : "tous les " + t.frequence_jours + " j") + (m.length && m.length < 12 ? " · " + m.map(x => MOIS_C[x - 1]).join(", ") : ""); };
 /* Part des tâches de saison qui sont à jour, à une date donnée (à partir des coches gardées) */
@@ -2398,7 +2414,8 @@ async function dosRoute(c, corps, re) {
     q(sb.from("route_coches").select("*").eq("client_id", c.id).order("fait_le", { ascending: false }).limit(500))]);
   const demandes = toutes.filter(t => t.validation === "en_attente" || t.validation === "devis");
   const taches = toutes.filter(t => !demandes.includes(t) && t.validation !== "refusee");
-  const actives = taches.filter(t => t.actif && !t.termine).map(t => ({ t, ...pointsTache(t, c.meteo) })).sort((a, b) => b.points - a.points);
+  const actives = taches.filter(t => t.actif && !t.termine).map(t => ({ t, ...pointsTache(t, c.meteo), retardJ: retardRoute(t, c.meteo) })).sort((a, b) => b.points - a.points);
+  const enRetard = actives.filter(o => o.retardJ), tempsRetard = enRetard.reduce((s, o) => s + (o.t.duree_min || 0), 0);
   const finies = taches.filter(t => !t.actif || t.termine);
   const pct = etatEntretien(taches, coches, c.meteo, Date.now());
   const histo = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map(k => ({ d: Date.now() - k * 7 * 864e5 })).map(o => ({ ...o, v: etatEntretien(taches, coches, null, o.d) }));
@@ -2412,6 +2429,7 @@ async function dosRoute(c, corps, re) {
   const alertes = (c.meteo && c.meteo.alertes) || [];
   const tag = e => `<span class="tag ${e === "à faire" ? "warn" : e === "à jour" ? "" : "off"}">${e}</span>`;
   corps.innerHTML = `${alertes.length ? `<div class="card" style="border-color:var(--warn);margin-bottom:10px">${alertes.map(a => `<b>${ico("alerte")} ${esc(a.texte)}</b>`).join("<br>")}<br><span class="muted small">Les tâches touchées sont poussées ou mises en pause automatiquement.</span></div>` : ""}
+    ${enRetard.length ? `<section class="card" style="border-color:var(--warn);margin-bottom:10px"><b>${ico("alerte")} Rattrapage : ${enRetard.length} tâche${enRetard.length > 1 ? "s ont" : " a"} sauté ${enRetard.length > 1 ? "leur" : "son"} tour</b>${tempsRetard ? " · ≈ " + heures(tempsRetard) + " en retard" : ""}<br><span class="small">${enRetard.map(o => esc(o.t.titre) + " (" + depuisTxt(o.retardJ) + ")").join(", ")}</span><br><span class="muted small">Aucune coche depuis : absence sans remplaçant, ou passage non coché. Le prochain passage aura plus à faire.${c.temps_semaine_min && tempsRetard > c.temps_semaine_min ? " C'est plus que le temps acheté d'une semaine." : ""}</span></section>` : ""}
     ${demandes.length ? `<section class="card" style="border-color:var(--warn);margin-bottom:10px"><h2 style="margin-top:0">${ico("personne")} Tâches demandées par les presta <span class="tag warn">${demandes.length}</span></h2>${demandes.map(t => ligneDemandeTache(t, false)).join("")}</section>` : ""}
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Temps acheté</h3>
@@ -2423,7 +2441,7 @@ async function dosRoute(c, corps, re) {
     <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Tâches, par priorité du moment</h2><button class="btn primary" id="rt-ajout">${ico("plus")} Ajouter une tâche</button></div>
       <p class="muted small" style="margin:4px 0 8px">Les points montent tant qu'une tâche n'est pas cochée après sa fréquence. Durées indicatives : le terrain commande.</p>
       ${actives.length ? `<div style="overflow-x:auto"><table><tr><th>Points</th><th>Tâche</th><th>Quand</th><th>Durée</th><th>Prio.</th><th>Dernière fois</th><th></th></tr>
-        ${actives.map(o => `<tr data-rt="${o.t.id}"><td><b>${o.points}</b><br>${tag(o.etat)}</td>
+        ${actives.map(o => `<tr data-rt="${o.t.id}"><td><b>${o.points}</b><br>${o.retardJ ? `<span class="tag warn">en retard</span>` : tag(o.etat)}</td>
           <td><b>${esc(o.t.titre)}</b> <span class="muted small">· ${CATS_ROUTE[o.t.categorie] || ""}${o.t.source === "intervenante" ? " · ajoutée par l'intervenant" : o.t.source === "ia" ? " · IA" : ""}</span>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</td>
           <td class="small">${esc(quandTache(o.t))}</td><td>${o.t.duree_min ? o.t.duree_min + " min" : "—"}</td><td>${o.t.priorite}/5</td>
           <td class="small">${o.t.derniere_fois ? jour(o.t.derniere_fois) : "jamais"}${o.t.derniere_partielle && (!o.t.derniere_fois || o.t.derniere_partielle > o.t.derniere_fois) ? `<br><span class="muted">en partie le ${jour(o.t.derniere_partielle)}</span>` : ""}</td>

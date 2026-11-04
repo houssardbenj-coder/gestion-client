@@ -1589,6 +1589,23 @@ function pointsTache(t, meteo, maintenant = Date.now()) {
   if (types.some(k => (METEO_PLUS[k] || []).includes(t.categorie))) points *= 2;
   return { points, retard, etat: retard >= 1 ? "à faire" : retard >= 0.7 ? "bientôt" : "à jour" };
 }
+/* Rattrapage : une tâche régulière qui a sauté au moins un tour (absence sans remplaçant, passage sans coche). Rend le nombre de jours sans passage, 0 si tout va bien.
+   Une tâche de saison ne compte qu'à partir du début de sa saison, et une tâche jamais cochée qu'à partir de sa création. */
+function retardRoute(t, meteo, maintenant = Date.now()) {
+  const f = +t.frequence_jours;
+  if (!(f > 0) || pointsTache(t, meteo, maintenant).etat !== "à faire") return 0;
+  let vu = Math.max(...[t.derniere_fois, t.derniere_partielle, t.cree_le].filter(Boolean).map(d => +new Date(d)));
+  const m = (t.mois || []).filter(Boolean);
+  if (m.length && m.length < 12) {
+    const d = new Date(maintenant); d.setDate(1); d.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 11; i++) { const avant = new Date(d.getFullYear(), d.getMonth() - 1, 1); if (!m.includes(avant.getMonth() + 1)) break; d.setTime(+avant); }
+    vu = Math.max(vu, +d);
+  }
+  const jours = (maintenant - vu) / 864e5;
+  return jours / f >= 1.7 ? Math.round(jours) : 0;
+}
+const depuisTxt = j => j < 14 ? j + " jours" : j < 60 ? Math.round(j / 7) + " semaines" : Math.round(j / 30.4) + " mois";
+const rythmeRoute = t => { const f = +t.frequence_jours; return !f ? "Une seule fois" : f === 7 ? "Chaque semaine" : f === 14 ? "Tous les 15 jours" : f === 30 ? "Chaque mois" : f === 60 ? "Tous les 2 mois" : f === 90 ? "Chaque saison" : f === 180 ? "2 fois par an" : f === 365 ? "Une fois par an" : "Tous les " + f + " jours"; };
 const dureeTxt = m => !m ? "" : m < 60 ? m + " min" : heuresTxt(m);
 async function feuilleRoute(clientId, minPassage) {
   const c = clients.find(k => k.id === clientId) || {};
@@ -1600,16 +1617,19 @@ async function feuilleRoute(clientId, minPassage) {
       sb.from("route_coches").select("*").eq("client_id", clientId).gte("fait_le", j0)]);
     if (tr.error) { souci(tr.error); return ""; }
     const coches = cr.data || [], budget = minPassage || c.temps_semaine_min || 0;
-    const liste = tr.data.map(t => ({ t, ...pointsTache(t, c.meteo), coche: coches.filter(k => k.tache_id === t.id).sort((a, b) => b.fait_le.localeCompare(a.fait_le))[0] }))
+    const liste = tr.data.map(t => ({ t, ...pointsTache(t, c.meteo), retardJ: retardRoute(t, c.meteo), coche: coches.filter(k => k.tache_id === t.id).sort((a, b) => b.fait_le.localeCompare(a.fait_le))[0] }))
       .sort((a, b) => b.points - a.points || b.t.priorite - a.t.priorite);
     const actives = liste.filter(o => o.coche || o.etat === "à faire" || o.etat === "bientôt");
     let cumul = 0;
     actives.forEach(o => { o.auProgramme = !budget || cumul < budget; cumul += o.t.duree_min || 0; });
     const reste = liste.filter(o => !actives.includes(o));
+    const aFaire = actives.filter(o => !o.coche), enRetard = aFaire.filter(o => o.retardJ), rappels = aFaire.filter(o => +o.t.frequence_jours >= 30);
+    const tempsDu = aFaire.reduce((s, o) => s + (o.t.duree_min || 0), 0), tempsRetard = enRetard.reduce((s, o) => s + (o.t.duree_min || 0), 0), plusLong = Math.max(0, ...enRetard.map(o => o.retardJ));
+    const tagEtat = o => o.coche ? "" : o.retardJ ? `<span class="tag warn" style="flex:none">En retard</span>` : o.etat === "à faire" ? `<span class="tag warn" style="flex:none">À faire</span>` : `<span class="tag" style="flex:none">Bientôt</span>`;
     const ligne = o => `<div class="card" data-rt="${o.t.id}" style="gap:6px;${o.coche ? "opacity:.75" : ""}">
         <div class="row" style="justify-content:space-between;flex-wrap:nowrap;align-items:flex-start"><span style="min-width:0"><b>${esc(o.t.titre)}</b>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</span>
-          <span class="tag ${o.etat === "à faire" ? "warn" : ""}" style="flex:none">${o.points} pts</span></div>
-        <span class="muted small">${CATS_ROUTE[o.t.categorie] || ""}${o.t.duree_min ? " · ≈ " + dureeTxt(o.t.duree_min) : ""}${o.t.source === "intervenante" ? " · ajoutée sur place" : ""}</span>
+          ${tagEtat(o)}</div>
+        <span class="muted small">${rythmeRoute(o.t)} · ${CATS_ROUTE[o.t.categorie] || ""}${o.t.duree_min ? " · ≈ " + dureeTxt(o.t.duree_min) : ""}${o.t.source === "intervenante" ? " · ajoutée sur place" : ""}${o.retardJ ? " · pas de passage depuis " + depuisTxt(o.retardJ) : ""}</span>
         ${o.coche ? `<div class="row" style="justify-content:space-between"><span class="tag">${{ fait: "✓ Fait", partiel: "½ Fait en partie", pas_possible: "✕ Pas possible" }[o.coche.etat]} aujourd'hui</span>${o.coche.intervenante_id === moi.id ? `<button class="btn flat" data-annule="${o.coche.id}" style="min-height:36px">Annuler</button>` : ""}</div>`
         : `<div class="grid3"><button class="btn go" data-c="fait"><span class="ic">${ico("valide")}</span>Fait</button><button class="btn" data-c="partiel"><span class="ic">½</span>En partie</button><button class="btn" data-c="pas_possible"><span class="ic">${ico("croix")}</span>Pas possible</button></div>`}</div>`;
     const alertes = (c.meteo && c.meteo.alertes) || [];
@@ -1617,6 +1637,8 @@ async function feuilleRoute(clientId, minPassage) {
       <p class="muted small">Classées par priorité du moment. Les durées sont indicatives : fais au mieux, coche ce que tu as fait.</p>
       ${alertes.length ? `<p class="tag warn" style="padding:8px 12px;border-radius:12px">${alertes.map(a => ico("alerte") + " " + esc(a.texte)).join("<br>")}</p>` : ""}
       ${budget ? `<p><b>Temps prévu : ≈ ${heuresTxt(budget)}</b></p>` : ""}
+      ${enRetard.length ? `<div class="card" style="border-color:var(--warn);gap:4px"><b><span class="ic">${ico("alerte")}</span> Plus à faire que d'habitude</b><span class="small">${enRetard.length} tâche${enRetard.length > 1 ? "s ont" : " a"} sauté ${enRetard.length > 1 ? "leur" : "son"} tour : aucune coche depuis ${depuisTxt(plusLong)} (par exemple une absence sans remplaçant).${tempsRetard ? " Cela représente ≈ " + heuresTxt(tempsRetard) + " de travail en retard, sans doute un peu plus car le lieu a attendu." : ""}${budget && tempsDu > budget ? " Tout faire demanderait ≈ " + heuresTxt(tempsDu) + " : commence par le haut de la liste, le reste passera au prochain passage." : ""}</span></div>` : ""}
+      ${rappels.length ? `<p class="small" style="margin:0"><b>À ne pas oublier :</b> ${rappels.map(o => esc(o.t.titre) + " (" + rythmeRoute(o.t).toLowerCase() + ")").join(", ")}.</p>` : ""}
       ${actives.filter(o => o.auProgramme).length ? `<h2 style="margin:4px 0 0">Au programme</h2><div class="stack">${actives.filter(o => o.auProgramme).map(ligne).join("")}</div>` : `<p class="muted">Rien d'urgent : tout est à jour.</p>`}
       ${actives.some(o => !o.auProgramme) ? `<h2 style="margin:4px 0 0">Si tu as le temps</h2><div class="stack">${actives.filter(o => !o.auProgramme).map(ligne).join("")}</div>` : ""}
       ${reste.length ? `<details><summary class="muted small">${reste.length} autre(s) tâche(s) à jour, hors saison ou en pause</summary><div class="stack" style="margin-top:8px">${reste.map(o => `<div class="card"><b>${esc(o.t.titre)}</b><span class="muted small">${o.etat}</span></div>`).join("")}</div></details>` : ""}
