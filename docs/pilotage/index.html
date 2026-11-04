@@ -477,6 +477,7 @@ async function vueAVoir() {
     q(sb.from("client_juridique").select("*").eq("traite", false).is("supprime_le", null).lte("echeance", ymd(plusJours(new Date(), 7))).order("echeance")),
     q(sb.from("tache_documents").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("route_taches").select("*").eq("validation", "en_attente").order("cree_le", { ascending: false }))]);
+  await chargerCibles(demandesTaches);
   const tachesDesDocs = docsTaches.length ? await q(sb.from("taches").select("*").in("id", [...new Set(docsTaches.map(d => d.tache_id))])) : [];
   const apercusAVoir = await urlsSignees(photos.slice(0, 12).map(p => p.apercu));
   const signes = cacheDemandes.filter(devisSigne), attenteDevis = cacheDemandes.filter(d => enAttenteDevis(d) && !devisSigne(d)), missions = cacheDemandes.filter(d => d.etat === "en_cours");
@@ -497,7 +498,7 @@ async function vueAVoir() {
     ${aFinaliser.length ? `<button class="card cliquable" data-dsection="PRESTA" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
       <b>${ico("drapeau")} ${aFinaliser.length} prestation${aFinaliser.length > 1 ? "s" : ""} à finaliser ›</b></button>` : ""}
     ${carteGardeFou(garde)}
-    ${demandesTaches.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("personne")} Tâches demandées par les presta <span class="tag warn">${demandesTaches.length}</span></h2>${demandesTaches.map(t => ligneDemandeTache(t, true)).join("")}</section>` : ""}
+    ${demandesTaches.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("personne")} Propositions des presta sur les feuilles de route <span class="tag warn">${demandesTaches.length}</span></h2>${demandesTaches.map(t => ligneDemandeTache(t, true)).join("")}</section>` : ""}
     <div class="deux" style="margin-top:12px">
       <section class="card"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
         ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${esc(nomInterv(n.intervenante_id))}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
@@ -2401,18 +2402,46 @@ function etatEntretien(taches, coches, meteo, date) {
   });
   return compte ? Math.round(ok / compte * 100) : null;
 }
-/* Une tâche proposée par un presta : rien n'entre dans la feuille de route ni dans un devis sans ton clic */
-const ligneDemandeTache = (t, avecClient) => `<div class="ligne" data-dt="${t.id}"><span><b>${esc(t.titre)}</b>${avecClient ? " · " + esc(nomClient(t.client_id)) : ""}${t.detail ? `<br><span class="small">${esc(t.detail)}</span>` : ""}
-    <br><span class="muted small">${esc(nomInterv(t.cree_par))} · ${esc(quandTache(t))}${t.duree_min ? " · " + t.duree_min + " min" : ""} · ${jour(t.cree_le)}${t.validation === "devis" ? " · extension de devis en cours" : ""}</span></span>
-    <span class="row" style="flex:none"><button class="btn go" data-dt-ajout>Ajouter à la feuille de route</button>${t.validation === "en_attente" ? `<button class="btn" data-dt-devis>Extension de devis</button>` : ""}<button class="btn flat stop" data-dt-refus>Refuser</button></span></div>`;
+/* Une proposition d'un presta (ajouter, retirer, changer) : rien ne bouge dans la feuille de route ni dans un devis sans ton clic. Retravailler = appliquer après avoir corrigé. */
+const ciblesRoute = new Map();
+async function chargerCibles(liste) {
+  const ids = [...new Set(liste.map(t => t.tache_cible).filter(Boolean))];
+  if (ids.length) (await q(sb.from("route_taches").select("*").in("id", ids))).forEach(x => ciblesRoute.set(x.id, x));
+}
+const ecartTemps = (av, ap) => { const d = (+ap || 0) - (+av || 0); return d ? ` (${d > 0 ? "+" : "−"}${Math.abs(d)} min)` : ""; };
+const ligneDemandeTache = (t, avecClient) => {
+  const genre = t.proposition || "ajout", x = ciblesRoute.get(t.tache_cible) || {}, duree = m => m ? m + " min" : "sans durée";
+  const quoi = genre === "retrait" ? `Retirer : <b>${esc(t.titre)}</b>` : genre === "changement" ? `Changer : <b>${esc(t.titre)}</b>` : `Ajouter : <b>${esc(t.titre)}</b>`;
+  const chiffres = genre === "retrait" ? `Rythme : ${esc(quandTache(x))} · libère ${duree(x.duree_min)}`
+    : genre === "changement" ? `Aujourd'hui : ${esc(quandTache(x))}, ${duree(x.duree_min)} → proposé : ${esc(quandTache(t))}, ${duree(t.duree_min)}${ecartTemps(x.duree_min, t.duree_min)}`
+    : `${esc(quandTache(t))} · ${t.duree_min ? "temps estimé " + t.duree_min + " min" : "sans durée"}`;
+  return `<div class="ligne" data-dt="${t.id}"><span>${quoi}${avecClient ? " · " + esc(nomClient(t.client_id)) : ""}${t.motif ? `<br><span class="small">Pourquoi : ${esc(t.motif)}</span>` : ""}${t.detail ? `<br><span class="small">${esc(t.detail)}</span>` : ""}
+    <br><span class="muted small">${chiffres}</span>
+    <br><span class="muted small">${esc(nomInterv(t.cree_par))} · ${jour(t.cree_le)}${t.validation === "devis" ? " · extension de devis en cours" : ""}</span></span>
+    <span class="row" style="flex:none"><button class="btn go" data-dt-ajout>${genre === "retrait" ? "Retirer la tâche" : genre === "changement" ? "Appliquer" : "Ajouter à la feuille de route"}</button>${genre !== "retrait" ? `<button class="btn" data-dt-retravail>Retravailler</button>` : ""}${genre === "ajout" && t.validation === "en_attente" ? `<button class="btn" data-dt-devis>Extension de devis</button>` : ""}<button class="btn flat stop" data-dt-refus>Ne pas retenir</button></span></div>`;
+};
 async function deciderDemandeTache(b, liste, re) {
   const t = liste.find(x => x.id === b.closest("[data-dt]").dataset.dt); if (!t) return;
+  const genre = t.proposition || "ajout", x = ciblesRoute.get(t.tache_cible);
   const decider = champs => maj(sb.from("route_taches").update({ ...champs, validation_le: new Date().toISOString() }).eq("id", t.id));
-  if (b.hasAttribute("data-dt-ajout")) { await decider({ validation: "ajoutee", actif: true }); toast("Tâche ajoutée à la feuille de route"); compteurAVoir(); return re(); }
-  if (b.hasAttribute("data-dt-refus")) { if (!confirm("Refuser « " + t.titre + " » ? Le presta verra qu'elle n'est pas retenue.")) return; await decider({ validation: "refusee", actif: false }); toast("Demande refusée"); compteurAVoir(); return re(); }
+  const fini = msg => { toast(msg); compteurAVoir(); return re(); };
+  if (b.hasAttribute("data-dt-refus")) { if (!confirm("Ne pas retenir « " + t.titre + " » ? Le presta le verra dans ses propositions.")) return; await decider({ validation: "refusee", actif: false }); return fini("Proposition non retenue"); }
+  if (genre !== "ajout" && (!x || !x.actif)) { await decider({ validation: "refusee", actif: false }); return fini("Cette tâche n'est plus sur la feuille de route : proposition fermée"); }
+  if (b.hasAttribute("data-dt-retravail")) {
+    const c = cacheClients.find(k => k.id === t.client_id); if (!c) return toast("Client introuvable");
+    // on corrige, puis l'enregistrement applique : la tâche elle-même pour un ajout, la tâche visée pour un changement
+    if (genre === "ajout") return modifierRoute(c, t, re, async () => { await decider({ validation: "ajoutee", actif: true }); compteurAVoir(); });
+    return modifierRoute(c, { ...x, frequence_jours: t.frequence_jours, duree_min: t.duree_min }, re, async () => { await decider({ validation: "ajoutee", actif: false }); compteurAVoir(); });
+  }
+  if (b.hasAttribute("data-dt-ajout")) {
+    if (genre === "retrait") { if (!confirm("Retirer « " + t.titre + " » de la feuille de route ? Son historique est gardé.")) return;
+      await maj(sb.from("route_taches").update({ actif: false }).eq("id", x.id)); await decider({ validation: "ajoutee", actif: false }); return fini("Tâche retirée"); }
+    if (genre === "changement") { await maj(sb.from("route_taches").update({ frequence_jours: t.frequence_jours, duree_min: t.duree_min }).eq("id", x.id)); await decider({ validation: "ajoutee", actif: false }); return fini("Feuille de route mise à jour"); }
+    await decider({ validation: "ajoutee", actif: true }); return fini("Tâche ajoutée à la feuille de route");
+  }
   if (b.hasAttribute("data-dt-devis")) {
     const c = cacheClients.find(k => k.id === t.client_id); if (!c) return toast("Client introuvable");
-    const besoin = [`Demandé par ${nomInterv(t.cree_par)} : ${t.titre}`, t.detail, t.duree_min ? `Durée indiquée : ${t.duree_min} min` : "", quandTache(t)].filter(Boolean).join("\n");
+    const besoin = [`Demandé par ${nomInterv(t.cree_par)} : ${t.titre}`, t.motif ? `Pourquoi : ${t.motif}` : "", t.detail, t.duree_min ? `Durée indiquée : ${t.duree_min} min` : "", quandTache(t)].filter(Boolean).join("\n");
     nouvelleDemande(c, () => { compteurAVoir(); re(); }, { titre: t.titre, besoin, type_prestation: t.frequence_jours ? "regulier" : "one_shot" }, d => decider({ validation: "devis", demande_id: d.id, actif: false }));
   }
 }
@@ -2421,7 +2450,8 @@ async function dosRoute(c, corps, re) {
     q(sb.from("route_taches").select("*").eq("client_id", c.id).order("cree_le")),
     q(sb.from("route_coches").select("*").eq("client_id", c.id).order("fait_le", { ascending: false }).limit(500))]);
   const demandes = toutes.filter(t => t.validation === "en_attente" || t.validation === "devis");
-  const taches = toutes.filter(t => !demandes.includes(t) && t.validation !== "refusee");
+  const taches = toutes.filter(t => !demandes.includes(t) && t.validation !== "refusee" && !t.tache_cible);
+  toutes.forEach(t => ciblesRoute.set(t.id, t));
   const actives = taches.filter(t => t.actif && !t.termine).map(t => ({ t, ...pointsTache(t, c.meteo), retardJ: retardRoute(t, c.meteo) })).sort((a, b) => b.points - a.points);
   const enRetard = actives.filter(o => o.retardJ), tempsRetard = enRetard.reduce((s, o) => s + (o.t.duree_min || 0), 0);
   const finies = taches.filter(t => !t.actif || t.termine);
@@ -2438,7 +2468,7 @@ async function dosRoute(c, corps, re) {
   const tag = e => `<span class="tag ${e === "à faire" ? "warn" : e === "à jour" ? "" : "off"}">${e}</span>`;
   corps.innerHTML = `${alertes.length ? `<div class="card" style="border-color:var(--warn);margin-bottom:10px">${alertes.map(a => `<b>${ico("alerte")} ${esc(a.texte)}</b>`).join("<br>")}<br><span class="muted small">Les tâches touchées sont poussées ou mises en pause automatiquement.</span></div>` : ""}
     ${enRetard.length ? `<section class="card" style="border-color:var(--warn);margin-bottom:10px"><b>${ico("alerte")} Rattrapage : ${enRetard.length} tâche${enRetard.length > 1 ? "s ont" : " a"} sauté ${enRetard.length > 1 ? "leur" : "son"} tour</b>${tempsRetard ? " · ≈ " + heures(tempsRetard) + " en retard" : ""}<br><span class="small">${enRetard.map(o => esc(o.t.titre) + " (" + depuisTxt(o.retardJ) + ")").join(", ")}</span><br><span class="muted small">Aucune coche depuis : absence sans remplaçant, ou passage non coché. Le prochain passage aura plus à faire.${c.temps_semaine_min && tempsRetard > c.temps_semaine_min ? " C'est plus que le temps acheté d'une semaine." : ""}</span></section>` : ""}
-    ${demandes.length ? `<section class="card" style="border-color:var(--warn);margin-bottom:10px"><h2 style="margin-top:0">${ico("personne")} Tâches demandées par les presta <span class="tag warn">${demandes.length}</span></h2>${demandes.map(t => ligneDemandeTache(t, false)).join("")}</section>` : ""}
+    ${demandes.length ? `<section class="card" style="border-color:var(--warn);margin-bottom:10px"><h2 style="margin-top:0">${ico("personne")} Propositions des presta <span class="tag warn">${demandes.length}</span></h2>${demandes.map(t => ligneDemandeTache(t, false)).join("")}</section>` : ""}
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Temps acheté</h3>
         <div class="row"><input type="number" id="rt-temps" min="0" step="0.5" value="${c.temps_semaine_min ? c.temps_semaine_min / 60 : ""}" style="max-width:110px" aria-label="Heures par semaine"> <span>h par semaine</span><button class="btn" id="rt-temps-ok">Enregistrer</button></div>
@@ -2475,7 +2505,7 @@ async function dosRoute(c, corps, re) {
       await maj(sb.from("route_taches").update({ actif: false }).eq("id", t.id)); toast("Tâche retirée"); re(); }
   };
 }
-function modifierRoute(c, t, re) {
+function modifierRoute(c, t, re, apres) {
   const v = t || { titre: "", detail: "", categorie: "autre", frequence_jours: 14, mois: [], duree_min: 30, priorite: 3 };
   fenetre(`<h2 style="margin:0">${t ? "Modifier la tâche" : "Nouvelle tâche"} · ${esc(c.nom)}</h2>
     <form id="frt" style="display:flex;flex-direction:column;gap:10px">
@@ -2495,6 +2525,7 @@ function modifierRoute(c, t, re) {
         priorite: Number(f.get("priorite")), mois: f.getAll("mois").map(Number) };
       if (!d.titre) return toast("Le nom de la tâche est obligatoire");
       await maj(t ? sb.from("route_taches").update(d).eq("id", t.id) : sb.from("route_taches").insert({ ...d, client_id: c.id, source: "gerant" }));
+      if (apres) await apres();
       fermer(); toast("Feuille de route enregistrée"); re();
     };
   });
