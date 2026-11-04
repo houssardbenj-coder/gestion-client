@@ -511,7 +511,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .ms-form{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
 .ms-form textarea{flex:1;min-width:0;resize:vertical}
 .entete-droite{display:flex;align-items:center;gap:10px}
-.entete-msg{position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border:0;border-radius:50%;background:var(--accent-soft);color:var(--ink);font-size:20px;cursor:pointer}
+.entete-msg{position:relative;min-height:42px;padding:0 14px;display:flex;align-items:center;gap:7px;border:0;border-radius:999px;background:var(--accent-soft);color:var(--ink);font-size:14px;font-weight:500;cursor:pointer}
+@media (max-width:440px){.entete-sous{display:none}}
 .entete-msg .nav-badge{top:-3px;left:auto;right:-4px}
 #ms-fil{height:calc(100dvh - 330px);min-height:220px}
 #ms-texte{font-size:16px}
@@ -916,7 +917,7 @@ async function accueil(o) {
   const avant = rangOnglet(ongletAffiche), apres = rangOnglet(onglet), change = onglet !== ongletAffiche;
   const sens = sensSuivant !== null ? sensSuivant : change && avant >= 0 && apres >= 0 ? Math.sign(apres - avant) : 0, animer = change || sensSuivant !== null;
   sensSuivant = null; ongletAffiche = onglet;
-  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite"><div class="entete-sous">Espace intervenant</div><button class="entete-msg" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}</button></div></header>
+  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite"><div class="entete-sous">Espace intervenant</div><button class="entete-msg" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}Messages</button></div></header>
     <main class="page" id="contenu"><div class="charge" role="status" aria-label="Chargement"><svg viewBox="0 0 20 18" aria-hidden="true"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></main>
     <nav class="nav${change ? " change" : ""}" aria-label="Onglets"><div><span class="nav-ind${apres < 0 ? " cache" : ""}" style="--p:${avant >= 0 ? avant : Math.max(apres, 0)}"></span>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ico(ic)}</span>${t}</button>`).join("")}</div></nav>`;
   app.querySelector("#ouvrir-messages").onclick = () => { vibre(5); accueil("messages"); };
