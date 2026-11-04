@@ -1164,7 +1164,7 @@ const ligneTache = t => `<div class="ligne" data-tache="${t.id}">
     ${estProposition(t) ? `<span class="coche" aria-hidden="true" style="display:grid;place-items:center">${t.fait_le ? COCHE : ico("mission")}</span>` : `<button class="coche" data-coche aria-pressed="${!!t.fait_le}" aria-label="${t.fait_le ? "Remettre à faire" : "Marquer comme fait"}">${t.fait_le ? COCHE : ""}</button>`}
     <button data-ouvre style="min-width:0"><span style="${t.fait_le ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(t.texte)}</span>
       ${t.commentaire ? `<span class="muted small" style="display:block">${ico("bulle")} ${esc(t.commentaire)}</span>` : ""}
-      <span class="row" style="gap:4px;margin-top:3px">${t.dossier_nom ? `<span class="tag">${ico("dossier")} ${esc(t.dossier_nom)}${nbDocs[t.id] ? " · " + nbDocs[t.id] : ""}</span>` : ""}${t.cree_par !== moi.id ? `<span class="tag">de OIKOS</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}${taBadge(t)}</span></button></div>`;
+      <span class="row" style="gap:4px;margin-top:3px">${t.dossier_nom ? `<span class="tag">${ico("dossier")} ${esc(t.dossier_nom)}${nbDocs[t.id] ? " · " + nbDocs[t.id] : ""}</span>` : ""}${t.cree_par !== moi.id ? `<span class="tag">de OIKOS</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}${estProposition(t) && t.echeance && !t.fait_le ? `<span class="tag">répondre avant le ${echeanceTxt(t)}</span>` : taBadge(t)}</span></button></div>`;
 /* Coche, détail, modification : branché sur la zone qui contient les lignes */
 function brancherTaches(zone, taches, apres) {
   zone.addEventListener("click", async e => {
@@ -1192,6 +1192,7 @@ function fdrHtml(f) {
     <div class="fdr-tete"><b>${esc(f.titre)}</b><span>${[f.client, f.activite].filter(Boolean).map(esc).join(" · ")}</span>${f.adresse ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">${ico("lieu")} ${esc(f.adresse)}</a>` : f.secteur ? `<br><span>${ico("lieu")} ${esc(f.secteur)}</span>` : ""}${f.telephone ? `<br><a href="tel:${esc(f.telephone)}">${ico("tel")} ${esc(f.telephone)}</a>` : ""}</div>
     <div class="fdr-chiffres"><div class="fdr-chiffre"><b>⏱ ${fdrDuree(f.minutes)}</b><span>de travail${parMois}${f.une_fois ? " + " + fdrDuree(f.une_fois) + " une fois" : ""}</span></div>
       <div class="fdr-chiffre paie"><b>${ico("euro")} ${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</b><span>${p.total > 0 ? fdrEuros(p.taux) + " de l'heure" + parMois + (p.compensation > 0 ? " + " + fdrEuros(p.compensation) + " de matériel" : "") : "voir avec OIKOS"}</span></div></div>
+    ${f.accepter_avant ? `<div class="fdr-delai">${ico("agenda")} À accepter avant le ${new Date(f.accepter_avant + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.echeance ? `<div class="fdr-delai">${ico("agenda")} À terminer avant le ${new Date(f.echeance + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>` : ""}
     ${f.note ? `<div class="fdr-mot">${ico("bulle")} ${esc(f.note)}</div>` : ""}
     ${(f.photos || []).length ? `<div><h4>Sur place</h4><div class="fdr-photos">${f.photos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener"><img src="${esc(x.url)}" alt="${esc(x.legende || "Photo du lieu")}" loading="lazy"></a>`).join("")}</div></div>` : ""}
@@ -1262,9 +1263,12 @@ async function rappelsMission() {
   const aPlacer = missions.filter(t => !t.fait_le && t.client_id);
   let poses = [];
   if (aPlacer.length) { const r = await sb.from("creneaux").select("client_id,debut").eq("intervenante_id", moi.id).eq("annule", false).in("client_id", aPlacer.map(t => t.client_id)); poses = r.data || []; }
+  // sur une proposition, la date de la tâche est la limite pour accepter : celle du travail est dans sa feuille de route
+  const docsAcceptees = acceptees.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", acceptees.map(t => t.id)) : { data: [] };
+  const finTravail = t => (ficheDeLaProposition(docsAcceptees.data || [], t.id) || {}).echeance || "";
   const html = aPlacer.filter(t => !poses.some(c => c.client_id === t.client_id && c.debut >= t.cree_le)).map(t => `<div class="rappel-mission">${ico("agenda")} <b>${esc(t.texte.replace(/^Mission : /, ""))}</b> : à placer dans ton emploi du temps, et prends contact avec le client${t.echeance ? " (à terminer avant le " + t.echeance.split("-").reverse().join("/") + ")" : ""}.
       <div class="row"><button class="btn" data-fiche-client="${t.client_id}">${ico("personne")} Contacter le client</button></div></div>`)
-    .concat(acceptees.map(t => `<div class="rappel-mission">${ico("ok")} <b>${esc(t.texte.replace(/^Proposition : /, ""))}</b> : mission acceptée. Garde du temps${t.echeance ? " avant le " + t.echeance.split("-").reverse().join("/") : ""} : l'ordre de mission et le contact du client arrivent quand le client a signé.</div>`)).join("");
+    .concat(acceptees.map(t => `<div class="rappel-mission">${ico("ok")} <b>${esc(t.texte.replace(/^Proposition : /, ""))}</b> : mission acceptée. Garde du temps${finTravail(t) ? " avant le " + finTravail(t).split("-").reverse().join("/") : ""} : l'ordre de mission et le contact du client arrivent quand le client a signé.</div>`)).join("");
   if (html && document.getElementById("contenu") === zone) zone.insertAdjacentHTML("afterbegin", html);
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-fiche-client]"); if (b) ficheClient(b.dataset.ficheClient); });
@@ -1292,7 +1296,7 @@ async function vueMissions() {
   const lus = liste.length ? await sb.from("tache_documents").select("tache_id,nom,legende").in("tache_id", liste.map(t => t.id)) : { data: [] };
   if (lus.error) throw lus.error;
   const ligne = t => { const f = ficheDeLaProposition(lus.data, t.id) || {}, p = f.paye || {}, ouverte = !t.fait_le, ville = f.secteur || villeDe(f.adresse), acceptee = /^Je prends/.test(t.commentaire || "");
-    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>${ico("lieu")} ${esc(ville || "Ville à voir")}${t.echeance ? " · " + ico("agenda") + " avant le " + t.echeance.split("-").reverse().join("/") : ""}</small>${acceptee ? `<br><small><b style="font-size:13px;color:var(--paie-ink)">${ico("ok")} Acceptée</b> : l'ordre de mission arrive quand le client a signé</small>` : ""}</span>
+    return `<button class="mission-ligne ${ouverte ? "attend" : ""}" data-id="${t.id}"><span><b>${esc(f.titre || t.texte.replace(/^Proposition : /, ""))}</b><br><small>${ico("lieu")} ${esc(ville || "Ville à voir")}${ouverte && t.echeance ? " · " + ico("agenda") + " répondre avant le " + t.echeance.split("-").reverse().join("/") : ""}${f.echeance ? " · " + ico("agenda") + " à terminer avant le " + f.echeance.split("-").reverse().join("/") : ""}</small>${acceptee ? `<br><small><b style="font-size:13px;color:var(--paie-ink)">${ico("ok")} Acceptée</b> : l'ordre de mission arrive quand le client a signé</small>` : ""}</span>
       <span class="droite"><span class="paie">${p.total > 0 ? "≈ " + fdrEuros(p.total) : "À convenir"}</span><small>⏱ ${f.minutes ? fdrDuree(f.minutes) : "?"}</small></span><span class="suite">Voir le dossier complet ›</span></button>`; };
   const fermee = t => t.fait_le && !/^Je prends/.test(t.commentaire || ""), mention = t => /annul/i.test(t.commentaire || "") ? "Annulée" : /prise/i.test(t.commentaire || "") ? "Déjà prise" : /expir/i.test(t.commentaire || "") ? "Expirée" : "Refusée";
   const ouvertes = liste.filter(t => !t.fait_le), acceptees = liste.filter(t => t.fait_le && !fermee(t) && !enCours.some(m => m.demande_id === t.demande_id)), closes = liste.filter(fermee);
@@ -1325,7 +1329,7 @@ async function ficheProposition(t, apres) {
   const rang = d => parseInt(String(d.nom).replace(/\D/g, ""), 10) || 0, texte = data.filter(d => /^Feuille de route/.test(d.nom)).sort((a, b) => rang(a) - rang(b)).map(d => d.legende || "").join("");
   let fiche = null; try { fiche = JSON.parse(texte); } catch (x) {}
   feuille(`<h2 style="margin:0">Mission proposée</h2>
-    ${fiche ? fdrHtml(fiche) : `<p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p><div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>`}
+    ${fiche ? fdrHtml(t.fait_le ? { ...fiche, accepter_avant: "" } : fiche) : `<p style="margin:0"><b>${esc(t.texte.replace(/^Proposition : /, ""))}</b></p><div class="card" style="white-space:pre-wrap">${esc(texte) || "Feuille de route indisponible : contacte OIKOS."}</div>`}
     ${t.fait_le ? `<p class="muted small">${/^Je /.test(t.commentaire || "") ? "Ta réponse : " : ""}${esc(t.commentaire || "Terminé")}</p>` : `<p class="muted small">Si d'autres presta ont reçu cette proposition, le premier qui accepte a la mission. L'ordre de mission arrive une fois le devis signé par le client.</p>
     <button class="btn primary big" type="button" id="pr-oui">✓ Je prends</button>
     <label class="f">Si tu ne peux pas, dis pourquoi (facultatif)<textarea id="pr-motif" maxlength="1500"></textarea></label>
