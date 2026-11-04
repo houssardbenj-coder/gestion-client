@@ -466,6 +466,7 @@ async function vueAVoir() {
   const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
   const il7 = new Date(Date.now() - 7 * 864e5).toISOString(), maintenant = new Date().toISOString();
   const tampon = await q(sb.from("clients_import").select("id", { count: "exact" }).in("etat", ["nouveau", "different", "a_verifier"]));
+  const garde = await chargerGardeFou();
   const [notes, docs, pts, prevus, taches, photos, echeances, docsTaches, demandesTaches] = await Promise.all([
     q(sb.from("notes_terrain").select("*").is("vue_le", null).order("cree_le", { ascending: false })),
     q(sb.from("documents").select("*").eq("etat", "recu").order("cree_le")),
@@ -495,6 +496,7 @@ async function vueAVoir() {
       <b>${ico("stylo")} ${attenteDevis.length} client${attenteDevis.length > 1 ? "s" : ""} en attente de devis ›</b></button>` : ""}
     ${aFinaliser.length ? `<button class="card cliquable" data-dsection="PRESTA" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
       <b>${ico("drapeau")} ${aFinaliser.length} prestation${aFinaliser.length > 1 ? "s" : ""} à finaliser ›</b></button>` : ""}
+    ${carteGardeFou(garde)}
     ${demandesTaches.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("personne")} Tâches demandées par les presta <span class="tag warn">${demandesTaches.length}</span></h2>${demandesTaches.map(t => ligneDemandeTache(t, true)).join("")}</section>` : ""}
     <div class="deux" style="margin-top:12px">
       <section class="card"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
@@ -528,6 +530,7 @@ async function vueAVoir() {
       <table><tr><th>Qui</th><th>Client</th><th>Quand</th><th>Pourquoi</th></tr>${douteux.map(p => `<tr><td>${esc(nomInterv(p.intervenante_id))}</td><td>${esc(nomClient(p.client_id))}</td><td>${jour(p.arrivee)} ${hm(p.arrivee)}–${p.depart ? hm(p.depart) : "?"}</td><td>${esc(raisonDoute(p))}</td></tr>`).join("")}</table></section>` : ""}`);
   el.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.closest("[data-gf]")) return actionGardeFou(b, garde, () => afficher());
     if (b.closest("[data-dt]")) return deciderDemandeTache(b, demandesTaches, () => afficher());
     if (b.dataset.dsection) { sectionDevis = b.dataset.dsection; return afficher("clients"); }
     if (b.dataset.o) return afficher(b.dataset.o);
@@ -547,6 +550,73 @@ async function vueAVoir() {
     if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); afficher(); }
     if (b.dataset.ko) refuserDoc(b.dataset.ko, () => afficher());
   };
+}
+/* Garde-fou des fichiers (SQL 37) : le sas et les alertes, un bloc par presta. Rien ne s'affiche si tout va bien, sauf une ligne discrète pour les réglages. */
+const GF_TEXTES = { sas: "Beaucoup de fichiers", rouge: "Plafond atteint", orphelins: "Envoi hors de l'appli", boucle: "Envoi en boucle", dossiers: "Beaucoup de dossiers", programme: "Fichier refusé" };
+async function chargerGardeFou() {
+  const [reglages, alertes, sasDocs, sasPhotos] = await Promise.all([
+    q(sb.from("depots_reglages").select("*").eq("id", 1).maybeSingle()),
+    q(sb.from("alertes_fichiers").select("*").is("vue_le", null).order("cree_le")),
+    q(sb.from("tache_documents").select("id,ajoute_par,nom,chemin,taille,sas_depuis").not("sas_depuis", "is", null).order("sas_depuis")),
+    q(sb.from("client_photos").select("id,auteur,client_id,legende,sas_depuis").not("sas_depuis", "is", null).order("sas_depuis"))]);
+  const qui = new Map();
+  const fiche = id => { if (!qui.has(id)) qui.set(id, { id, alertes: [], docs: [], photos: [] }); return qui.get(id); };
+  alertes.forEach(a => fiche(a.intervenante_id).alertes.push(a));
+  sasDocs.forEach(d => fiche(d.ajoute_par).docs.push(d));
+  sasPhotos.forEach(p => fiche(p.auteur).photos.push(p));
+  return { reglages, liste: [...qui.values()] };
+}
+function carteGardeFou({ reglages: r, liste }) {
+  const jauges = r ? [["Drive OIKOS", r.drive_pct], ["Stockage de la base", r.stockage_pct]].filter(j => j[1] != null).map(j => `${j[0]} ${j[1]} %`).join(" · ") : "";
+  const alerte = r && (r.drive_pct >= 85 || r.stockage_pct >= 70);
+  const pied = `<div class="row" style="justify-content:space-between"><span class="muted small">${ico("dossier")} Fichiers des presta${jauges ? " · " + esc(jauges) : ""}</span><button class="btn flat" data-gfreglages="1">Réglages</button></div>`;
+  if (!liste.length) return `<div data-gf style="margin-top:12px${alerte ? ";color:var(--warn)" : ""}">${pied}</div>`;
+  return `<section class="card" data-gf style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("dossier")} Fichiers des presta à vérifier</h2>
+    ${liste.map(p => {
+      const nb = p.docs.length + p.photos.length, grave = p.alertes.some(a => a.type !== "sas");
+      const debut = [...p.docs, ...p.photos].map(x => x.sas_depuis).sort()[0];
+      const depart = debut && !grave && r ? new Date(new Date(debut).getTime() + r.sas_heures * 36e5) : null;
+      return `<div class="ligne"><span><b>${esc(nomInterv(p.id))}</b>${nb ? ` · ${nb} fichier${nb > 1 ? "s" : ""} dans le sas` : ""}
+        ${p.alertes.map(a => `<br><span class="tag ${a.type === "sas" ? "" : "warn"}">${esc(GF_TEXTES[a.type] || a.type)}</span> <span class="muted small">${esc(a.detail || "")}</span>`).join("")}
+        ${p.docs.length ? `<br><span class="muted small">${p.docs.slice(0, 6).map(d => esc(d.nom)).join(", ")}${p.docs.length > 6 ? "…" : ""}</span>` : ""}
+        <br><span class="muted small">${nb ? (depart ? "Sans réponse, partent dans le Drive le " + jour(depart) + " à " + hm(depart) : "Restent hors du Drive tant que tu n'as pas décidé") : "Rien dans le sas"}</span></span>
+        <span class="row" style="flex:none"><button class="btn go" data-gfok="${p.id}">Autoriser</button>${nb ? `<button class="btn stop" data-gfko="${p.id}">Refuser</button>` : ""}</span></div>`;
+    }).join("")}${pied}</section>`;
+}
+async function actionGardeFou(b, garde, re) {
+  if (b.dataset.gfreglages) return reglagesGardeFou(garde.reglages, re);
+  const p = garde.liste.find(x => x.id === (b.dataset.gfok || b.dataset.gfko)); if (!p) return;
+  const maintenant = new Date().toISOString(), vues = () => maj(sb.from("alertes_fichiers").update({ vue_le: maintenant }).eq("intervenante_id", p.id).is("vue_le", null));
+  if (b.dataset.gfok) {
+    if (!confirm("Autoriser " + nomInterv(p.id) + " ? Ses fichiers partent dans le Drive et il n'a plus de limite pendant 24 h.")) return;
+    await maj(sb.from("tache_documents").update({ sas_depuis: null }).eq("ajoute_par", p.id).not("sas_depuis", "is", null));
+    await maj(sb.from("client_photos").update({ sas_depuis: null }).eq("auteur", p.id).not("sas_depuis", "is", null));
+    await maj(sb.from("depots_exceptions").upsert({ intervenante_id: p.id, jusqu: new Date(Date.now() + 864e5).toISOString() }));
+    await vues(); toast("Autorisé pour 24 h"); return re();
+  }
+  if (!confirm("Effacer les " + (p.docs.length + p.photos.length) + " fichiers du sas de " + nomInterv(p.id) + " ? Ils ne pourront pas être récupérés.")) return;
+  const chemins = p.docs.map(d => d.chemin).filter(Boolean);
+  if (chemins.length) { const s = await sb.storage.from("taches").remove(chemins); if (s.error) return souci(s.error); }
+  if (p.docs.length) await maj(sb.from("tache_documents").delete().in("id", p.docs.map(d => d.id)));
+  if (p.photos.length) await maj(sb.from("client_photos").update({ supprime_le: maintenant, sas_depuis: null }).in("id", p.photos.map(x => x.id)));
+  await vues(); toast("Fichiers refusés et effacés"); re();
+}
+function reglagesGardeFou(r, re) {
+  if (!r) return toast("Réglages indisponibles");
+  const champ = (k, t) => `<label class="f">${t}<input type="number" min="1" step="1" name="${k}" value="${esc(String(r[k]))}"></label>`;
+  fenetre(`<h2 style="margin:0">Fichiers des presta</h2><form class="stack" id="gf">
+      <p class="muted small" style="margin:0">Par presta, sur 24 h. Les photos, PDF et documents sans macro sont les seuls acceptés, quels que soient ces réglages.</p>
+      ${champ("vert_fichiers", "Rien ne change jusqu'à (fichiers)")}${champ("vert_mo", "… et jusqu'à (Mo)")}
+      ${champ("rouge_fichiers", "Envois refusés à partir de (fichiers)")}${champ("rouge_mo", "… ou à partir de (Mo)")}
+      ${champ("sas_heures", "Le sas part seul dans le Drive après (heures)")}${champ("dossiers_alerte", "Alerte au-delà de (dossiers créés)")}
+      <div class="row"><button class="btn go" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    el.querySelector("#gf").onsubmit = async e => {
+      e.preventDefault();
+      const d = {}; for (const [k, v] of new FormData(e.target)) { d[k] = Math.round(+v); if (!(d[k] > 0)) return toast("Mets un nombre plus grand que 0."); }
+      if (d.rouge_fichiers <= d.vert_fichiers || d.rouge_mo <= d.vert_mo) return toast("Le refus doit venir après le palier normal.");
+      await maj(sb.from("depots_reglages").update(d).eq("id", 1)); fermer(); toast("Réglages enregistrés"); re();
+    };
+  });
 }
 const dist = g => g && g.distance != null ? (g.distance >= 1000 ? (g.distance / 1000).toFixed(1).replace(".", ",") + " km" : g.distance + " m") : "";
 function raisonDoute(p) {

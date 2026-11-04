@@ -569,6 +569,11 @@ const ajouterJours = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate
 const versLocal = d => { d = new Date(d); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
 const reseau = e => !navigator.onLine || /fetch|network|réseau/i.test(String(e && (e.message || e)));
 function souci(e) { toast(reseau(e) ? "Pas de réseau : réessaie dans un instant." : "Ça n'a pas marché : " + ((e && e.message) || e)); }
+/* Garde-fou des fichiers (SQL 37) : la base décide, ceci ne sert qu'à afficher un message clair */
+const DEPOT_OK = /\.(jpe?g|png|webp|heic|heif|pdf|txt|csv|docx|xlsx|odt|ods)$/i;
+const MSG_PLAFOND = "Beaucoup d'envois en 24 h : envoi bloqué et OIKOS est prévenu. Tes fichiers restent sur ton téléphone, réessaie plus tard.";
+const refusDepot = e => /row-level security/i.test((e && e.message) || "");
+async function palierDepot() { try { const { data, error } = await sb.rpc("mon_palier"); return error ? "vert" : data; } catch (e) { return "vert"; } }
 const estIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 const lienSMS = (tel, texte) => "sms:" + String(tel || "").replace(/[^\d+]/g, "") + (estIOS ? "&" : "?") + "body=" + encodeURIComponent(texte);
 const lienItineraire = adr => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(adr || "");
@@ -1418,8 +1423,8 @@ async function dessinerDossier(zone, t) {
     <label class="f">Ce que tu veux écrire (facultatif pour une photo)<textarea id="dos-texte" maxlength="2000" placeholder="Ex. haie taillée côté rue, reste le fond du jardin"></textarea></label>
     <div class="stack" style="margin-top:8px"><button class="btn" id="ajout" type="button"><span class="ic">${ico("photo")}</span>Ajouter photos ou documents</button>
       <button class="btn" id="commenter" type="button"><span class="ic">${ico("bulle")}</span>Ajouter ce commentaire</button></div>
-    <p class="muted small" style="margin-top:6px">Photo, PDF, Word, Excel, texte · 15 Mo maximum par fichier. Une fois ajouté, seul OIKOS peut retirer un élément.</p>
-    <input type="file" id="fichiers" multiple hidden>`;
+    <p class="muted small" style="margin-top:6px">Photo, PDF, Word (docx), Excel (xlsx), texte · 15 Mo maximum par fichier. Une fois ajouté, seul OIKOS peut retirer un élément.</p>
+    <input type="file" id="fichiers" accept="image/*,.pdf,.txt,.csv,.docx,.xlsx,.odt,.ods" multiple hidden>`;
   const champ = zone.querySelector("#fichiers"), texte = zone.querySelector("#dos-texte");
   zone.querySelector("#ajout").onclick = () => { champ.value = ""; champ.click(); };
   zone.querySelector("#commenter").onclick = async () => {
@@ -1430,17 +1435,24 @@ async function dessinerDossier(zone, t) {
   };
   champ.onchange = async () => {
     let ok = 0; const legende = texte.value.trim() || null;
-    for (const f of [...champ.files]) {
+    if (await palierDepot() === "rouge") return toast(MSG_PLAFOND);
+    for (const brut of [...champ.files]) {
+      if (!DEPOT_OK.test(brut.name)) { toast("« " + brut.name + " » : ce type de fichier n'est pas accepté"); continue; }
+      const f = await photoReduite(brut);
       if (f.size > 15728640) { toast("« " + f.name + " » dépasse 15 Mo"); continue; }
       toast("Envoi de " + f.name + "…");
       const ext = (f.name.split(".").pop() || "fichier").replace(/[^a-z0-9]/gi, "").toLowerCase(), chemin = `${t.id}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
       const u = await sb.storage.from("taches").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
-      if (u.error) { /mime|type/i.test(u.error.message || "") ? toast("« " + f.name + " » : ce type de fichier n'est pas accepté") : souci(u.error); continue; }
+      if (u.error) {
+        if (refusDepot(u.error)) { toast(MSG_PLAFOND); break; }
+        /mime|type/i.test(u.error.message || "") ? toast("« " + f.name + " » : ce type de fichier n'est pas accepté") : souci(u.error); continue;
+      }
       const i = await sb.from("tache_documents").insert({ tache_id: t.id, nom: f.name.slice(0, 255), chemin, type: f.type || null, taille: f.size, legende });
       if (i.error) { souci(i.error); continue; }
       ok++;
     }
-    if (ok) toast(ok > 1 ? ok + " documents ajoutés : OIKOS les voit" : "Document ajouté : OIKOS le voit");
+    if (ok && await palierDepot() !== "vert") toast("Bien reçu : OIKOS range ces fichiers après vérification");
+    else if (ok) toast(ok > 1 ? ok + " documents ajoutés : OIKOS les voit" : "Document ajouté : OIKOS le voit");
     dessinerDossier(zone, t);
   };
   zone.querySelector(".docs").onclick = async e => {
@@ -1670,10 +1682,11 @@ function ajouterPhoto(clientId, apres) {
     el.querySelector("#prendre").onclick = () => { champ.value = ""; champ.click(); };
     champ.onchange = async () => {
       const fichiers = [...champ.files]; if (!fichiers.length) return;
+      if (await palierDepot() === "rouge") return toast(MSG_PLAFOND);
       const d = { client_id: clientId, categorie: f.categorie.value, legende: f.legende.value.trim() || null };
       el.querySelector("#prendre").disabled = true; el.querySelector("#prendre").lastChild.textContent = "Envoi en cours…";
       try { for (const x of fichiers) await envoyerPhoto(x, d); fermer(); toast(fichiers.length > 1 ? fichiers.length + " photos envoyées ✓" : "Photo envoyée ✓"); apres(); }
-      catch (e) { el.querySelector("#prendre").disabled = false; el.querySelector("#prendre").lastChild.textContent = "Prendre ou choisir"; souci(e); }
+      catch (e) { el.querySelector("#prendre").disabled = false; el.querySelector("#prendre").lastChild.textContent = "Prendre ou choisir"; refusDepot(e) ? toast(MSG_PLAFOND) : souci(e); }
     };
   });
 }
@@ -1682,6 +1695,11 @@ async function reduire(f, max, qualite) {
   const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
   cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
   return new Promise((ok, ko) => cv.toBlob(b => b ? ok(b) : ko(new Error("image illisible")), "image/jpeg", qualite));
+}
+/* Photo d'un dossier de tâche : même taille que dans le dossier du client (1600 px). Si le téléphone ne sait pas la lire, elle part telle quelle. */
+async function photoReduite(f) {
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 5e5) return f;
+  try { return new File([await reduire(f, 1600, 0.82)], f.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }); } catch (e) { return f; }
 }
 /* Une photo → aperçu (640 px, gardé dans la base) + photo complète (1600 px, rangée ensuite dans le Drive d'OIKOS) */
 async function envoyerPhoto(f, d) {
@@ -2157,7 +2175,7 @@ async function vuePapiers() {
     const fichiers = [...champ.files]; if (!fichiers.length || !cible) return;
     const fermer = feuille(`<h2 style="margin:0">Envoi en cours…</h2><p class="muted">${esc(cible.libelle)} · ${fichiers.length} fichier${fichiers.length > 1 ? "s" : ""}</p>`);
     try { for (const f of fichiers) await envoyerPapier(cible, f); fermer(); toast("Envoyé à OIKOS ✓"); accueil("papiers"); }
-    catch (e) { fermer(); souci(e); accueil("papiers"); }
+    catch (e) { fermer(); refusDepot(e) ? toast(MSG_PLAFOND) : souci(e); accueil("papiers"); }
   };
 }
 /* Photo réduite (2000 px) pour un envoi rapide, PDF tel quel ; 10 Mo au plus */
