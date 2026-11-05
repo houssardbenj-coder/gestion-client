@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5EE">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1B1D15">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#2E3622">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2F3722">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co http://127.0.0.1:8770; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Pilotage</title>
 <link rel="icon" href="logo-oikos.png">
@@ -16,25 +16,25 @@
 /* Tableau de bord du gérant : un onglet par sujet en haut, des listes et des fiches qui s'ouvrent sur place.
    Même base que l'appli des intervenantes ; seul le compte gérant peut entrer (la base le vérifie aussi). */
 :root{
-  --bg:#F7F5EE; --surface:#FFFFFF; --sunk:#EDEAE0; --ink:#23241F; --muted:#5A5B52; --line:#DAD7CA;
-  --accent:#525A44; --accent-ink:#FFFFFF; --accent-soft:#E7E8DA;
-  --go:#3E7D3A; --go-ink:#FFFFFF; --stop:#A8432B; --warn:#8A5A0E; --warn-soft:#F4E9CC;
-  --carte:#FFFFFF; --carte-bord:transparent; --ombre:0 1px 2px rgb(35 36 31 / .05),0 10px 26px rgb(35 36 31 / .06); --ombre-btn:0 6px 16px rgb(82 90 68 / .24); --flou:none;
-  --bouton:#F0EEE4; --mono:#D6D9CC; --tri:transparent; --trait:transparent; --paie:#DFF0DC; --paie-ink:#2C6B29; --delai:#FBE3DE; --delai-ink:#8E2F1C;
+  --bg:#F2EEE1; --surface:#FFFFFF; --sunk:#E9E4D3; --ink:#1F2119; --muted:#55574B; --line:#CFCAB5;
+  --accent:#46572B; --accent-fort:#34421E; --accent-ink:#FFFFFF; --accent-soft:#E2E8CC;
+  --go:#2F7D32; --go-ink:#FFFFFF; --go-soft:#DCF0D8; --stop:#B3411F; --stop-ink:#FFFFFF; --stop-soft:#F9E2D8; --warn:#8A5700; --warn-vif:#C98A16; --warn-soft:#FBE8BC; --info:#2B6170; --info-soft:#D9EAEC;
+  --tete:#2E3622; --carte:#FFFFFF; --carte-bord:#DED9C6; --ombre:0 1px 2px rgb(35 36 31 / .08),0 10px 24px rgb(35 36 31 / .09); --ombre-btn:0 4px 12px rgb(52 66 30 / .35); --flou:none;
+  --bouton:#FFFFFF; --mono:#C9D4AA; --tri:#EEEADB; --trait:rgb(70 87 43 / .09); --paie:#DCF0D8; --paie-ink:#256B28; --delai:#F9E2D8; --delai-ink:#8E2F1C;
   --titre:Fraunces,"Cormorant Garamond",Georgia,serif;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#1B1D15; --surface:#26291F; --sunk:#14160F; --ink:#F3F1E7; --muted:#BDBEAE; --line:#3D4033;
-  --accent:#C9D4AA; --accent-ink:#1B1D15; --accent-soft:#363A2B;
-  --go:#7CC26F; --go-ink:#14160F; --stop:#E9775F; --warn:#E0B458; --warn-soft:#3A3115;
-  --carte:rgb(243 241 231 / .075); --carte-bord:rgb(243 241 231 / .16); --ombre:0 18px 40px rgb(0 0 0 / .24); --ombre-btn:none; --flou:blur(18px);
-  --bouton:rgb(243 241 231 / .08); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --paie:#26361F; --paie-ink:#A6DC9B; --delai:#43231A; --delai-ink:#F4B5A5; color-scheme:dark }}
+  --bg:#1B1D15; --surface:#2A2E21; --sunk:#14160F; --ink:#F6F4EA; --muted:#C4C5B5; --line:#4F5441;
+  --accent:#C8DE85; --accent-fort:#DCEBA9; --accent-ink:#1B1D15; --accent-soft:#3B4326;
+  --go:#86D178; --go-ink:#14160F; --go-soft:#26381F; --stop:#F2805F; --stop-ink:#1B1D15; --stop-soft:#4A2519; --warn:#F0C35C; --warn-vif:#F0C35C; --warn-soft:#42360F; --info:#85C9D6; --info-soft:#1F3A40;
+  --tete:#2F3722; --carte:rgb(243 241 231 / .09); --carte-bord:rgb(243 241 231 / .2); --ombre:0 18px 40px rgb(0 0 0 / .28); --ombre-btn:0 4px 14px rgb(0 0 0 / .4); --flou:blur(18px);
+  --bouton:rgb(243 241 231 / .06); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --paie:#26361F; --paie-ink:#A6DC9B; --delai:#43231A; --delai-ink:#F4B5A5; color-scheme:dark }}
 :root[data-theme="dark"]{
-  --bg:#1B1D15; --surface:#26291F; --sunk:#14160F; --ink:#F3F1E7; --muted:#BDBEAE; --line:#3D4033;
-  --accent:#C9D4AA; --accent-ink:#1B1D15; --accent-soft:#363A2B;
-  --go:#7CC26F; --go-ink:#14160F; --stop:#E9775F; --warn:#E0B458; --warn-soft:#3A3115;
-  --carte:rgb(243 241 231 / .075); --carte-bord:rgb(243 241 231 / .16); --ombre:0 18px 40px rgb(0 0 0 / .24); --ombre-btn:none; --flou:blur(18px);
-  --bouton:rgb(243 241 231 / .08); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --paie:#26361F; --paie-ink:#A6DC9B; --delai:#43231A; --delai-ink:#F4B5A5; color-scheme:dark }
+  --bg:#1B1D15; --surface:#2A2E21; --sunk:#14160F; --ink:#F6F4EA; --muted:#C4C5B5; --line:#4F5441;
+  --accent:#C8DE85; --accent-fort:#DCEBA9; --accent-ink:#1B1D15; --accent-soft:#3B4326;
+  --go:#86D178; --go-ink:#14160F; --go-soft:#26381F; --stop:#F2805F; --stop-ink:#1B1D15; --stop-soft:#4A2519; --warn:#F0C35C; --warn-vif:#F0C35C; --warn-soft:#42360F; --info:#85C9D6; --info-soft:#1F3A40;
+  --tete:#2F3722; --carte:rgb(243 241 231 / .09); --carte-bord:rgb(243 241 231 / .2); --ombre:0 18px 40px rgb(0 0 0 / .28); --ombre-btn:0 4px 14px rgb(0 0 0 / .4); --flou:blur(18px);
+  --bouton:rgb(243 241 231 / .06); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --paie:#26361F; --paie-ink:#A6DC9B; --delai:#43231A; --delai-ink:#F4B5A5; color-scheme:dark }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
@@ -333,6 +333,94 @@ nav.menu-haut{flex:none}
   .rail.ouvert{display:flex;position:fixed;inset:0;max-height:none;z-index:14;background:var(--bg);padding:18px}
   .rail-ouvrir{display:inline-flex}
 }
+/* Couleurs franches (05/11/2026) : en-tête olive sombre, trois niveaux de boutons, terracotta = urgent, ocre = à décider, ardoise = pour information, vert = validé */
+header.top{--ink:#F7F5EE;--muted:#D3D9BE;--accent:#C8DE85;--accent-ink:#1B1D15;--accent-soft:rgb(255 255 255 / .16);--line:rgb(255 255 255 / .28);--bouton:rgb(255 255 255 / .1);--bg:rgb(255 255 255 / .1);--mono:#6F7C4B;background:var(--tete);color:var(--ink);box-shadow:0 2px 10px rgb(0 0 0 / .22);-webkit-backdrop-filter:none;backdrop-filter:none}
+header.top .btn.flat{color:var(--ink)}
+nav.onglets button{color:var(--muted)}
+nav.onglets button:hover{background:rgb(255 255 255 / .12);color:var(--ink)}
+nav.onglets button[aria-current="page"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.bulle{background:var(--stop);color:var(--stop-ink);font-weight:600}
+header.top .bulle{background:#D2502A;color:#fff}
+.cherche-btn:hover{background:rgb(255 255 255 / .18);color:var(--ink)}
+/* Titres */
+h1{font-weight:400;color:var(--accent-fort)}
+h2{font-weight:500;color:var(--accent-fort)}
+.card h2:first-child{margin-top:0}
+/* Boutons : plein = l'action à faire, contour = une autre action, texte seul = secondaire */
+.btn{background:var(--bouton);border:1.5px solid var(--accent);color:var(--accent);font-weight:600}
+.btn:hover:not(:disabled){background:var(--accent-soft)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover:not(:disabled){background:var(--accent-fort);border-color:var(--accent-fort);transform:translateY(-1px)}
+.btn.go{background:var(--go);border-color:var(--go);color:var(--go-ink);box-shadow:var(--ombre-btn)}
+.btn.go:hover:not(:disabled){background:var(--go);filter:brightness(.9);transform:translateY(-1px)}
+.btn.stop{background:var(--bouton);border-color:var(--stop);color:var(--stop)}
+.btn.stop:hover:not(:disabled){background:var(--stop-soft)}
+.btn.flat{background:none;border-color:transparent;color:var(--accent);box-shadow:none}
+.btn.flat:hover:not(:disabled){background:var(--accent-soft)}
+.btn.flat.stop{color:var(--stop)}
+.btn.flat.stop:hover:not(:disabled){background:var(--stop-soft)}
+.cl-liste .btn{border:1px solid var(--line);color:var(--ink);font-weight:400}
+.btn[data-cr]{border-color:var(--line);color:var(--ink);box-shadow:none}
+.btn[data-cr][style*="--go"]{background:var(--go-soft);border-width:2px}
+.chip{border:1.5px solid var(--line);color:var(--accent-fort)}
+.chip:hover{border-color:var(--accent);background:var(--accent-soft)}
+.chip[aria-pressed="true"],.chip[aria-pressed="true"]:hover{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+/* Étiquettes */
+.tag{background:var(--accent-soft);color:var(--accent-fort);font-weight:600}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.off{background:var(--sunk);color:var(--muted)}
+/* Cartes et listes */
+.card[style*="border-color:var(--warn)"]{border-color:var(--warn-vif)!important;border-left-width:6px;background:color-mix(in srgb,var(--warn-soft) 45%,var(--surface))}
+.cliquable:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent),var(--ombre)}
+tr.cliquable:hover{background:var(--accent-soft);box-shadow:none}
+.dos-carte:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent),var(--ombre)}
+th{background:var(--accent-soft);color:var(--accent-fort);font-weight:600}
+th:first-child{border-radius:9px 0 0 9px}
+th:last-child{border-radius:0 9px 9px 0}
+input[type=text],input[type=email],input[type=tel],input[type=password],input[type=number],input[type=date],input[type=time],input[type=datetime-local],input[type=search],select,textarea,.rp-ligne input{border:1.5px solid var(--line)}
+.tk-grp>summary{background:var(--accent-soft);color:var(--accent-fort)}
+.tk-late>summary{background:var(--stop-soft);color:var(--stop)}
+.err{color:var(--stop)}
+.pk-maint{background:var(--stop)}
+/* Aujourd'hui : la couleur de l'icône dit la nature de la ligne */
+.jour-date{font-weight:500}
+.jour-n{color:var(--stop);font-weight:500}
+.jour-liste{background:var(--carte);border-color:var(--carte-bord);box-shadow:var(--ombre)}
+.jour-ligne{transition:background-color .15s}
+.jour-ligne:hover{background:color-mix(in srgb,var(--accent-soft) 40%,transparent)}
+.jour-liste .jour-ligne:first-child{border-radius:18px 18px 0 0}
+.jour-liste .jour-ligne:last-child{border-radius:0 0 18px 18px}
+.jour-texte b{font-weight:600}
+.jour-icone{background:var(--accent-soft);color:var(--accent-fort)}
+.jour-icone.urgent{background:var(--stop);color:var(--stop-ink)}
+.jour-icone.decider{background:var(--warn-vif);color:#1F2119}
+.jour-icone.info{background:var(--info-soft);color:var(--info)}
+.btn[data-j-plus]{color:var(--muted);font-weight:500}
+.jour-groupe{background:var(--carte);border-color:var(--carte-bord);border-left:6px solid var(--line);box-shadow:var(--ombre)}
+.jour-groupe.attente{border-left-color:var(--warn-vif)}
+.jour-groupe.info{border-left-color:var(--info)}
+.jour-groupe>summary{font-weight:600}
+.jour-groupe>summary .muted{min-width:24px;padding:0 7px;border-radius:999px;text-align:center;font-weight:600;font-size:13px;background:var(--sunk);color:var(--ink)}
+/* Colonne de droite */
+.rail details.rail-branche>summary{background:var(--accent-soft);border:1.5px solid var(--accent);color:var(--accent-fort);font-weight:600}
+.rail details.rail-branche>summary:hover{background:var(--accent);color:var(--accent-ink)}
+.rail details.rail-branche>summary:hover::after{color:inherit}
+.rail details.rail-branche>summary::after{color:var(--accent-fort);font-size:18px}
+.proc{background:var(--surface);border:1px solid var(--line)}
+.proc:hover{border-color:var(--accent);background:var(--accent-soft)}
+.proc[aria-current="true"]{border-color:var(--accent)}
+.etat.partiel{background:var(--warn-vif)!important}.etat.aucune{background:var(--stop)!important}
+/* Messagerie */
+.ms-b{background:var(--surface);border-color:var(--line)}
+.ms-b.moi{background:var(--accent-soft)}
+.ms-pers[aria-current="true"]{box-shadow:inset 4px 0 0 var(--accent);border-radius:4px 10px 10px 4px}
+/* Chiffres : un filet de couleur par nature de montant */
+.su-chiffres .card{border-top:4px solid var(--accent)}
+.su-chiffres .card:nth-child(2){border-top-color:var(--warn-vif)}
+.su-chiffres .card:nth-child(n+3){border-top-color:var(--go)}
+.su-chiffres b{color:var(--accent-fort)}
+.su-table tr.total td{background:var(--accent-soft);color:var(--accent-fort)}
+.voile{background:rgb(20 22 14 / .6)}
 </style>
 </head>
 <body>
@@ -888,9 +976,10 @@ async function lignesDuJour() {
   prevus.filter(x => x.client_id && !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut))).forEach(x => info.push({ icone: "agenda", quoi: nomInterv(x.intervenante_id) + " n'a pas déclaré un passage", detail: nomClient(x.client_id) + " · " + jour(x.debut) + " " + hm(x.debut), action: "Voir le reporting", agir: () => afficher("reporting"), autres: [] }));
   return { faire, attente, info };
 }
+const TONS_JOUR = { balance: "urgent", stylo: "urgent", alerte: "urgent", personne: "decider", mission: "decider", drapeau: "decider", telecharger: "decider", dossier: "decider", doc: "decider", bulle: "info", mail: "info", ok: "info", photo: "info", agenda: "info" };
 function htmlLigne(l, i, principal, zone) {
   const autres = l.autres || [];
-  return `<div class="jour-ligne" data-j="${zone}${i}"><span class="jour-icone">${ico(l.icone)}</span><div class="jour-texte"><b>${esc(l.quoi)}</b>${l.detail ? `<span>${esc(l.detail)}</span>` : ""}</div>
+  return `<div class="jour-ligne" data-j="${zone}${i}"><span class="jour-icone ${TONS_JOUR[l.icone] || ""}">${ico(l.icone)}</span><div class="jour-texte"><b>${esc(l.quoi)}</b>${l.detail ? `<span>${esc(l.detail)}</span>` : ""}</div>
     <button class="btn ${principal ? "primary" : ""}" data-j-agir>${esc(l.action)}</button>${autres.length ? `<button class="btn flat" data-j-plus aria-expanded="false">Autres actions</button><div class="jour-autres" hidden>${autres.map((a, n) => `<button data-j-autre="${n}">${esc(a[0])}</button>`).join("")}</div>` : ""}</div>`;
 }
 async function vueJour() {
@@ -899,11 +988,11 @@ async function vueJour() {
   const bulleJour = document.getElementById("b-avoir"); if (bulleJour) bulleJour.innerHTML = nbAFaire ? `<span class="bulle">${nbAFaire}</span>` : "";
   const n = faire.length, auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   const dernier = jourDernier;
-  const el = contenu(`<p class="jour-date">${esc(auj.charAt(0).toUpperCase() + auj.slice(1))}</p><h1 class="jour-titre">${n ? n + (n > 1 ? " choses à faire" : " chose à faire") : "Rien à faire pour le moment"}</h1>
+  const el = contenu(`<p class="jour-date">${esc(auj.charAt(0).toUpperCase() + auj.slice(1))}</p><h1 class="jour-titre">${n ? `<span class="jour-n">${n}</span>` + (n > 1 ? " choses à faire" : " chose à faire") : "Rien à faire pour le moment"}</h1>
     ${n ? `<section class="jour-liste" aria-label="À faire maintenant">${faire.map((l, i) => htmlLigne(l, i, i === 0, "f")).join("")}</section>` : ""}
     ${dernier ? `<div class="jour-annuler"><span>${esc(dernier.texte)}</span><button class="btn flat" id="j-annuler">Annuler</button></div>` : ""}
-    ${attente.length ? `<details class="jour-groupe"><summary><span>En attente d'une réponse</span><span class="muted">${attente.length}</span></summary>${attente.map((l, i) => htmlLigne(l, i, false, "a")).join("")}</details>` : ""}
-    ${info.length ? `<details class="jour-groupe"><summary><span>Pour information</span><span class="muted">${info.length}</span></summary><div class="row" style="justify-content:flex-end;padding:0 18px"><button class="btn flat" id="j-tout-vu">Tout marquer fait</button></div>${info.map((l, i) => htmlLigne(l, i, false, "i")).join("")}</details>` : ""}
+    ${attente.length ? `<details class="jour-groupe attente"><summary><span>En attente d'une réponse</span><span class="muted">${attente.length}</span></summary>${attente.map((l, i) => htmlLigne(l, i, false, "a")).join("")}</details>` : ""}
+    ${info.length ? `<details class="jour-groupe info"><summary><span>Pour information</span><span class="muted">${info.length}</span></summary><div class="row" style="justify-content:flex-end;padding:0 18px"><button class="btn flat" id="j-tout-vu">Tout marquer fait</button></div>${info.map((l, i) => htmlLigne(l, i, false, "i")).join("")}</details>` : ""}
     <p style="margin-top:14px"><button class="btn flat" data-page="avoir">Tout voir en détail</button></p>`);
   const marquer = async l => { const r = sb.from(l.table).update({ vue_le: new Date().toISOString() }); await maj(l.ids ? r.in("id", l.ids) : r.eq("id", l.id)); };
   const ligneDe = b => { const c = b.closest("[data-j]"); if (!c) return null; const z = c.dataset.j[0], i = Number(c.dataset.j.slice(1)); return ({ f: faire, a: attente, i: info })[z][i]; };
