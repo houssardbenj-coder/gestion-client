@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5EE">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1B1D15">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co http://127.0.0.1:8770; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Pilotage</title>
 <link rel="icon" href="logo-oikos.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -260,6 +260,41 @@ input[type=date],input[type=time],input[type=datetime-local],input[type=search]{
 .ms-conv form{padding:0 14px 14px}
 #ms-retour{display:none}
 @media (max-width:720px){.ms-grille{grid-template-columns:minmax(0,1fr)}.ms-grille.ouverte .ms-liste{display:none}.ms-grille:not(.ouverte) .ms-conv{display:none}#ms-retour{display:inline-flex}}
+/* Boutons de la carte, à droite de toutes les pages */
+.cadre-rail{display:grid;grid-template-columns:minmax(0,1fr) 272px;align-items:start}
+.cadre-rail>main{width:100%;min-width:0}
+.rail{position:sticky;top:var(--haut-entete,64px);max-height:calc(100vh - var(--haut-entete,64px));overflow:auto;padding:16px 16px 24px 4px;display:flex;flex-direction:column;gap:6px}
+.rail h2{font-size:15px;margin:12px 0 2px}
+.rail-etat{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:13px;color:var(--muted)}
+.rail-etat .point{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.rail-etat .point.actif{background:var(--go)}
+.rail details>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:6px 2px;list-style-position:inside}
+.rail-liste{display:flex;flex-direction:column;gap:4px}
+.proc{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 10px;border:0;border-radius:10px;background:var(--bouton);cursor:pointer;font-size:13.5px;line-height:1.25;color:var(--ink)}
+.proc[aria-current="true"]{background:var(--accent);color:var(--accent-ink)}
+.proc .etat{flex:none;width:8px;height:8px;border-radius:50%;background:var(--line)}
+.etat.ok{background:var(--go)!important}.etat.partiel{background:#D9B13B!important}.etat.aucune{background:#D9823B!important}.etat.apreciser{background:#9A9B90!important}
+.rail-ouvrir{display:none}
+.volet{position:fixed;top:0;bottom:0;right:272px;width:min(460px,100vw);background:var(--bg);box-shadow:0 0 40px rgb(0 0 0 / .22);z-index:15;overflow:auto;padding:18px 20px 28px;display:flex;flex-direction:column;gap:12px}
+.volet-tete{display:flex;align-items:flex-start;gap:8px;justify-content:space-between}
+.volet ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px}
+.volet a{color:var(--accent);font-weight:600}
+.lien-pc{display:inline;padding:0;border:0;background:none;color:var(--accent);font-weight:600;text-decoration:underline;cursor:pointer;text-align:left;overflow-wrap:anywhere}
+.lien-pc:disabled{color:var(--muted);cursor:not-allowed}
+/* Suivi de l'Excel */
+.su-chiffres{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.su-chiffres .card{padding:12px 14px}
+.su-chiffres b{display:block;font-family:var(--titre);font-weight:500;font-size:22px;margin-top:2px;font-variant-numeric:tabular-nums}
+.su-table{overflow-x:auto}
+.su-table td.n,.su-table th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.su-table tr.total td{font-weight:600}
+@media (max-width:1180px){.volet{right:0}}
+@media (max-width:980px){
+  .cadre-rail{display:block}
+  .rail{display:none}
+  .rail.ouvert{display:flex;position:fixed;inset:0;max-height:none;z-index:14;background:var(--bg);padding:18px}
+  .rail-ouvrir{display:inline-flex}
+}
 </style>
 </head>
 <body>
@@ -410,17 +445,20 @@ function ecranConnexion(msg) {
 }
 
 /* ===================== Cadre et onglets ===================== */
-const ONGLETS = [["avoir", "À voir"], ["messages", "Messages"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenants"], ["clients", "Clients"], ["dossiers", "Dossiers clients"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["avoir", "À voir"], ["messages", "Messages"], ["planning", "Planning"], ["reporting", "Reporting"], ["taches", "À faire"], ["intervenantes", "Intervenants"], ["clients", "Clients"], ["dossiers", "Dossiers clients"], ["papiers", "Papiers demandés"], ["suivi", "Suivi Excel"]];
 async function afficher(o) {
   if (o) onglet = o;
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}OIKOS<span>Pilotage</span></div>
     <nav class="onglets">${ONGLETS.map(([k, t]) => `<button data-o="${k}" ${k === onglet ? 'aria-current="page"' : ""}>${t}<span id="b-${k}"></span></button>`).join("")}</nav>
-    <button class="btn flat" id="sortir">Se déconnecter</button></div></header>
-    <main class="wrap" id="contenu"><p class="muted">Chargement…</p></main>`;
+    <button class="btn rail-ouvrir" id="rail-ouvrir">Administratif et tâches</button><button class="btn flat" id="sortir">Se déconnecter</button></div></header>
+    <div class="cadre-rail"><main class="wrap" id="contenu"><p class="muted">Chargement…</p></main><aside class="rail" id="rail" aria-label="Administratif et tâches ponctuelles"></aside></div>`;
+  document.documentElement.style.setProperty("--haut-entete", app.querySelector("header.top").offsetHeight + "px");
+  document.getElementById("rail-ouvrir").onclick = () => document.getElementById("rail").classList.add("ouvert");
+  dessinerRail(); demarrerRail();
   app.querySelector("nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) afficher(b.dataset.o); };
   document.getElementById("sortir").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers })[onglet](); }
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi })[onglet](); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
 const contenu = h => { document.getElementById("contenu").innerHTML = h; return document.getElementById("contenu"); };
@@ -502,6 +540,217 @@ function optionsClients(liste, choisi) {
 }
 const nomCreneau = x => x.client_id ? nomClient(x.client_id) : (x.titre || "Rendez-vous");   // rendez-vous hors client : son objet
 const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
+
+/* ===================== Boutons de la carte et suivi de l'Excel =====================
+   La carte et l'Excel vivent sur le PC. Le programme de la carte (serveur.py, port 8770) les donne à cette page, seule adresse qu'il accepte.
+   Une copie part dans la base, réservée au gérant (SQL 42), pour le téléphone et le PC éteint. Rien de cela n'est écrit dans cette page : le dépôt est public.
+   Sans le SQL 42, tout marche quand même sur le PC relié. */
+const PC = "http://127.0.0.1:8770/pilote";
+const SUR_TELEPHONE = /Android|iPhone|iPad/i.test(navigator.userAgent);
+const ETATS_CARTE = { ok: "En place", partiel: "En partie", aucune: "Pas de solution", apreciser: "À préciser" };
+let carteP = null, suiviP = null, pcRelie = false, railDemarre = false, railErreur = "", voletId = null, carteIndex = {};
+const retirerEmoji = t => String(t ?? "").replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]\uFE0F?\u20E3?/gu, "").replace(/\uFE0F/g, "").replace(/  +/g, " ");
+const sansEmoji = t => retirerEmoji(t).trim();
+async function pc(chemin, corps, delai) {
+  const r = await fetch(PC + chemin, { method: corps ? "POST" : "GET", headers: corps ? { "Content-Type": "application/json" } : {}, body: corps ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(delai || 3000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erreur || "Le PC a refusé");
+  return j;
+}
+/* Copie de la base : seulement si elle a changé */
+const versionsCopie = {};
+async function copierDansBase(cle, version, contenu) {
+  if (versionsCopie[cle] === version) return;
+  const { error } = await sb.from("pilote_documents").upsert({ cle, version, contenu, maj_le: new Date().toISOString() });
+  if (!error) versionsCopie[cle] = version;
+}
+async function lireCopie(cle) {
+  const { data, error } = await sb.from("pilote_documents").select("version,contenu,maj_le").eq("cle", cle).maybeSingle();
+  if (error || !data) return null;
+  versionsCopie[cle] = data.version;
+  return data;
+}
+function indexerCarte() {
+  carteIndex = {};
+  (function parcourir(liste, parent, profil) {
+    for (const n of liste || []) {
+      const p = n.profil || profil;
+      carteIndex[n.id] = { n, parent, profil: p };
+      parcourir(n.enfants, n.id, p);
+    }
+  })(carteP ? carteP.branches : [], null, carteP ? carteP.profil : "");
+}
+async function chargerDuPc() {
+  const carte = await pc("/carte");
+  const change = !carteP || carteP.version !== carte.version;
+  carteP = carte; pcRelie = true; railErreur = "";
+  if (change) indexerCarte();
+  copierDansBase("carte", carte.version, carte).catch(() => {});
+  chargerSuiviPc().catch(() => {});
+}
+async function chargerSuiviPc() {
+  const res = await pc("/suivi", null, 60000);
+  const change = !suiviP || suiviP.lu_le !== res.lu_le;
+  suiviP = res;
+  copierDansBase("suivi", res.fichier_modifie, res).catch(() => {});
+  if (change && onglet === "suivi" && document.getElementById("su-page")) vueSuivi();
+}
+async function demarrerRail() {
+  if (railDemarre) return;
+  railDemarre = true;
+  try { await chargerDuPc(); }
+  catch (e) {
+    pcRelie = false;
+    const copie = await lireCopie("carte");
+    if (copie) { carteP = copie.contenu; carteP.copie_du = copie.maj_le; indexerCarte(); }
+  }
+  dessinerRail();
+  setInterval(verifierPc, 5 * 60 * 1000);   // garde le programme allumé tant que le pilotage est ouvert
+}
+async function verifierPc() {
+  const avant = pcRelie;
+  try { await chargerDuPc(); } catch (e) { pcRelie = false; }
+  if (avant !== pcRelie) dessinerRail();
+}
+function relierPc() {
+  let essais = 0;
+  const t = setInterval(async () => {
+    if (++essais > 15) { clearInterval(t); toast("Le PC ne répond pas. Le bouton est-il installé sur ce PC ?"); return; }
+    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); } catch (e) {}
+  }, 2000);
+}
+const boutonRelier = () => SUR_TELEPHONE ? "" : `<a class="btn" href="oikos-carte:demarrer" data-relier>Relier le PC</a>${aide("Allume le programme de la carte sur ce PC. Une seule installation par PC : « Installer le bouton du PC » dans le dossier Plateforme intervenantes, raccourci.")}`;
+const etatDe = n => n.etat ? `<span class="etat ${esc(n.etat)}" title="${esc(ETATS_CARTE[n.etat] || "")}"></span>` : `<span class="etat" style="background:transparent"></span>`;
+const boutonProc = n => `<button class="proc" data-proc="${esc(n.id)}" aria-current="${voletId === n.id}">${etatDe(n)}<span>${esc(sansEmoji(n.t))}</span></button>`;
+const utile = n => !!((n.enfants || []).length || (n.etapes || []).length || (n.liens || []).length || n.note);
+/* Un groupe sans contenu propre se déplie dans la colonne ; le reste s'ouvre dans le volet */
+function blocRail(n) {
+  if (!utile(n)) return "";
+  const groupe = (n.enfants || []).length && !(n.etapes || []).length && !(n.liens || []).length;
+  if (!groupe) return boutonProc(n);
+  return `<details open data-groupe="${esc(n.id)}"><summary>${esc(sansEmoji(n.t))}</summary><div class="rail-liste">${n.enfants.filter(utile).map(boutonProc).join("")}</div></details>`;
+}
+function dessinerRail() {
+  const r = document.getElementById("rail");
+  if (!r) return;
+  const etat = pcRelie
+    ? `<span class="point actif"></span>PC relié`
+    : `<span class="point"></span>${SUR_TELEPHONE ? "Sur le téléphone : lecture seule" : "PC non relié"} ${boutonRelier()}`;
+  const fermer = `<button class="btn flat rail-ouvrir" data-fermer-rail>Fermer</button>`;
+  if (!carteP) { r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}<p class="muted small">Les boutons arrivent une fois le PC relié une première fois.</p>`; return; }
+  const titres = { admin: "Administratif", entreprise: "Tâches ponctuelles" };
+  r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}` + carteP.branches.map(b => `<h2>${titres[b.id] || esc(sansEmoji(b.t))}</h2><div class="rail-liste">${(b.enfants || []).map(blocRail).join("")}</div>`).join("");
+}
+/* Texte de la carte : [nom](adresse ou chemin) devient un lien, tout le reste est échappé */
+function texteCarte(t, id) {
+  const profil = (carteIndex[id] || {}).profil || "";
+  const lien = (nom, cible) => /^https?:\/\//i.test(cible)
+    ? `<a href="${esc(cible)}" target="_blank" rel="noopener noreferrer" data-web="${esc(cible)}" data-profil="${esc(profil)}">${esc(sansEmoji(nom))}</a>`
+    : `<button class="lien-pc" data-pc="${esc(cible)}" title="${esc(cible)}" ${SUR_TELEPHONE ? "disabled" : ""}>${esc(sansEmoji(nom))}</button>`;
+  const motif = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s)]+)/g;
+  let h = "", i = 0, m; t = String(t ?? "");
+  while ((m = motif.exec(t))) {
+    h += esc(retirerEmoji(t.slice(i, m.index)));
+    h += m[3] ? lien(m[3], m[3]) : lien(m[1], m[2]);
+    i = m.index + m[0].length;
+  }
+  return h + esc(retirerEmoji(t.slice(i)));
+}
+function ouvrirVolet(id) {
+  const x = carteIndex[id];
+  if (!x) return;
+  voletId = id;
+  const n = x.n, parent = x.parent && carteIndex[x.parent] ? carteIndex[x.parent].n : null;
+  let v = document.getElementById("volet");
+  if (!v) { v = document.createElement("aside"); v.id = "volet"; v.className = "volet"; v.setAttribute("aria-label", "Détail de la tâche"); document.body.append(v); }
+  v.innerHTML = `<div class="volet-tete"><div>${parent ? `<button class="btn flat small" data-proc="${esc(parent.id)}" style="padding:0;margin-bottom:4px">‹ ${esc(sansEmoji(parent.t))}</button>` : ""}<h2 style="margin:0">${esc(sansEmoji(n.t))}</h2></div><button class="btn flat" data-fermer-volet>Fermer</button></div>
+    ${n.etat ? `<div><span class="tag">${esc(ETATS_CARTE[n.etat] || n.etat)}</span>${n.minutes ? ` <span class="tag off">${esc(n.minutes)} min</span>` : ""}</div>` : ""}
+    ${n.quoi ? `<p>${texteCarte(n.quoi, id)}</p>` : ""}
+    ${(n.etapes || []).length ? `<ol>${n.etapes.map(e => `<li>${texteCarte(e, id)}</li>`).join("")}</ol>` : ""}
+    ${(n.liens || []).length ? `<div><h3 style="margin:0 0 4px" class="small muted">Logiciels, sites, fichiers</h3><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">${n.liens.map(e => `<span>${texteCarte(e, id)}</span>`).join("")}</div></div>` : ""}
+    ${(n.enfants || []).length ? `<div class="rail-liste">${n.enfants.map(boutonProc).join("")}</div>` : ""}
+    ${n.note ? `<p class="muted small">${texteCarte(n.note, id)}</p>` : ""}
+    ${!pcRelie && !SUR_TELEPHONE ? `<p class="muted small">Pour ouvrir les fichiers et les programmes : ${boutonRelier()}</p>` : ""}`;
+  v.scrollTop = 0;
+  dessinerRail();
+}
+function fermerVolet() { const v = document.getElementById("volet"); if (v) v.remove(); voletId = null; dessinerRail(); }
+function demanderLancer(cible, nom) {
+  fenetre(`<h2 style="margin:0">Lancer ce programme ?</h2><p>${esc(nom)}</p><p class="muted small" style="overflow-wrap:anywhere">${esc(cible)}</p>
+    <div class="row"><button class="btn primary" id="lancer-oui">Lancer</button><button class="btn" data-fermer>Annuler</button></div>`, (el, fermer) => {
+    el.querySelector("#lancer-oui").onclick = async () => { fermer(); try { await pc("/lancer", { cible }); toast("Programme lancé sur le PC"); } catch (e) { souci(e); } };
+  });
+}
+async function ouvrirSurPc(cible, nom) {
+  if (!pcRelie) return toast("Relie d'abord le PC, avec le bouton en haut à droite.");
+  try {
+    const j = await pc("/ouvrir", { cible });
+    if (j.confirmer) return demanderLancer(cible, nom);
+    toast(j.copie ? "Ouvert dans le Bloc-notes, copie de sécurité faite" : "Ouvert sur le PC");
+  } catch (e) { souci(e); }
+}
+document.addEventListener("click", async e => {
+  const proc = e.target.closest("[data-proc]");
+  if (proc) { document.getElementById("rail")?.classList.remove("ouvert"); return ouvrirVolet(proc.dataset.proc); }
+  if (e.target.closest("[data-fermer-volet]")) return fermerVolet();
+  if (e.target.closest("[data-fermer-rail]")) return document.getElementById("rail")?.classList.remove("ouvert");
+  if (e.target.closest("[data-relier]")) return relierPc();
+  const fichier = e.target.closest("[data-pc]");
+  if (fichier) return ouvrirSurPc(fichier.dataset.pc, fichier.textContent);
+  const web = e.target.closest("[data-web]");
+  if (web && pcRelie) {   // sur le PC : le bon compte Chrome, comme dans la carte
+    e.preventDefault();
+    const u = web.dataset.web, sites = (carteP && carteP.sites) || {};
+    let site = ""; try { const h = new URL(u).hostname.replace(/^www\./, ""); const k = Object.keys(sites).find(d => h === d || h.endsWith("." + d)); site = k ? sites[k] : ""; } catch (err) {}
+    try { await pc("/web", { url: u, profil: site || web.dataset.profil }); }
+    catch (err) { window.open(u, "_blank", "noopener,noreferrer"); }
+  }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("volet") && !document.querySelector(".voile")) fermerVolet(); });
+
+/* Onglet Suivi Excel : mêmes calculs que l'onglet TABLEAU DE BORD (IA automatisation facture test\suivi_tableau.py) */
+let suAnnee = null;
+const suEuros = v => (Number(v) || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+const dateFr = d => d ? d.slice(0, 10).split("-").reverse().join("/") : "aucune";
+const heureFr = d => d ? new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "?";
+function tableControles(l, total) {
+  if (!l.length) return `<p class="muted small">Rien à signaler.</p>`;
+  return `<div class="su-table"><table><thead><tr><th>Date</th><th>Client</th><th>Détail</th><th class="n">Montant TTC</th></tr></thead><tbody>${l.map(x => `<tr><td>${dateFr(x.date)}</td><td>${esc(x.qui)}</td><td>${esc(x.detail)}</td><td class="n">${x.montant == null ? "" : suEuros(x.montant)}</td></tr>`).join("")}</tbody></table></div>${total > l.length ? `<p class="muted small">Les ${l.length} plus récentes sur ${total}.</p>` : ""}`;
+}
+async function vueSuivi() {
+  let source = "";
+  if (!suiviP) {
+    try { await chargerSuiviPc(); } catch (e) {
+      const copie = await lireCopie("suivi");
+      if (copie) { suiviP = copie.contenu; source = copie.maj_le; }
+      else if (pcRelie) return contenu(`<div id="su-page"><h1>Suivi Excel</h1><p class="err">${esc(e.message)}</p></div>`);
+    }
+  } else if (!pcRelie) source = suiviP.lu_le;
+  if (!suiviP) return contenu(`<div id="su-page"><h1>Suivi Excel</h1><p class="muted" style="margin:10px 0">Les chiffres arrivent une fois le PC relié une première fois.</p>${boutonRelier()}</div>`);
+  const s = suiviP, annees = [...new Set(s.mois.map(m => m.mois.slice(3)))].sort();
+  const cetteAnnee = String(new Date().getFullYear());
+  if (!annees.includes(suAnnee)) suAnnee = annees.includes(cetteAnnee) ? cetteAnnee : annees[annees.length - 1];
+  const mois = s.mois.filter(m => m.mois.endsWith(suAnnee));
+  const somme = k => mois.reduce((t, m) => t + m[k], 0);
+  const ligne = (titre, v, cls) => `<tr class="${cls || ""}"><td>${titre}</td>${["cours", "menage", "jardinage", "bricolage", "ca", "cout", "benefice", "ben_oikos", "ben_be"].map(k => `<td class="n">${suEuros(v(k))}</td>`).join("")}</tr>`;
+  const t = s.totaux;
+  const el = contenu(`<div id="su-page"><div class="row" style="justify-content:space-between"><h1>Suivi Excel</h1><div class="row">
+      ${pcRelie ? `<button class="btn" id="su-maj">Actualiser</button><button class="btn" data-pc="${esc(s.chemin || "")}" id="su-excel" hidden>Ouvrir l'Excel</button>` : boutonRelier()}</div></div>
+    <p class="muted small" style="margin-top:4px">Excel enregistré le ${heureFr(s.fichier_modifie)}. Dernière saisie : cours ${dateFr(s.derniere.cours)}, services ${dateFr(s.derniere.services)}.${source ? ` Copie du ${heureFr(source)}, PC non relié.` : ""}</p>
+    <div class="chips" id="su-annees" style="margin-top:12px">${annees.map(a => `<button class="chip" data-annee="${a}" aria-pressed="${a === suAnnee}">${a}</button>`).join("")}</div>
+    <div class="su-chiffres">${[["CA total HT", somme("ca")], ["Coût intervenants", somme("cout")], ["Bénéfice net", somme("benefice")], ["Bénéfice OIKOS", somme("ben_oikos")], ["Bénéfice Benjamin ens.", somme("ben_be")]].map(([n, v]) => `<div class="card"><span class="muted small">${n}</span><b>${suEuros(v)}</b></div>`).join("")}</div>
+    <div class="card su-table"><table><thead><tr><th>Mois ${aide("Mois de facturation, comme dans l'Excel : celui qui suit la prestation, sauf s'il a été tapé à la main.")}</th><th class="n">Cours</th><th class="n">Ménage</th><th class="n">Jardinage</th><th class="n">Bricolage</th><th class="n">CA total</th><th class="n">Coût interv.</th><th class="n">Bénéfice</th><th class="n">Bén. OIKOS</th><th class="n">Bén. Benjamin</th></tr></thead>
+      <tbody>${mois.map(m => ligne(m.mois, k => m[k])).join("")}${ligne("Total " + suAnnee, somme, "total")}</tbody></table></div>
+    <h2>À contrôler</h2>
+    <details class="card" style="margin-bottom:8px"><summary>Lignes à compléter (${t.sans_montant})</summary>${tableControles(s.sans_montant, t.sans_montant)}</details>
+    <details class="card" style="margin-bottom:8px"><summary>Paiement non pointé (${t.non_pointees}, soit ${suEuros(t.non_pointees_ttc)})</summary>${tableControles(s.non_pointees, t.non_pointees)}</details>
+    <details class="card"><summary>Sans facture (${t.sans_facture})</summary>${tableControles(s.sans_facture, t.sans_facture)}</details></div>`);
+  el.querySelector("#su-annees").onclick = e => { const b = e.target.closest("[data-annee]"); if (b) { suAnnee = b.dataset.annee; vueSuivi(); } };
+  const maj = el.querySelector("#su-maj");
+  if (maj) maj.onclick = async () => { maj.disabled = true; try { await chargerSuiviPc(); await vueSuivi(); toast("Chiffres à jour"); } catch (e) { maj.disabled = false; souci(e); } };
+  const xl = el.querySelector("#su-excel");
+  if (xl && s.chemin) xl.hidden = false;
+}
 
 /* ===================== Messages (SQL 39) : une conversation par presta ===================== */
 const motsNom = n => String(n || "").toLowerCase().trim().split(/\s+/).sort().join(" ");
