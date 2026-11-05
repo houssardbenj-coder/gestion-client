@@ -431,21 +431,31 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .lg-filtres{margin:10px 0}
 #lg-mois{width:auto}
 #lg-cherche{flex:1 1 240px;max-width:380px;min-width:0}
-.lg-boite{padding:0;overflow:auto;max-height:calc(100vh - 250px);min-height:220px}
-.lg-table{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
-.lg-table thead th{position:sticky;top:0;z-index:2;border-radius:0;white-space:nowrap;padding:8px 6px}
+.lg-boite{padding:0;overflow:auto;max-height:calc(100vh - 215px);min-height:220px}
+.lg-table{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+.lg-table thead th{position:sticky;top:0;z-index:2;border-radius:0;padding:6px 4px;line-height:1.15;font-size:11px;vertical-align:bottom}
 .lg-table td{padding:2px;border-top:1px solid var(--line);vertical-align:middle}
-.lg-table td.lg-ro{padding:2px 7px;color:var(--muted);white-space:nowrap}
+.lg-table td:has(.w-long){width:45%}
+.lg-table td.lg-ro{padding:2px 4px;color:var(--muted);white-space:nowrap}
 .lg-table td.n,.lg-table th.n{text-align:right;font-variant-numeric:tabular-nums}
-.lg-table .lg-num{position:sticky;left:0;z-index:1;background:var(--sunk);color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;padding:2px 7px;text-align:right;border-top:1px solid var(--line);border-radius:0;min-width:42px}
+.lg-table .lg-num{position:sticky;left:0;z-index:1;background:var(--sunk);color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;padding:2px 5px;text-align:right;border-top:1px solid var(--line);border-radius:0;min-width:34px}
 .lg-table thead .lg-num{z-index:3;background:var(--accent-soft);color:var(--accent-fort);font-weight:600;border-top:0}
 .lg-table .lg-num .btn{padding:2px}
 .lg-table tbody tr:hover td{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
-.lg-table input.lg-c{border:1px solid transparent;border-radius:6px;background:transparent;padding:4px 5px;font-size:13px;color:var(--ink)}
+.lg-table input.lg-c{border:1px solid transparent;border-radius:6px;background:transparent;padding:4px 3px;font-size:13px;color:var(--ink)}
 .lg-table input.lg-c:hover{border-color:var(--line);background:var(--surface)}
 .lg-table input.lg-c:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 2px var(--accent-soft)}
 .lg-table input.lg-c::placeholder{color:var(--muted);opacity:.85}
-.lg-table input.w-date{width:128px}.lg-table input.w-num{width:70px;text-align:right}.lg-table input.w-txt{width:150px}.lg-table input.w-long{width:230px}
+.lg-table input.lg-c{width:100%}.lg-table input.w-date{min-width:90px}.lg-table input.w-num{min-width:48px;text-align:right}.lg-table input.w-txt{min-width:84px}.lg-table input.w-long{min-width:90px}.lg-table input.w-nom{min-width:124px}.lg-table input.w-court{min-width:68px}
+.lg-table input.lg-c::-webkit-calendar-picker-indicator{display:none!important}
+.lg-table input.lg-c:hover::-webkit-calendar-picker-indicator,.lg-table input.lg-c:focus::-webkit-calendar-picker-indicator{display:block!important}
+@media (max-width:1500px){.lg-table [data-col="ttc"]{display:none}}
+.page-large .cadre-rail{display:block}
+.page-large .wrap{max-width:none}
+.page-large .rail{display:none}
+.page-large .rail-ouvrir{display:inline-flex}
+.page-large .rail.ouvert{display:flex;position:fixed;top:0;right:0;bottom:0;width:min(320px,100vw);max-height:none;z-index:14;background:var(--bg);padding:18px;box-shadow:0 0 40px rgb(0 0 0 / .25)}
+.page-large .volet{right:min(320px,calc(100vw - 460px))}
 .lg-coche{text-align:center}
 .lg-coche input{width:17px;height:17px;accent-color:var(--go);vertical-align:middle}
 .lg-table td.lg-manque{background:var(--stop-soft)}
@@ -621,6 +631,7 @@ async function afficher(o) {
     lgModifs = {}; lgNouvelles = { cours: [], services: [] };
   }
   if (o) onglet = o;
+  document.body.classList.toggle("page-large", onglet === "lignes");
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}<div class="marque-mots">OIKOS<small>Pilotage</small></div></div>
     <nav class="onglets menu-haut">${MENU.map(m => `<button data-o="${m.pages[0]}" ${m === groupeDe(onglet) ? 'aria-current="page"' : ""}>${m.t}${m.bulle ? `<span id="${m.bulle}"></span>` : ""}</button>`).join("")}</nav>
     <button class="cherche-btn" id="cherche-ouvrir" type="button">${ico("loupe")}<span>Client, tâche, action…</span><kbd>Ctrl K</kbd></button>
@@ -969,6 +980,7 @@ const LG_COLONNES = {
 const lgNb = () => Object.keys(lgModifs).length + lgNouvelles.cours.length + lgNouvelles.services.length;
 const lgCle = (o, l, c) => o + "|" + l + "|" + c;
 const lgTexte = v => v == null ? "" : String(v).replace(".", ",");
+const lgEntite = e => /enseignement/i.test(e || "") ? "BE" : (e || "");
 const lgManque = (o, l) => o === "cours" ? (!l.prenom || l.montant == null) : (!l.client || l.taux == null || l.paye == null);
 const lgOrigine = (o, id) => (lgP[o].find(x => String(x.ligne) === String(id)) || {});
 /* Ce que la case affiche quand rien n'a été changé. Une case « auto » est vide : son montant calculé est écrit en gris dedans. */
@@ -978,15 +990,15 @@ function lgValeurInitiale(l, c, type) {
   return type === "num" ? lgTexte(l[c]) : (l[c] == null ? "" : String(l[c]));
 }
 function lgCase(o, l, id, [c, titre, type, liste]) {
-  if (type === "ro") return `<td class="lg-ro" data-ro="${c}">${esc(l[c] || "")}</td>`;
-  if (type === "euro") return `<td class="lg-ro n">${l[c] == null ? "" : suEuros(l[c])}</td>`;
+  if (type === "ro") return `<td class="lg-ro" data-ro="${c}">${esc((c === "entite" ? lgEntite(l[c]) : l[c]) || "")}</td>`;
+  if (type === "euro") return `<td class="lg-ro n" data-col="${c}">${l[c] == null ? "" : suEuros(l[c])}</td>`;
   const cle = lgCle(o, id, c), change = cle in lgModifs, v = change ? lgModifs[cle] : lgValeurInitiale(l, c, type);
   const vide = (c === "prenom" || c === "client" || (o === "cours" && c === "montant" && l.montant == null) || (o === "services" && (c === "taux" || c === "paye") && l[c] == null)) && !v;
   const classe = `${change ? "lg-modif" : ""} ${vide && String(id)[0] !== "n" ? "lg-manque" : ""}`;
   const attr = `data-c="${c}" data-type="${type}" aria-label="${esc(titre)}"`;
   if (type === "ok" || type === "oui") return `<td class="lg-coche ${classe}"><input type="checkbox" ${attr} ${v ? "checked" : ""}></td>`;
   if (type === "date") return `<td class="${classe}"><input class="lg-c w-date" type="date" ${attr} value="${esc(v)}"></td>`;
-  if (type === "liste") return `<td class="${classe}"><input class="lg-c w-txt" type="text" list="${liste}" ${attr} value="${esc(v)}" autocomplete="off"></td>`;
+  if (type === "liste") return `<td class="${classe}"><input class="lg-c ${c === "activite" || c === "zone" ? "w-court" : "w-nom"}" type="text" list="${liste}" ${attr} value="${esc(v)}" autocomplete="off"></td>`;
   if (type === "num" || type === "auto") return `<td class="${classe}"><input class="lg-c w-num" type="text" inputmode="decimal" ${attr} value="${esc(v)}" ${type === "auto" ? `placeholder="${esc(lgTexte(l[c]) || "auto")}"` : ""}></td>`;
   return `<td class="${classe}"><input class="lg-c ${type === "long" ? "w-long" : "w-txt"}" type="text" ${attr} value="${esc(v)}" title="${esc(v)}"></td>`;
 }
@@ -999,7 +1011,7 @@ function lgDessiner() {
   const o = lgOnglet, mot = norm(lgCherche);
   const toutes = lgP[o].filter(l => (!lgMois || l.mois === lgMois) && (!lgAFaire || lgManque(o, l)) && (!mot || norm("ligne " + l.ligne + " " + Object.values(l).join(" ")).includes(mot)));
   const nouvelles = lgNouvelles[o];
-  z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" class="${k[2] === "euro" ? "n" : ""}">${k[1]}</th>`).join("")}</tr></thead>
+  z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" data-col="${k[0]}" class="${k[2] === "euro" ? "n" : ""}">${k[1]}</th>`).join("")}</tr></thead>
     <tbody>${nouvelles.map(id => lgRangee(o, {}, id)).join("")}${toutes.map(l => lgRangee(o, l, l.ligne)).join("")}</tbody></table>
     ${!toutes.length && !nouvelles.length ? `<p class="muted" style="padding:14px">Aucune ligne avec ces filtres.</p>` : ""}</div><p class="muted small" style="margin-top:6px">${toutes.length} ligne${toutes.length > 1 ? "s" : ""}, de la plus récente à la plus ancienne.</p>`;
   /* Après un nouveau dessin : le client et le montant d'un élève changé, sans toucher à ce qui a été tapé */
@@ -1030,7 +1042,7 @@ function lgSuiteCours(tr, c, apercu) {
   const champ = n => tr.querySelector(`[data-c="${n}"]`), prenom = norm(champ("prenom").value);
   const e = lgP.listes.eleves.find(x => norm(x.prenom) === prenom);
   const ro = n => tr.querySelector(`[data-ro="${n}"]`);
-  ro("client").textContent = e ? e.client : ""; ro("entite").textContent = e ? e.entite : "";
+  ro("client").textContent = e ? e.client : ""; ro("entite").textContent = e ? lgEntite(e.entite) : "";
   const h = parseFloat(champ("heures").value.replace(",", ".")), m = champ("montant");
   if (e && e.taux != null && h > 0) {
     const calcule = Math.round(h * e.taux * 100) / 100;
