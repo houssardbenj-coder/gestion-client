@@ -1219,8 +1219,9 @@ const lgCle = (o, l, c) => o + "|" + l + "|" + c;
 const lgTexte = v => v == null ? "" : String(v).replace(".", ",");
 const lgEntite = e => /enseignement/i.test(e || "") ? "BE" : (e || "");
 const lgManque = (o, l) => o === "cours" ? (!l.prenom || l.montant == null) : (!l.client || l.taux == null || l.paye == null);
-/* Même règle que les programmes du PC (Générer les factures, intervenants, NOVA). Une ligne qui a un changement à enregistrer reste affichée : on voit ce qu'on enregistre. */
-const lgArchivee = l => /^(oui|yes|true|1)$/i.test(String(l.archiver || "").trim());
+/* Archivée dans le pilote : ARCHIVER à Oui (même règle que les programmes du PC), ou STATUT PAIEMENT à ok (posé par Pointer les paiements).
+   Le ok n'écrit rien dans ARCHIVER : le programme des intervenants doit encore compter ces lignes. Une ligne qui a un changement à enregistrer reste affichée : on voit ce qu'on enregistre. */
+const lgArchivee = l => /^(oui|yes|true|1)$/i.test(String(l.archiver || "").trim()) || /^ok$/i.test(String(l.statut || "").trim());
 const lgMasquee = (o, l) => lgSansArchivees && lgArchivee(l) && !Object.keys(lgModifs).some(k => k.startsWith(lgCle(o, l.ligne, "")));
 const lgOrigine = (o, id) => (lgP[o].find(x => String(x.ligne) === String(id)) || {});
 /* Ce que la case affiche quand rien n'a été changé. Une case « auto » est vide : son montant calculé est écrit en gris dedans. */
@@ -1341,7 +1342,7 @@ function lgEntete() {
     <div class="row lg-filtres"><select id="lg-mois" aria-label="Mois de facturation"><option value="">Tous les mois</option>${moisDispos.map(m => `<option ${m === lgMois ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>
       <input id="lg-cherche" type="search" placeholder="Chercher un nom, une note, un n° de ligne…" value="${esc(lgCherche)}">
       <button class="chip" id="lg-afaire" aria-pressed="${lgAFaire}">Incomplètes (${nb})</button>
-      <button class="chip" id="lg-sans-archivees" aria-pressed="${lgSansArchivees}">Masquer les archivées (${nbArchivees})</button>
+      <button class="chip" id="lg-sans-archivees" title="Lignes Archivé à Oui, et lignes payées (ok) : elles s'archivent toutes seules" aria-pressed="${lgSansArchivees}">Masquer les archivées (${nbArchivees})</button>
       <span style="flex:1"></span><button class="btn" id="lg-ajouter" type="button">${ico("plus")} Nouvelle ligne</button></div>`;
 }
 async function vueLignes() {
