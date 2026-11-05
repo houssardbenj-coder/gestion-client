@@ -1205,6 +1205,7 @@ const LG_COLONNES = {
   cours: [["date", "Date", "date"], ["prenom", "Élève", "liste", "lg-eleves"], ["client", "Client", "ro"], ["entite", "Entité", "ro"], ["heures", "Heures", "num"], ["acompte", "Acompte", "num"], ["montant", "Montant TTC", "auto"], ["ht", "HT", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["archiver", "Archivé", "oui"]],
   services: [["date", "Date", "date"], ["activite", "Activité", "liste", "lg-activites"], ["client", "Client", "liste", "lg-clients"], ["intervenant", "Intervenant", "liste", "lg-intervenants"], ["zone", "Zone", "liste", "lg-zones"], ["heures", "Heures", "num"], ["taux", "Taux facturé", "auto"], ["paye", "Taux payé", "auto"], ["acompte", "Acompte", "num"], ["ttc", "TTC", "euro"], ["ht", "HT", "euro"], ["cout", "Coût", "euro"], ["reste", "Reste", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["facture_interv", "Facture interv.", "txt"], ["archiver", "Archivé", "oui"]]
 };
+let lgLarg = {};
 const lgNb = () => Object.keys(lgModifs).length + lgNouvelles.cours.length + lgNouvelles.services.length;
 const lgCle = (o, l, c) => o + "|" + l + "|" + c;
 const lgTexte = v => v == null ? "" : String(v).replace(".", ",");
@@ -1231,7 +1232,8 @@ function lgCase(o, l, id, [c, titre, type, liste]) {
   if (type === "date") return `<td class="${classe}"><input class="lg-c w-date" type="date" ${attr} value="${esc(v)}"></td>`;
   if (type === "liste") return `<td class="${classe}"><input class="lg-c ${c === "activite" || c === "zone" ? "w-court" : "w-nom"}" type="text" list="${liste}" ${attr} value="${esc(v)}" autocomplete="off"></td>`;
   if (type === "num" || type === "auto") return `<td class="${classe}"><input class="lg-c w-num" type="text" inputmode="decimal" ${attr} value="${esc(v)}" ${type === "auto" ? `placeholder="${esc(lgTexte(l[c]) || "auto")}"` : ""}></td>`;
-  return `<td class="${classe}"><input class="lg-c ${type === "long" ? "w-long" : "w-txt"}" type="text" ${attr} value="${esc(v)}" title="${esc(v)}"></td>`;
+  const larg = type === "txt" && lgLarg[c] ? ` style="min-width:calc(${lgLarg[c]}ch + 10px)"` : "";
+  return `<td class="${classe}"><input class="lg-c ${type === "long" ? "w-long" : "w-txt"}" type="text" ${attr} value="${esc(v)}" title="${esc(v)}"${larg}></td>`;
 }
 function lgRangee(o, l, id) {
   const nouvelle = String(id)[0] === "n";
@@ -1243,6 +1245,9 @@ function lgDessiner() {
   const retenues = lgP[o].filter(l => (!lgMois || l.mois === lgMois) && (!lgAFaire || lgManque(o, l)) && (!mot || norm("ligne " + l.ligne + " " + Object.values(l).join(" ")).includes(mot)));
   const toutes = retenues.filter(l => !lgMasquee(o, l)), masquees = retenues.length - toutes.length;
   const nouvelles = lgNouvelles[o];
+  /* Les cases de texte court (factures) prennent la largeur de leur plus long contenu : un numéro de facture se lit en entier */
+  lgLarg = {};
+  for (const [c, , type] of LG_COLONNES[o]) if (type === "txt") lgLarg[c] = Math.min(40, Math.max(0, ...toutes.map(l => String(l[c] ?? "").length)));
   z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" data-col="${k[0]}" class="${k[2] === "euro" ? "n" : ""}">${k[1]}</th>`).join("")}</tr></thead>
     <tbody>${nouvelles.map(id => lgRangee(o, {}, id)).join("")}${toutes.map(l => lgRangee(o, l, l.ligne)).join("")}</tbody></table>
     ${!toutes.length && !nouvelles.length ? `<p class="muted" style="padding:14px">Aucune ligne avec ces filtres.</p>` : ""}</div><p class="muted small" style="margin-top:6px">${toutes.length} ligne${toutes.length > 1 ? "s" : ""}${masquees ? `, ${masquees} archivée${masquees > 1 ? "s" : ""} masquée${masquees > 1 ? "s" : ""}` : ""}, de la plus récente à la plus ancienne.</p>`;
