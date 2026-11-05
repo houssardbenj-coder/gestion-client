@@ -426,6 +426,34 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .marque-mots{line-height:1.1}
 .marque-mots small{display:block;margin-top:2px;font-size:11px;font-weight:400;letter-spacing:.06em;color:var(--muted)}
 @media (max-width:980px){.marque-tete{border-right:0;padding-right:0}}
+/* Lignes de l'Excel : un tableau où chaque case se modifie sur place */
+#contenu.large{max-width:none}
+.lg-filtres{margin:10px 0}
+#lg-mois{width:auto}
+#lg-cherche{flex:1 1 240px;max-width:380px;min-width:0}
+.lg-boite{padding:0;overflow:auto;max-height:calc(100vh - 250px);min-height:220px}
+.lg-table{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
+.lg-table thead th{position:sticky;top:0;z-index:2;border-radius:0;white-space:nowrap;padding:8px 6px}
+.lg-table td{padding:2px;border-top:1px solid var(--line);vertical-align:middle}
+.lg-table td.lg-ro{padding:2px 7px;color:var(--muted);white-space:nowrap}
+.lg-table td.n,.lg-table th.n{text-align:right;font-variant-numeric:tabular-nums}
+.lg-table .lg-num{position:sticky;left:0;z-index:1;background:var(--sunk);color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;padding:2px 7px;text-align:right;border-top:1px solid var(--line);border-radius:0;min-width:42px}
+.lg-table thead .lg-num{z-index:3;background:var(--accent-soft);color:var(--accent-fort);font-weight:600;border-top:0}
+.lg-table .lg-num .btn{padding:2px}
+.lg-table tbody tr:hover td{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+.lg-table input.lg-c{border:1px solid transparent;border-radius:6px;background:transparent;padding:4px 5px;font-size:13px;color:var(--ink)}
+.lg-table input.lg-c:hover{border-color:var(--line);background:var(--surface)}
+.lg-table input.lg-c:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 2px var(--accent-soft)}
+.lg-table input.lg-c::placeholder{color:var(--muted);opacity:.85}
+.lg-table input.w-date{width:128px}.lg-table input.w-num{width:70px;text-align:right}.lg-table input.w-txt{width:150px}.lg-table input.w-long{width:230px}
+.lg-coche{text-align:center}
+.lg-coche input{width:17px;height:17px;accent-color:var(--go);vertical-align:middle}
+.lg-table td.lg-manque{background:var(--stop-soft)}
+.lg-table td.lg-modif,.lg-table tbody tr:hover td.lg-modif{background:var(--warn-soft);box-shadow:inset 0 0 0 1.5px var(--warn-vif);border-radius:6px}
+.lg-nouvelle td{background:color-mix(in srgb,var(--go-soft) 55%,transparent)}
+.lg-barre{--accent:#C8DE85;--accent-fort:#DCEBA9;--accent-ink:#1B1D15;--accent-soft:rgb(255 255 255 / .16);position:sticky;bottom:10px;z-index:4;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding:10px 16px;background:var(--tete);color:#F7F5EE;border-radius:14px;box-shadow:0 8px 24px rgb(0 0 0 / .3)}
+.lg-barre .btn.flat{color:#F7F5EE}
+.lg-erreur{margin-bottom:10px;border-color:var(--stop);border-left-width:6px;background:color-mix(in srgb,var(--stop-soft) 50%,var(--surface))}
 .su-note{white-space:normal;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -578,16 +606,20 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["suivi", "Suivi Excel"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["papiers", "Papiers demandés"]];
 const MENU = [
   { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir"], bulle: "b-avoir" },
   { k: "clients", t: "Clients", pages: ["clients", "dossiers"], bulle: "b-clients" },
   { k: "equipe", t: "Équipe", pages: ["intervenantes", "planning", "reporting"] },
   { k: "messages", t: "Messages", pages: ["messages"], bulle: "b-messages" },
-  { k: "chiffres", t: "Chiffres", pages: ["suivi"] }];
+  { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi"] }];
 const groupeDe = o => MENU.find(m => m.pages.includes(o));
 const nomPage = o => (ONGLETS.find(x => x[0] === o) || [])[1] || "";
 async function afficher(o) {
+  if (o && o !== "lignes" && onglet === "lignes" && lgNb()) {
+    if (!confirm("Tes changements de l'Excel ne sont pas enregistrés. Les abandonner ?")) return;
+    lgModifs = {}; lgNouvelles = { cours: [], services: [] };
+  }
   if (o) onglet = o;
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}<div class="marque-mots">OIKOS<small>Pilotage</small></div></div>
     <nav class="onglets menu-haut">${MENU.map(m => `<button data-o="${m.pages[0]}" ${m === groupeDe(onglet) ? 'aria-current="page"' : ""}>${m.t}${m.bulle ? `<span id="${m.bulle}"></span>` : ""}</button>`).join("")}</nav>
@@ -601,7 +633,7 @@ async function afficher(o) {
   document.getElementById("cherche-ouvrir").onclick = ouvrirRecherche;
   brancherSousMenu();
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, jour: vueJour })[onglet]();
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, jour: vueJour })[onglet]();
     const zoneSous = document.getElementById("sous-menu-zone"); if (zoneSous) zoneSous.innerHTML = sousMenu(); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
@@ -779,7 +811,7 @@ function relierPc() {
   let essais = 0;
   const t = setInterval(async () => {
     if (++essais > 15) { clearInterval(t); toast("Le PC ne répond pas. Le bouton est-il installé sur ce PC ?"); return; }
-    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); } catch (e) {}
+    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); } catch (e) {}
   }, 2000);
 }
 const boutonRelier = () => SUR_TELEPHONE ? "" : `<a class="btn" href="oikos-carte:demarrer" data-relier>Relier le PC</a>${aide("Allume le programme de la carte sur ce PC. Une seule installation par PC : « Installer le bouton du PC » dans le dossier Plateforme intervenantes, raccourci.")}`;
@@ -864,6 +896,8 @@ document.addEventListener("click", async e => {
   if (e.target.closest("[data-fermer-volet]")) return fermerVolet();
   if (e.target.closest("[data-fermer-rail]")) return document.getElementById("rail")?.classList.remove("ouvert");
   if (e.target.closest("[data-relier]")) return relierPc();
+  const allerLigne = e.target.closest("[data-aller-ligne]");
+  if (allerLigne) { const m = allerLigne.dataset.allerLigne.match(/^SAISIE (COURS|SERVICES), (ligne \d+)$/); if (m) { lgOnglet = m[1] === "COURS" ? "cours" : "services"; lgMois = ""; lgAFaire = false; lgCherche = m[2]; return afficher("lignes"); } }
   const fichier = e.target.closest("[data-pc]");
   if (fichier) return ouvrirSurPc(fichier.dataset.pc, fichier.textContent);
   const web = e.target.closest("[data-web]");
@@ -884,7 +918,7 @@ const dateFr = d => d ? d.slice(0, 10).split("-").reverse().join("/") : "aucune"
 const heureFr = d => d ? new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "?";
 function tableControles(l, total) {
   if (!l.length) return `<p class="muted small">Rien à signaler.</p>`;
-  return `<div class="su-table"><table><thead><tr><th>Date</th><th>Client</th><th>Détail</th><th>Où dans l'Excel</th><th class="n">Montant TTC</th></tr></thead><tbody>${l.map(x => `<tr><td>${dateFr(x.date)}</td><td>${esc(x.qui)}</td><td>${esc(x.detail)}${x.note ? `<div class="su-note">Note : ${esc(x.note)}</div>` : ""}</td><td>${esc(x.ou || "")}</td><td class="n">${x.montant == null ? "" : suEuros(x.montant)}</td></tr>`).join("")}</tbody></table></div>${total > l.length ? `<p class="muted small">Les ${l.length} plus récentes sur ${total}.</p>` : ""}`;
+  return `<div class="su-table"><table><thead><tr><th>Date</th><th>Client</th><th>Détail</th><th>Où dans l'Excel</th><th class="n">Montant TTC</th></tr></thead><tbody>${l.map(x => `<tr><td>${dateFr(x.date)}</td><td>${esc(x.qui)}</td><td>${esc(x.detail)}${x.note ? `<div class="su-note">Note : ${esc(x.note)}</div>` : ""}</td><td>${x.ou ? `<button class="lien-pc" data-aller-ligne="${esc(x.ou)}" title="Voir et corriger cette ligne">${esc(x.ou)}</button>` : ""}</td><td class="n">${x.montant == null ? "" : suEuros(x.montant)}</td></tr>`).join("")}</tbody></table></div>${total > l.length ? `<p class="muted small">Les ${l.length} plus récentes sur ${total}.</p>` : ""}`;
 }
 async function vueSuivi() {
   let source = "";
@@ -923,6 +957,181 @@ async function vueSuivi() {
   const xl = el.querySelector("#su-excel");
   if (xl && s.chemin) xl.hidden = false;
 }
+
+/* ===================== Lignes de l'Excel : modifiées ici, écrites dans le fichier par le programme du PC (lignes_excel.py) =====================
+   Rien de ces lignes n'est écrit dans cette page ni copié dans la base : sans le PC, la page ne montre rien. */
+let lgP = null, lgOnglet = "cours", lgMois = "", lgCherche = "", lgAFaire = false, lgModifs = {}, lgNouvelles = { cours: [], services: [] }, lgCompte = 0, lgEnvoi = false;
+const LG_ONGLETS = { cours: "Cours", services: "Services OIKOS" };
+const LG_COLONNES = {
+  cours: [["date", "Date", "date"], ["prenom", "Élève", "liste", "lg-eleves"], ["client", "Client", "ro"], ["entite", "Entité", "ro"], ["heures", "Heures", "num"], ["acompte", "Acompte", "num"], ["montant", "Montant TTC", "auto"], ["ht", "HT", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["archiver", "Archivé", "oui"]],
+  services: [["date", "Date", "date"], ["activite", "Activité", "liste", "lg-activites"], ["client", "Client", "liste", "lg-clients"], ["intervenant", "Intervenant", "liste", "lg-intervenants"], ["zone", "Zone", "liste", "lg-zones"], ["heures", "Heures", "num"], ["taux", "Taux facturé", "auto"], ["paye", "Taux payé", "auto"], ["acompte", "Acompte", "num"], ["ttc", "TTC", "euro"], ["ht", "HT", "euro"], ["cout", "Coût", "euro"], ["reste", "Reste", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["facture_interv", "Facture interv.", "txt"], ["archiver", "Archivé", "oui"]]
+};
+const lgNb = () => Object.keys(lgModifs).length + lgNouvelles.cours.length + lgNouvelles.services.length;
+const lgCle = (o, l, c) => o + "|" + l + "|" + c;
+const lgTexte = v => v == null ? "" : String(v).replace(".", ",");
+const lgManque = (o, l) => o === "cours" ? (!l.prenom || l.montant == null) : (!l.client || l.taux == null || l.paye == null);
+const lgOrigine = (o, id) => (lgP[o].find(x => String(x.ligne) === String(id)) || {});
+/* Ce que la case affiche quand rien n'a été changé. Une case « auto » est vide : son montant calculé est écrit en gris dedans. */
+function lgValeurInitiale(l, c, type) {
+  if (type === "auto") return l[c + "_auto"] ? "" : lgTexte(l[c]);
+  if (type === "ok" || type === "oui") return !!l[c];
+  return type === "num" ? lgTexte(l[c]) : (l[c] == null ? "" : String(l[c]));
+}
+function lgCase(o, l, id, [c, titre, type, liste]) {
+  if (type === "ro") return `<td class="lg-ro" data-ro="${c}">${esc(l[c] || "")}</td>`;
+  if (type === "euro") return `<td class="lg-ro n">${l[c] == null ? "" : suEuros(l[c])}</td>`;
+  const cle = lgCle(o, id, c), change = cle in lgModifs, v = change ? lgModifs[cle] : lgValeurInitiale(l, c, type);
+  const vide = (c === "prenom" || c === "client" || (o === "cours" && c === "montant" && l.montant == null) || (o === "services" && (c === "taux" || c === "paye") && l[c] == null)) && !v;
+  const classe = `${change ? "lg-modif" : ""} ${vide && String(id)[0] !== "n" ? "lg-manque" : ""}`;
+  const attr = `data-c="${c}" data-type="${type}" aria-label="${esc(titre)}"`;
+  if (type === "ok" || type === "oui") return `<td class="lg-coche ${classe}"><input type="checkbox" ${attr} ${v ? "checked" : ""}></td>`;
+  if (type === "date") return `<td class="${classe}"><input class="lg-c w-date" type="date" ${attr} value="${esc(v)}"></td>`;
+  if (type === "liste") return `<td class="${classe}"><input class="lg-c w-txt" type="text" list="${liste}" ${attr} value="${esc(v)}" autocomplete="off"></td>`;
+  if (type === "num" || type === "auto") return `<td class="${classe}"><input class="lg-c w-num" type="text" inputmode="decimal" ${attr} value="${esc(v)}" ${type === "auto" ? `placeholder="${esc(lgTexte(l[c]) || "auto")}"` : ""}></td>`;
+  return `<td class="${classe}"><input class="lg-c ${type === "long" ? "w-long" : "w-txt"}" type="text" ${attr} value="${esc(v)}" title="${esc(v)}"></td>`;
+}
+function lgRangee(o, l, id) {
+  const nouvelle = String(id)[0] === "n";
+  return `<tr data-l="${esc(id)}" class="${nouvelle ? "lg-nouvelle" : ""}"><th scope="row" class="lg-num">${nouvelle ? `<button class="btn flat stop" data-lg-retirer="${esc(id)}" aria-label="Retirer cette nouvelle ligne" title="Retirer cette nouvelle ligne">${ico("croix")}</button>` : l.ligne}</th>${LG_COLONNES[o].map(k => lgCase(o, l, id, k)).join("")}</tr>`;
+}
+function lgDessiner() {
+  const z = document.getElementById("lg-zone"); if (!z) return;
+  const o = lgOnglet, mot = norm(lgCherche);
+  const toutes = lgP[o].filter(l => (!lgMois || l.mois === lgMois) && (!lgAFaire || lgManque(o, l)) && (!mot || norm("ligne " + l.ligne + " " + Object.values(l).join(" ")).includes(mot)));
+  const nouvelles = lgNouvelles[o];
+  z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" class="${k[2] === "euro" ? "n" : ""}">${k[1]}</th>`).join("")}</tr></thead>
+    <tbody>${nouvelles.map(id => lgRangee(o, {}, id)).join("")}${toutes.map(l => lgRangee(o, l, l.ligne)).join("")}</tbody></table>
+    ${!toutes.length && !nouvelles.length ? `<p class="muted" style="padding:14px">Aucune ligne avec ces filtres.</p>` : ""}</div><p class="muted small" style="margin-top:6px">${toutes.length} ligne${toutes.length > 1 ? "s" : ""}, de la plus récente à la plus ancienne.</p>`;
+  /* Après un nouveau dessin : le client et le montant d'un élève changé, sans toucher à ce qui a été tapé */
+  z.querySelectorAll("tr[data-l]").forEach(tr => { if (lgCle(o, tr.dataset.l, "prenom") in lgModifs) lgSuiteCours(tr, "prenom", true); });
+  lgBarre();
+}
+function lgBarre() {
+  const b = document.getElementById("lg-barre"); if (!b) return;
+  const n = lgChangements().length;
+  b.hidden = !n;
+  b.querySelector("b").textContent = n + (n > 1 ? " lignes à enregistrer" : " ligne à enregistrer");
+  b.querySelector("#lg-enregistrer").disabled = lgEnvoi;
+  b.querySelector("#lg-enregistrer").textContent = lgEnvoi ? "Enregistrement…" : "Enregistrer dans l'Excel";
+}
+function lgLireCase(i) {
+  if (i.type === "checkbox") return i.checked;
+  return i.value.trim();
+}
+function lgNoter(tr, i) {
+  const o = lgOnglet, id = tr.dataset.l, c = i.dataset.c, cle = lgCle(o, id, c), v = lgLireCase(i), nouvelle = id[0] === "n";
+  const initial = nouvelle ? (i.type === "checkbox" ? false : "") : lgValeurInitiale(lgOrigine(o, id), c, i.dataset.type);
+  if (v === initial) delete lgModifs[cle]; else lgModifs[cle] = v;
+  i.closest("td").classList.toggle("lg-modif", cle in lgModifs);
+}
+/* Un cours : l'élève choisi donne son client, et ses heures × son taux donnent le montant quand ce montant avait été tapé (sinon l'Excel le calcule) */
+function lgSuiteCours(tr, c, apercu) {
+  if (lgOnglet !== "cours" || (c !== "prenom" && c !== "heures")) return;
+  const champ = n => tr.querySelector(`[data-c="${n}"]`), prenom = norm(champ("prenom").value);
+  const e = lgP.listes.eleves.find(x => norm(x.prenom) === prenom);
+  const ro = n => tr.querySelector(`[data-ro="${n}"]`);
+  ro("client").textContent = e ? e.client : ""; ro("entite").textContent = e ? e.entite : "";
+  const h = parseFloat(champ("heures").value.replace(",", ".")), m = champ("montant");
+  if (e && e.taux != null && h > 0) {
+    const calcule = Math.round(h * e.taux * 100) / 100;
+    if (m.value === "") m.placeholder = lgTexte(calcule);
+    else if (!apercu) { m.value = lgTexte(calcule); lgNoter(tr, m); }
+  }
+}
+function lgChangements() {
+  const parLigne = {};
+  for (const [cle, v] of Object.entries(lgModifs)) {
+    const [o, id, c] = cle.split("|"); const k = o + "|" + id;
+    (parLigne[k] = parLigne[k] || { onglet: o, ligne: id[0] === "n" ? null : Number(id), valeurs: {} }).valeurs[c] = v === true ? (c === "statut" ? "ok" : "Oui") : v === false ? "" : v;
+  }
+  return Object.values(parLigne);
+}
+function lgAvertir(chg) {
+  const argent = ["date", "prenom", "client", "activite", "heures", "acompte", "montant", "taux"];
+  const facturee = x => x.ligne && /\d/.test(lgOrigine(x.onglet, x.ligne).facture || "");   // « à voir » n'est pas une facture
+  const fact = chg.filter(x => facturee(x) && argent.some(c => c in x.valeurs));
+  const videes = chg.filter(x => facturee(x) && x.valeurs.facture === "");
+  const m = [];
+  if (fact.length) m.push(`${fact.length} ligne${fact.length > 1 ? "s" : ""} déjà facturée${fact.length > 1 ? "s" : ""} : l'Excel change, mais pas la facture dans VosFactures.`);
+  if (videes.length) m.push(`${videes.length} numéro${videes.length > 1 ? "s" : ""} de facture retiré${videes.length > 1 ? "s" : ""} : ces lignes pourront être facturées une seconde fois.`);
+  return m;
+}
+async function lgEnregistrer() {
+  if (lgEnvoi || !lgNb()) return;
+  const chg = lgChangements();
+  for (const o of ["cours", "services"]) for (const id of lgNouvelles[o]) if (!lgModifs[lgCle(o, id, "date")]) return toast("Une nouvelle ligne a besoin d'une date.");
+  const msg = lgAvertir(chg);
+  if (msg.length && !confirm(msg.join("\n") + "\n\nEnregistrer quand même ?")) return;
+  lgEnvoi = true; lgBarre();
+  const zoneMsg = document.getElementById("lg-msg"); zoneMsg.innerHTML = "";
+  try {
+    lgP = await pc("/lignes", { version: lgP.version, changements: chg }, 90000);
+    lgModifs = {}; lgNouvelles = { cours: [], services: [] };
+    suiviP = null; chargerSuiviPc().catch(() => {});
+    toast("Enregistré dans l'Excel. Une copie de sécurité a été faite avant.");
+    lgEnvoi = false; lgEntete(); lgDessiner();
+  } catch (e) {
+    lgEnvoi = false; lgBarre();
+    zoneMsg.innerHTML = `<div class="card lg-erreur"><b>${ico("alerte")} Pas enregistré.</b> ${esc(e.message || e)} <button class="btn" id="lg-relire" type="button">Relire l'Excel</button></div>`;
+  }
+}
+function lgEntete() {
+  const e = document.getElementById("lg-entete"); if (!e) return;
+  const o = lgOnglet, moisDispos = [...new Set(lgP[o].map(l => l.mois).filter(Boolean))].sort((a, b) => (b.slice(3) + b.slice(0, 2)).localeCompare(a.slice(3) + a.slice(0, 2)));
+  if (lgMois && !moisDispos.includes(lgMois)) lgMois = "";
+  const nb = lgP[o].filter(l => lgManque(o, l)).length;
+  e.innerHTML = `<div class="chips" id="lg-onglets">${Object.entries(LG_ONGLETS).map(([k, t]) => `<button class="chip" data-lg-o="${k}" aria-pressed="${k === o}">${t} (${lgP[k].length})</button>`).join("")}</div>
+    <div class="row lg-filtres"><select id="lg-mois" aria-label="Mois de facturation"><option value="">Tous les mois</option>${moisDispos.map(m => `<option ${m === lgMois ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>
+      <input id="lg-cherche" type="search" placeholder="Chercher un nom, une note, un n° de ligne…" value="${esc(lgCherche)}">
+      <button class="chip" id="lg-afaire" aria-pressed="${lgAFaire}">Incomplètes (${nb})</button>
+      <span style="flex:1"></span><button class="btn" id="lg-ajouter" type="button">${ico("plus")} Nouvelle ligne</button></div>`;
+}
+async function vueLignes() {
+  const c = document.getElementById("contenu"); c.classList.add("large");
+  const titre = `<div class="row" style="justify-content:space-between"><h1>Lignes Excel ${aide("Les lignes des onglets SAISIE COURS et SAISIE SERVICES du TABLEAU DE BORD. Clique dans une case, change-la, puis Enregistrer dans l'Excel. Une copie de sécurité est faite avant chaque enregistrement. Une case écrite en gris est calculée par l'Excel : y taper un nombre le remplace, la vider remet le calcul.")}</h1><span id="lg-haut" class="row"></span></div>`;
+  try { lgP = await pc("/lignes", null, 30000); }
+  catch (e) {
+    if (SUR_TELEPHONE) return contenu(`${titre}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : ces lignes ne s'ouvrent et ne se modifient que depuis le PC.</p>`);
+    return contenu(`${titre}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour voir et modifier les lignes.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
+  }
+  const el = contenu(`${titre}<div id="lg-entete"></div><div id="lg-msg"></div>
+    <datalist id="lg-eleves">${lgP.listes.eleves.map(x => `<option value="${esc(x.prenom)}">${esc(x.client)}</option>`).join("")}</datalist>
+    <datalist id="lg-clients">${lgP.listes.clients.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+    <datalist id="lg-intervenants">${lgP.listes.intervenants.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+    <datalist id="lg-zones">${lgP.listes.zones.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+    <datalist id="lg-activites">${lgP.listes.activites.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+    <div id="lg-zone"></div>
+    <div class="lg-barre" id="lg-barre" hidden><b></b><span class="row"><button class="btn flat" id="lg-annuler" type="button">Annuler</button><button class="btn primary" id="lg-enregistrer" type="button">Enregistrer dans l'Excel</button></span></div>`);
+  if (lgP.chemin) document.getElementById("lg-haut").innerHTML = `<button class="btn flat" data-pc="${esc(lgP.chemin)}">Ouvrir l'Excel</button>`;
+  lgEntete(); lgDessiner();
+  el.oninput = e => {
+    const i = e.target;
+    if (i.id === "lg-cherche") { lgCherche = i.value; return lgDessiner(); }
+    const tr = i.closest && i.closest("tr[data-l]");
+    if (!tr || !i.dataset.c) return;
+    lgNoter(tr, i); lgSuiteCours(tr, i.dataset.c); lgBarre();
+  };
+  el.onchange = e => {
+    if (e.target.id === "lg-mois") { lgMois = e.target.value; lgDessiner(); }
+  };
+  el.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.lgO) { lgOnglet = b.dataset.lgO; lgMois = ""; lgEntete(); return lgDessiner(); }
+    if (b.id === "lg-afaire") { lgAFaire = !lgAFaire; b.setAttribute("aria-pressed", lgAFaire); return lgDessiner(); }
+    if (b.id === "lg-ajouter") {
+      const id = "n" + (++lgCompte); lgNouvelles[lgOnglet].unshift(id); lgModifs[lgCle(lgOnglet, id, "date")] = ymd(new Date());
+      lgDessiner(); document.querySelector(`tr[data-l="${id}"] [data-c="${lgOnglet === "cours" ? "prenom" : "activite"}"]`).focus(); return;
+    }
+    if (b.dataset.lgRetirer) {
+      const id = b.dataset.lgRetirer; lgNouvelles[lgOnglet] = lgNouvelles[lgOnglet].filter(x => x !== id);
+      Object.keys(lgModifs).filter(k => k.startsWith(lgOnglet + "|" + id + "|")).forEach(k => delete lgModifs[k]); return lgDessiner();
+    }
+    if (b.id === "lg-annuler") { lgModifs = {}; lgNouvelles = { cours: [], services: [] }; document.getElementById("lg-msg").innerHTML = ""; return lgDessiner(); }
+    if (b.id === "lg-enregistrer") return lgEnregistrer();
+    if (b.id === "lg-relire") { document.getElementById("lg-msg").innerHTML = ""; pc("/lignes", null, 30000).then(r => { lgP = r; lgEntete(); lgDessiner(); toast("Excel relu : tes changements restent à enregistrer"); }).catch(souci); }
+  };
+}
+addEventListener("beforeunload", e => { if (lgNb()) { e.preventDefault(); e.returnValue = ""; } });
 
 /* ===================== Aujourd'hui : une liste, une action par ligne ===================== */
 let jourDernier = null, nbAFaire = null;   // la dernière ligne marquée faite, pour pouvoir annuler ; le nombre affiché sur le menu
