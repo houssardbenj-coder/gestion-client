@@ -507,6 +507,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .ms-b{max-width:80%;padding:9px 12px;border-radius:14px;background:var(--bg);border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere;align-self:flex-start}
 .ms-b.moi{align-self:flex-end;background:var(--accent-soft);border-color:transparent}
 .ms-b small{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+.ms-b small.ms-lu{margin-top:1px;color:var(--ink)}
 .ms-vide{margin:auto;text-align:center;color:var(--muted)}
 .ms-form{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
 .ms-form textarea{flex:1;min-width:0;resize:vertical}
@@ -962,14 +963,20 @@ async function vueMessages() {
     <form class="ms-form" id="ms-form"><textarea id="ms-texte" rows="2" maxlength="4000" required placeholder="Écrire à OIKOS…" aria-label="Message"></textarea><button class="btn primary" type="submit">Envoyer</button></form>`);
   const fil = document.getElementById("ms-fil"), zone = document.getElementById("ms-texte");
   const heure = d => new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const dessiner = () => {
-    fil.innerHTML = l.map(m => `<div class="ms-b ${m.de_gerant ? "" : "moi"}">${esc(m.texte)}<small>${heure(m.cree_le)}${!m.de_gerant && m.lu_le ? " · lu" : ""}</small></div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.</p>`;
-    fil.scrollTop = fil.scrollHeight;
+  const dessiner = (descendre) => {
+    /* Chacun sa marque : le message envoyé dit si OIKOS l'a ouvert, le message reçu dit que tu l'as ouvert */
+    const marque = m => m.lu_le ? `<small class="ms-lu">${ico("ok")} Lu par ${m.de_gerant ? "toi" : "OIKOS"} le ${heure(m.lu_le)}</small>` : m.de_gerant ? "" : `<small>Pas encore lu</small>`;
+    const premier = !fil.children.length, enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 60, garde = fil.scrollTop;
+    fil.innerHTML = l.map(m => `<div class="ms-b ${m.de_gerant ? "" : "moi"}">${esc(m.texte)}<small>${heure(m.cree_le)}</small>${marque(m)}</div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.</p>`;
+    fil.scrollTop = !premier && !enBas && !descendre ? garde : fil.scrollHeight;
   };
   const marquerLu = async () => {
-    if (!l.some(m => m.de_gerant && !m.lu_le)) return;
-    const { error } = await sb.from("messages").update({ lu_le: new Date().toISOString() }).eq("intervenante_id", moi.id).eq("de_gerant", true).is("lu_le", null);
-    if (!error) majBadgeMessages();
+    if (document.hidden || !l.some(m => m.de_gerant && !m.lu_le)) return;   // appli cachée : personne ne lit encore
+    const { data, error } = await sb.from("messages").update({ lu_le: new Date().toISOString() }).eq("intervenante_id", moi.id).eq("de_gerant", true).is("lu_le", null).select("id,lu_le");
+    if (error) return;
+    (data || []).forEach(x => { const m = l.find(y => y.id === x.id); if (m) m.lu_le = x.lu_le; });
+    if (document.getElementById("ms-fil") === fil) dessiner();
+    majBadgeMessages();
   };
   dessiner(); marquerLu();
   document.getElementById("ms-form").onsubmit = async e => {
@@ -978,14 +985,14 @@ async function vueMessages() {
     const { error } = await sb.from("messages").insert({ texte });
     if (b) b.disabled = false;
     if (error) return souci(error);
-    zone.value = ""; vibre(5); l = await charger(); dessiner();
+    zone.value = ""; vibre(5); l = await charger(); dessiner(true);
   };
   msMinuteur = setInterval(async () => {
     if (onglet !== "messages" || !document.getElementById("ms-fil")) return clearInterval(msMinuteur);
     if (document.hidden) return;
     try {
       const n = await charger(), signe = x => x.map(m => m.id + (m.lu_le ? "l" : "")).join();
-      if (signe(n) === signe(l)) return;
+      if (signe(n) === signe(l)) return marquerLu();
       l = n; dessiner(); marquerLu();
     } catch (e) {}
   }, 15000);
