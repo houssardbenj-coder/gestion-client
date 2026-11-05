@@ -416,11 +416,17 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .ms-pers[aria-current="true"]{box-shadow:inset 4px 0 0 var(--accent);border-radius:4px 10px 10px 4px}
 /* Chiffres : un filet de couleur par nature de montant */
 .su-chiffres .card{border-top:4px solid var(--accent)}
-.su-chiffres .card:nth-child(2){border-top-color:var(--warn-vif)}
-.su-chiffres .card:nth-child(n+3){border-top-color:var(--go)}
+.su-chiffres .card:nth-child(4){border-top-color:var(--warn-vif)}
+.su-chiffres .card:nth-child(5){border-top-color:var(--go)}
 .su-chiffres b{color:var(--accent-fort)}
 .su-table tr.total td{background:var(--accent-soft);color:var(--accent-fort)}
 .voile{background:rgb(20 22 14 / .6)}
+/* Le nom est un logo, pas un bouton : deux lignes, un trait qui le sépare du menu */
+.marque-tete{cursor:default;user-select:none;padding-right:18px;border-right:1px solid var(--line)}
+.marque-mots{line-height:1.1}
+.marque-mots small{display:block;margin-top:2px;font-size:11px;font-weight:400;letter-spacing:.06em;color:var(--muted)}
+@media (max-width:980px){.marque-tete{border-right:0;padding-right:0}}
+.su-note{white-space:normal;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
@@ -583,7 +589,7 @@ const groupeDe = o => MENU.find(m => m.pages.includes(o));
 const nomPage = o => (ONGLETS.find(x => x[0] === o) || [])[1] || "";
 async function afficher(o) {
   if (o) onglet = o;
-  app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}OIKOS<span>Pilotage</span></div>
+  app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}<div class="marque-mots">OIKOS<small>Pilotage</small></div></div>
     <nav class="onglets menu-haut">${MENU.map(m => `<button data-o="${m.pages[0]}" ${m === groupeDe(onglet) ? 'aria-current="page"' : ""}>${m.t}${m.bulle ? `<span id="${m.bulle}"></span>` : ""}</button>`).join("")}</nav>
     <button class="cherche-btn" id="cherche-ouvrir" type="button">${ico("loupe")}<span>Client, tâche, action…</span><kbd>Ctrl K</kbd></button>
     <span class="haut-droite"><button class="btn rail-ouvrir" id="rail-ouvrir">Administratif et tâches</button><button class="btn flat" data-o="papiers" aria-label="Réglages" title="Réglages">${ico("reglages")}</button></span></div></header>
@@ -749,7 +755,7 @@ async function chargerSuiviPc() {
   const res = await pc("/suivi", null, 60000);
   const change = !suiviP || suiviP.lu_le !== res.lu_le;
   suiviP = res;
-  copierDansBase("suivi", res.fichier_modifie, res).catch(() => {});
+  copierDansBase("suivi", "2-" + res.fichier_modifie, res).catch(() => {});
   if (change && onglet === "suivi" && document.getElementById("su-page")) vueSuivi();
 }
 async function demarrerRail() {
@@ -878,7 +884,7 @@ const dateFr = d => d ? d.slice(0, 10).split("-").reverse().join("/") : "aucune"
 const heureFr = d => d ? new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "?";
 function tableControles(l, total) {
   if (!l.length) return `<p class="muted small">Rien à signaler.</p>`;
-  return `<div class="su-table"><table><thead><tr><th>Date</th><th>Client</th><th>Détail</th><th class="n">Montant TTC</th></tr></thead><tbody>${l.map(x => `<tr><td>${dateFr(x.date)}</td><td>${esc(x.qui)}</td><td>${esc(x.detail)}</td><td class="n">${x.montant == null ? "" : suEuros(x.montant)}</td></tr>`).join("")}</tbody></table></div>${total > l.length ? `<p class="muted small">Les ${l.length} plus récentes sur ${total}.</p>` : ""}`;
+  return `<div class="su-table"><table><thead><tr><th>Date</th><th>Client</th><th>Détail</th><th>Où dans l'Excel</th><th class="n">Montant TTC</th></tr></thead><tbody>${l.map(x => `<tr><td>${dateFr(x.date)}</td><td>${esc(x.qui)}</td><td>${esc(x.detail)}${x.note ? `<div class="su-note">Note : ${esc(x.note)}</div>` : ""}</td><td>${esc(x.ou || "")}</td><td class="n">${x.montant == null ? "" : suEuros(x.montant)}</td></tr>`).join("")}</tbody></table></div>${total > l.length ? `<p class="muted small">Les ${l.length} plus récentes sur ${total}.</p>` : ""}`;
 }
 async function vueSuivi() {
   let source = "";
@@ -895,17 +901,20 @@ async function vueSuivi() {
   if (!annees.includes(suAnnee)) suAnnee = annees.includes(cetteAnnee) ? cetteAnnee : annees[annees.length - 1];
   const mois = s.mois.filter(m => m.mois.endsWith(suAnnee));
   const somme = k => mois.reduce((t, m) => t + m[k], 0);
-  const ligne = (titre, v, cls) => `<tr class="${cls || ""}"><td>${titre}</td>${["cours", "menage", "jardinage", "bricolage", "ca", "cout", "benefice", "ben_oikos", "ben_be"].map(k => `<td class="n">${suEuros(v(k))}</td>`).join("")}</tr>`;
+  const aCA = mois.every(m => "ca_oikos" in m);   // une copie d'avant ne les a pas : le tiret plutôt qu'un faux zéro
+  const eu = (k, val) => /^ca_/.test(k) && !aCA ? "—" : suEuros(val);
+  const ligne = (titre, v, cls) => `<tr class="${cls || ""}"><td>${titre}</td>${["cours", "menage", "jardinage", "bricolage", "ca", "ca_oikos", "ca_be", "cout", "benefice"].map(k => `<td class="n">${eu(k, v(k))}</td>`).join("")}</tr>`;
+  const aideReste = "Le CA moins ce qui est payé aux intervenants. Ce n'est pas un bénéfice : les charges, l'URSSAF, les frais et les impôts ne sont pas déduits, et les cours n'ont aucun coût dans l'Excel.";
   const t = s.totaux;
   const el = contenu(`<div id="su-page"><div class="row" style="justify-content:space-between"><h1>Suivi Excel</h1><div class="row">
       ${pcRelie ? `<button class="btn" id="su-maj">Actualiser</button><button class="btn" data-pc="${esc(s.chemin || "")}" id="su-excel" hidden>Ouvrir l'Excel</button>` : boutonRelier()}</div></div>
     <p class="muted small" style="margin-top:4px">Excel enregistré le ${heureFr(s.fichier_modifie)}. Dernière saisie : cours ${dateFr(s.derniere.cours)}, services ${dateFr(s.derniere.services)}.${source ? ` Copie du ${heureFr(source)}, PC non relié.` : ""}</p>
     <div class="chips" id="su-annees" style="margin-top:12px">${annees.map(a => `<button class="chip" data-annee="${a}" aria-pressed="${a === suAnnee}">${a}</button>`).join("")}</div>
-    <div class="su-chiffres">${[["CA total HT", somme("ca")], ["Coût intervenants", somme("cout")], ["Bénéfice net", somme("benefice")], ["Bénéfice OIKOS", somme("ben_oikos")], ["Bénéfice Benjamin ens.", somme("ben_be")]].map(([n, v]) => `<div class="card"><span class="muted small">${n}</span><b>${suEuros(v)}</b></div>`).join("")}</div>
-    <div class="card su-table"><table><thead><tr><th>Mois ${aide("Mois de facturation, comme dans l'Excel : celui qui suit la prestation, sauf s'il a été tapé à la main.")}</th><th class="n">Cours</th><th class="n">Ménage</th><th class="n">Jardinage</th><th class="n">Bricolage</th><th class="n">CA total</th><th class="n">Coût interv.</th><th class="n">Bénéfice</th><th class="n">Bén. OIKOS</th><th class="n">Bén. Benjamin</th></tr></thead>
+    <div class="su-chiffres">${[["CA total HT", "ca"], ["CA OIKOS HT", "ca_oikos"], ["CA Benjamin ens. HT", "ca_be"], ["Coût intervenants", "cout"], ["Reste après interv." + aide(aideReste), "benefice"]].map(([n, k]) => `<div class="card"><span class="muted small">${n}</span><b>${eu(k, somme(k))}</b></div>`).join("")}</div>
+    <div class="card su-table"><table><thead><tr><th>Mois ${aide("Mois de facturation, comme dans l'Excel : celui qui suit la prestation, sauf s'il a été tapé à la main.")}</th><th class="n">Cours</th><th class="n">Ménage</th><th class="n">Jardinage</th><th class="n">Bricolage</th><th class="n">CA total</th><th class="n">CA OIKOS</th><th class="n">CA Benjamin</th><th class="n">Coût interv.</th><th class="n">Reste ${aide(aideReste)}</th></tr></thead>
       <tbody>${mois.map(m => ligne(m.mois, k => m[k])).join("")}${ligne("Total " + suAnnee, somme, "total")}</tbody></table></div>
     <h2>À contrôler</h2>
-    <details class="card" style="margin-bottom:8px"><summary>Lignes à compléter (${t.sans_montant})</summary>${tableControles(s.sans_montant, t.sans_montant)}</details>
+    <details class="card" style="margin-bottom:8px"><summary>Lignes de l'Excel où il manque une information (${t.sans_montant}) ${aide("Il manque par exemple le prénom de l'élève ou un taux : le montant ou le coût ne peut pas être calculé. Ces lignes ne comptent pas, ou pas entièrement, dans les chiffres du haut. À corriger dans l'Excel, à l'endroit indiqué.")}</summary>${tableControles(s.sans_montant, t.sans_montant)}</details>
     <details class="card" style="margin-bottom:8px"><summary>Paiement non pointé (${t.non_pointees}, soit ${suEuros(t.non_pointees_ttc)})</summary>${tableControles(s.non_pointees, t.non_pointees)}</details>
     <details class="card"><summary>Sans facture (${t.sans_facture})</summary>${tableControles(s.sans_facture, t.sans_facture)}</details></div>`);
   el.querySelector("#su-annees").onclick = e => { const b = e.target.closest("[data-annee]"); if (b) { suAnnee = b.dataset.annee; vueSuivi(); } };
