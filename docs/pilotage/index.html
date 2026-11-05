@@ -286,6 +286,31 @@ input[type=date],input[type=time],input[type=datetime-local],input[type=search]{
 .volet a{color:var(--accent);font-weight:600}
 .lien-pc{display:inline;padding:0;border:0;background:none;color:var(--accent);font-weight:600;text-decoration:underline;cursor:pointer;text-align:left;overflow-wrap:anywhere}
 .lien-pc:disabled{color:var(--muted);cursor:not-allowed}
+.volet-tete .etat{display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:var(--line);margin-right:8px;vertical-align:middle}
+.volet-pc{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:14px}
+.volet-pc .btn{margin-left:auto}
+.actions{display:flex;flex-direction:column;gap:6px}
+.actions h3{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--muted)}
+.actions-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+.act,.volet a.act{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:500;line-height:1.25;text-align:left;text-decoration:none;cursor:pointer;overflow-wrap:anywhere}
+.act:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+.act>span{flex:1;min-width:0}
+.act .ico{flex:none}
+.act.prog .ico,.proc-prog .ico{fill:currentColor}
+.act.prog{min-height:54px;background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:15.5px;font-weight:600}
+.act.prog:hover:not(:disabled){background:var(--accent-fort);border-color:var(--accent-fort);color:var(--accent-ink)}
+.act.prog b{flex:none;padding:4px 12px;border-radius:999px;background:var(--accent-ink);color:var(--accent);font-size:13px;font-weight:700}
+.act:disabled{opacity:.45;cursor:not-allowed}
+.volet-expl{border-top:1px solid var(--line);padding-top:8px;font-size:14px}
+.volet-expl>summary{cursor:pointer;min-height:36px;display:flex;align-items:center;gap:6px;font-weight:600;color:var(--muted);list-style:none}
+.volet-expl>summary::before{content:"+";width:14px}
+.volet-expl[open]>summary::before{content:"−"}
+.volet-expl>summary::-webkit-details-marker{display:none}
+.volet-expl>*:not(summary){margin:8px 0 0}
+.proc>span:nth-child(2){flex:1;min-width:0}
+.proc-prog{flex:none;display:inline-flex;color:var(--accent)}
+.proc-prog .ico{width:14px;height:14px}
+.proc[aria-current="true"] .proc-prog{color:inherit}
 /* Menu, sous-boutons, recherche */
 .haut-droite{display:flex;align-items:center;gap:6px;margin-left:auto}
 nav.menu-haut{flex:none}
@@ -476,7 +501,7 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 <script>
 /* ===================== Réglages ===================== */
 /* Icônes dessinées (trait fin) à la place des émojis, comme dans l'appli des intervenants */
-const ICONES = { reglages: "M4 7h10M18 7h2M4 17h2M10 17h10M16 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 14.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", ouvert: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 5.6-1.5", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", portable: "M7 3h10v18H7zM11 18h2", mission: "M4 8h16v11H4zM9 8V5h6v3", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", rond: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", etincelle: "M12 3l2 6.5L20.5 12 14 14.5 12 21l-2-6.5L3.5 12 10 9.5zM19 3v4M17 5h4", recu: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6", drapeau: "M6 21V4h12l-2 4 2 4H6", balance: "M12 4v16M8 20h8M5 7h14M5 7l-2.5 7a3 3 0 0 0 5 0zM19 7l-2.5 7a3 3 0 0 0 5 0z", loupe: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4", goutte: "M12 3s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.500 10 12 3 12 3z", feuille: "M5 19C5 10 11 5 20 4c0 9-5 15-13 15zM5 21c2-5 5-8 9-10", corbeille: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5", trombone: "M20 11l-8.5 8.500a5 5 0 0 1-7-7L13 4a3.300 3.300 0 0 1 4.700 4.700L9 17.500a1.600 1.600 0 0 1-2.300-2.300l8-8", outil: "M14.500 6.500a4 4 0 0 1 5-1.500l-3 3 2 2 3-3a4 4 0 0 1-5.500 5L8 20.500 5.500 18l8.500-7.500a4 4 0 0 1 .5-4z", oeil: "M2.500 12S6 5.500 12 5.500 21.500 12 21.500 12 18 18.500 12 18.500 2.500 12 2.500 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", chrono: "M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.500 1.500M10 2.500h4", croix: "M6 6l12 12M18 6 6 18", retour: "M9 7 4 12l5 5M4 12h11a5 5 0 0 1 5 5" };
+const ICONES = { lancer: "M8 5l11 7-11 7z", site: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6", reglages: "M4 7h10M18 7h2M4 17h2M10 17h10M16 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 14.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", ouvert: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 5.6-1.5", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", portable: "M7 3h10v18H7zM11 18h2", mission: "M4 8h16v11H4zM9 8V5h6v3", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", rond: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", etincelle: "M12 3l2 6.5L20.5 12 14 14.5 12 21l-2-6.5L3.5 12 10 9.5zM19 3v4M17 5h4", recu: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6", drapeau: "M6 21V4h12l-2 4 2 4H6", balance: "M12 4v16M8 20h8M5 7h14M5 7l-2.5 7a3 3 0 0 0 5 0zM19 7l-2.5 7a3 3 0 0 0 5 0z", loupe: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4", goutte: "M12 3s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.500 10 12 3 12 3z", feuille: "M5 19C5 10 11 5 20 4c0 9-5 15-13 15zM5 21c2-5 5-8 9-10", corbeille: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5", trombone: "M20 11l-8.5 8.500a5 5 0 0 1-7-7L13 4a3.300 3.300 0 0 1 4.700 4.700L9 17.500a1.600 1.600 0 0 1-2.300-2.300l8-8", outil: "M14.500 6.500a4 4 0 0 1 5-1.500l-3 3 2 2 3-3a4 4 0 0 1-5.500 5L8 20.500 5.500 18l8.500-7.500a4 4 0 0 1 .5-4z", oeil: "M2.500 12S6 5.500 12 5.500 21.500 12 21.500 12 18 18.500 12 18.500 2.500 12 2.500 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", chrono: "M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.500 1.500M10 2.500h4", croix: "M6 6l12 12M18 6 6 18", retour: "M9 7 4 12l5 5M4 12h11a5 5 0 0 1 5 5" };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[n]}"/></svg>`;
 const MONO = `<svg class="mono" viewBox="0 0 30 28" aria-hidden="true"><path d="M17 3 28 26H6Z"/><path d="M9 2 28 21 2 26Z"/></svg>`;
 const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
@@ -816,18 +841,38 @@ async function demarrerRail() {
 async function verifierPc() {
   const avant = pcRelie;
   try { await chargerDuPc(); } catch (e) { pcRelie = false; }
-  if (avant !== pcRelie) dessinerRail();
+  if (avant !== pcRelie) { dessinerRail(); if (voletId) ouvrirVolet(voletId); }
 }
 function relierPc() {
   let essais = 0;
   const t = setInterval(async () => {
     if (++essais > 15) { clearInterval(t); toast("Le PC ne répond pas. Le bouton est-il installé sur ce PC ?"); return; }
-    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); } catch (e) {}
+    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); if (voletId) ouvrirVolet(voletId); } catch (e) {}
   }, 2000);
 }
 const boutonRelier = () => SUR_TELEPHONE ? "" : `<a class="btn" href="oikos-carte:demarrer" data-relier>Relier le PC</a>${aide("Allume le programme de la carte sur ce PC. Une seule installation par PC : « Installer le bouton du PC » dans le dossier Plateforme intervenantes, raccourci.")}`;
 const etatDe = n => n.etat ? `<span class="etat ${esc(n.etat)}" title="${esc(ETATS_CARTE[n.etat] || "")}"></span>` : `<span class="etat" style="background:transparent"></span>`;
-const boutonProc = n => `<button class="proc" data-proc="${esc(n.id)}" aria-current="${voletId === n.id}">${etatDe(n)}<span>${esc(sansEmoji(n.t))}</span></button>`;
+/* Les liens d'une tâche, triés pour en faire des boutons : ce qui se lance, ce qui s'ouvre sur le PC, les sites.
+   Seulement « liens » et « etapes » : le PC n'ouvre rien d'autre (cibles_pilote dans serveur.py) */
+const EXT_PROGRAMME = /\.(lnk|bat|cmd|exe|msi|scr|com|hta|jar|reg|url|xlsm|docm|pptm|apk)$/i;
+function actionsDe(n) {
+  const a = { programmes: [], fichiers: [], sites: [] }, vus = new Set();
+  const motif = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s)]+)/g;
+  for (const t of [...(n.liens || []), ...(n.etapes || [])]) {
+    for (const m of String(t ?? "").matchAll(motif)) {
+      const cible = m[2] || m[3], cle = cible.replace(/\\/g, "/").toLowerCase();
+      if (vus.has(cle)) continue;
+      vus.add(cle);
+      const web = /^https?:\/\//i.test(cible), prog = !web && EXT_PROGRAMME.test(cible);
+      let nom = sansEmoji(m[1] || "").replace(/\s*\(bouton\)\s*$/i, "");
+      if (!nom) { try { nom = new URL(cible).hostname.replace(/^www\./, ""); } catch (e) { nom = cible; } }
+      if (prog) nom = nom.replace(/^Lancer\s+/i, "");
+      (web ? a.sites : prog ? a.programmes : a.fichiers).push({ nom, cible, dossier: !web && !/\.[a-z0-9]{1,5}$/i.test(cible) });
+    }
+  }
+  return a;
+}
+const boutonProc = n => `<button class="proc" data-proc="${esc(n.id)}" aria-current="${voletId === n.id}">${etatDe(n)}<span>${esc(sansEmoji(n.t))}</span>${actionsDe(n).programmes.length ? `<span class="proc-prog" title="Un programme à lancer">${ico("lancer")}</span>` : ""}</button>`;
 const utile = n => !!((n.enfants || []).length || (n.etapes || []).length || (n.liens || []).length || n.note);
 /* Un groupe sans contenu propre se déplie dans la colonne ; le reste s'ouvre dans le volet */
 /* Fermés par défaut, sauf les groupes à l'intérieur ; ce pilote retient ce que tu as laissé ouvert */
@@ -871,18 +916,27 @@ function texteCarte(t, id) {
 function ouvrirVolet(id) {
   const x = carteIndex[id];
   if (!x) return;
+  const dejaOuvert = voletId === id && !!document.querySelector("#volet .volet-expl[open]");
   voletId = id;
   const n = x.n, parent = x.parent && carteIndex[x.parent] ? carteIndex[x.parent].n : null;
   let v = document.getElementById("volet");
   if (!v) { v = document.createElement("aside"); v.id = "volet"; v.className = "volet"; v.setAttribute("aria-label", "Détail de la tâche"); document.body.append(v); }
-  v.innerHTML = `<div class="volet-tete"><div>${parent ? `<button class="btn flat small" data-proc="${esc(parent.id)}" style="padding:0;margin-bottom:4px">‹ ${esc(sansEmoji(parent.t))}</button>` : ""}<h2 style="margin:0">${esc(sansEmoji(n.t))}</h2></div><button class="btn flat" data-fermer-volet>Fermer</button></div>
-    ${n.etat ? `<div><span class="tag">${esc(ETATS_CARTE[n.etat] || n.etat)}</span>${n.minutes ? ` <span class="tag off">${esc(n.minutes)} min</span>` : ""}</div>` : ""}
-    ${n.quoi ? `<p>${texteCarte(n.quoi, id)}</p>` : ""}
-    ${(n.etapes || []).length ? `<ol>${n.etapes.map(e => `<li>${texteCarte(e, id)}</li>`).join("")}</ol>` : ""}
-    ${(n.liens || []).length ? `<div><h3 style="margin:0 0 4px" class="small muted">Logiciels, sites, fichiers</h3><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">${n.liens.map(e => `<span>${texteCarte(e, id)}</span>`).join("")}</div></div>` : ""}
+  const a = actionsDe(n), surPc = a.programmes.length + a.fichiers.length > 0, nb = (n.etapes || []).length;
+  const bloque = pcRelie ? "" : "disabled";
+  const prog = p => `<button class="act prog" data-pc="${esc(p.cible)}" data-nom="${esc(p.nom)}" title="${esc(p.cible)}" ${bloque}>${ico("lancer")}<span>${esc(p.nom)}</span><b>Lancer</b></button>`;
+  const fich = p => `<button class="act" data-pc="${esc(p.cible)}" data-nom="${esc(p.nom)}" title="${esc(p.cible)}" ${bloque}>${ico(p.dossier ? "dossier" : "doc")}<span>${esc(p.nom)}</span></button>`;
+  const site = p => `<a class="act" href="${esc(p.cible)}" target="_blank" rel="noopener noreferrer" data-web="${esc(p.cible)}" data-profil="${esc(x.profil || "")}" title="${esc(p.cible)}">${ico("site")}<span>${esc(p.nom)}</span></a>`;
+  const groupe = (titre, liste, f) => liste.length ? `<h3>${titre}</h3><div class="actions-grille">${liste.map(f).join("")}</div>` : "";
+  const rienAFaire = !surPc && !a.sites.length && !(n.enfants || []).length;
+  v.innerHTML = `<div class="volet-tete"><div>${parent ? `<button class="btn flat small" data-proc="${esc(parent.id)}" style="padding:0;margin-bottom:4px">‹ ${esc(sansEmoji(parent.t))}</button>` : ""}<h2 style="margin:0">${n.etat ? etatDe(n) : ""}${esc(sansEmoji(n.t))}${n.minutes ? ` <span class="tag off">${esc(n.minutes)} min</span>` : ""}</h2></div><button class="btn flat" data-fermer-volet>Fermer</button></div>
+    ${surPc && !pcRelie ? `<div class="volet-pc">${SUR_TELEPHONE ? "Programmes et fichiers : depuis le PC" : `PC non relié ${boutonRelier()}`}</div>` : ""}
+    ${a.programmes.length ? `<div class="actions">${a.programmes.map(prog).join("")}</div>` : ""}
+    ${a.fichiers.length || a.sites.length ? `<div class="actions">${groupe("Fichiers et dossiers", a.fichiers, fich)}${groupe("Sites", a.sites, site)}</div>` : ""}
     ${(n.enfants || []).length ? `<div class="rail-liste">${n.enfants.map(boutonProc).join("")}</div>` : ""}
-    ${n.note ? `<p class="muted small">${texteCarte(n.note, id)}</p>` : ""}
-    ${!pcRelie && !SUR_TELEPHONE ? `<p class="muted small">Pour ouvrir les fichiers et les programmes : ${boutonRelier()}</p>` : ""}`;
+    ${n.quoi || nb || n.note ? `<details class="volet-expl" ${dejaOuvert || rienAFaire ? "open" : ""}><summary>Explications${nb ? ` · ${nb} étape${nb > 1 ? "s" : ""}` : ""}</summary>
+      ${n.quoi ? `<p>${texteCarte(n.quoi, id)}</p>` : ""}
+      ${nb ? `<ol>${n.etapes.map(e => `<li>${texteCarte(e, id)}</li>`).join("")}</ol>` : ""}
+      ${n.note ? `<p class="muted small">${texteCarte(n.note, id)}</p>` : ""}</details>` : ""}`;
   v.scrollTop = 0;
   dessinerRail();
 }
@@ -910,7 +964,7 @@ document.addEventListener("click", async e => {
   const allerLigne = e.target.closest("[data-aller-ligne]");
   if (allerLigne) { const m = allerLigne.dataset.allerLigne.match(/^SAISIE (COURS|SERVICES), (ligne \d+)$/); if (m) { lgOnglet = m[1] === "COURS" ? "cours" : "services"; lgMois = ""; lgAFaire = false; lgCherche = m[2]; return afficher("lignes"); } }
   const fichier = e.target.closest("[data-pc]");
-  if (fichier) return ouvrirSurPc(fichier.dataset.pc, fichier.textContent);
+  if (fichier) return ouvrirSurPc(fichier.dataset.pc, fichier.dataset.nom || fichier.textContent);
   const web = e.target.closest("[data-web]");
   if (web && pcRelie) {   // sur le PC : le bon compte Chrome, comme dans la carte
     e.preventDefault();
