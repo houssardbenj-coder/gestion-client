@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#2E3622">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2F3722">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co http://127.0.0.1:8770; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co http://127.0.0.1:8770 https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Pilotage</title>
 <link rel="icon" href="logo-oikos.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -513,6 +513,12 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .lg-coche{text-align:center}
 .lg-coche input{width:17px;height:17px;accent-color:var(--go);vertical-align:middle}
 .lg-table td.lg-manque{background:var(--stop-soft)}
+/* Factures en pastille : numéro de facture client en olive, facture intervenant en bleu-gris, « à voir » (pas de numéro) en ocre. Au clic, la case redevient une case à écrire. */
+.lg-table th .ico{width:13px;height:13px;margin-right:2px}
+.lg-table td.lg-fact input.lg-c{border-radius:999px;padding:4px 9px;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.lg-table td.fx-faite.lg-fact-client input.lg-c:not(:focus){background:var(--accent-soft);color:var(--accent-fort);font-weight:600;border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.lg-table td.fx-faite.lg-fact-interv input.lg-c:not(:focus){background:var(--info-soft);color:var(--info);font-weight:600;border-color:color-mix(in srgb,var(--info) 35%,transparent)}
+.lg-table td.fx-voir input.lg-c:not(:focus){background:var(--warn-soft);color:var(--warn);font-weight:600;border-color:color-mix(in srgb,var(--warn-vif) 45%,transparent)}
 .lg-table td.lg-modif,.lg-table tbody tr:hover td.lg-modif{background:var(--warn-soft);box-shadow:inset 0 0 0 1.5px var(--warn-vif);border-radius:6px}
 .lg-nouvelle td{background:color-mix(in srgb,var(--go-soft) 55%,transparent)}
 .lg-barre{--accent:#C8DE85;--accent-fort:#DCEBA9;--accent-ink:#1B1D15;--accent-soft:rgb(255 255 255 / .16);position:sticky;bottom:10px;z-index:4;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding:10px 16px;background:var(--tete);color:#F7F5EE;border-radius:14px;box-shadow:0 8px 24px rgb(0 0 0 / .3)}
@@ -597,17 +603,39 @@ function fenetre(html, brancher, quandFerme) {
 
 /* ===================== Connexion (compte gérant seulement) ===================== */
 let moi = null, onglet = "jour";
+/* Après une actualisation (F5) : on revient sur la même page. Gardé pour cet onglet du navigateur seulement (sessionStorage). */
+const PAGE_CLE = "pilote-page", PLUS_TARD_CLE = "pilote-mfa-plus-tard";
+function retenirPage() { try { sessionStorage.setItem(PAGE_CLE, JSON.stringify({ onglet, sectionDevis, entreprise })); } catch (e) {} }
+function pageRetenue() {
+  try { const p = JSON.parse(sessionStorage.getItem(PAGE_CLE) || "null"); if (!p || !ONGLETS.some(x => x[0] === p.onglet)) return null;
+    if (p.sectionDevis === "ATTENTE" || p.sectionDevis === "PRESTA") sectionDevis = p.sectionDevis;
+    if (ENTREPRISES.some(([k]) => k === p.entreprise)) entreprise = p.entreprise;
+    return p.onglet; } catch (e) { return null; }
+}
+/* « Plus tard » sur la double authentification : retenu pour cet onglet, sinon chaque actualisation redemandait de l'activer */
+const plusTard = () => { try { sessionStorage.setItem(PLUS_TARD_CLE, moi ? moi.id : ""); } catch (e) {} afficher(); };
+const plusTardDejaDit = () => { try { return !!moi && sessionStorage.getItem(PLUS_TARD_CLE) === moi.id; } catch (e) { return false; } };
+const coupureReseau = e => !!e && (e.name === "AuthRetryableFetchError" || /fetch|network|r[ée]seau|timeout/i.test(e.message || ""));
+/* Pas de réseau ou base en pause : la session reste, on propose juste de réessayer (avant, cela renvoyait à l'écran de connexion) */
+function ecranReessayer(msg) {
+  app.innerHTML = `<div class="connexion card"><div class="marque"><img src="logo-oikos.png" alt=""><span><b>Oikos</b> Pilotage</span></div>
+    <p class="err">${esc(msg)}</p><p class="muted">Tu es toujours connecté : réessaie dans un instant.</p>
+    <button class="btn primary" type="button" id="reessayer">Réessayer</button><button class="btn flat" type="button" id="changer">Changer de compte</button></div>`;
+  document.getElementById("reessayer").onclick = () => demarrer();
+  document.getElementById("changer").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
+}
 async function demarrer() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) return ecranConnexion();
+  const { data: { session }, error: errSession } = await sb.auth.getSession();
+  if (!session) return coupureReseau(errSession) ? ecranReessayer("Pas de réseau : " + errSession.message) : ecranConnexion();
   const p = await sb.from("profils").select("*").eq("id", session.user.id).maybeSingle();
-  if (p.error) return ecranConnexion("Pas de réseau ou base en pause : " + p.error.message);
+  if (p.error) return ecranReessayer("Pas de réseau ou base en pause : " + p.error.message);
   if (!p.data || p.data.role !== "gerant" || !p.data.actif) { await sb.auth.signOut(); return ecranConnexion("Ce compte n'est pas le compte gérant."); }
   moi = p.data;
   const { data: niveau, error: errNiveau } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (errNiveau) return ecranConnexion("Pas de réseau : " + errNiveau.message);
-  if (niveau.currentLevel === "aal2") return afficher();
+  if (errNiveau) return ecranReessayer("Pas de réseau : " + errNiveau.message);
+  if (niveau.currentLevel === "aal2") return afficher(pageRetenue() || undefined);
   if (niveau.nextLevel === "aal2") return ecranCodeMfa();
+  if (plusTardDejaDit()) return afficher(pageRetenue() || undefined);
   ecranActiverMfa();
 }
 /* Double authentification : le code à 6 chiffres de l'appli d'authentification, après le mot de passe */
@@ -636,12 +664,12 @@ async function ecranActiverMfa(msg) {
   const liste = await sb.auth.mfa.listFactors();
   for (const f of (liste.data && liste.data.all) || []) if (f.status !== "verified") await sb.auth.mfa.unenroll({ factorId: f.id });   // essai abandonné
   const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "OIKOS Pilotage " + Date.now() });
-  if (error) { pageMfa(`<p class="err">Activation impossible : ${esc(error.message)}</p><button class="btn flat" type="button" id="mfa-sortir">Retour</button><button class="btn flat" type="button" id="mfa-tard">Plus tard</button>`); document.getElementById("mfa-tard").onclick = () => afficher(); return; }
+  if (error) { pageMfa(`<p class="err">Activation impossible : ${esc(error.message)}</p><button class="btn flat" type="button" id="mfa-sortir">Retour</button><button class="btn flat" type="button" id="mfa-tard">Plus tard</button>`); document.getElementById("mfa-tard").onclick = plusTard; return; }
   pageMfa(`<h2 style="margin:0">Protège le pilotage</h2><p class="muted">Dans ton appli d'authentification, ajoute un compte en scannant ce carré, puis entre le code affiché.</p>
     ${msg ? `<p class="err">${esc(msg)}</p>` : ""}<img src="${esc(data.totp.qr_code)}" alt="Carré à scanner" style="width:220px;height:220px;background:#fff;border-radius:12px;align-self:center">
     <details><summary>Impossible de scanner, ou garder une copie</summary><p class="muted small" style="overflow-wrap:anywhere;margin:6px 0">Clé à taper dans l'appli : <b>${esc(data.totp.secret)}</b><br>Garde-la dans ton gestionnaire de mots de passe : elle remplace le téléphone s'il est perdu.</p></details>
     ${champCode}<button class="btn primary" type="submit">Activer</button><button class="btn flat" type="button" id="mfa-tard">Plus tard</button>`);
-  document.getElementById("mfa-tard").onclick = () => afficher();
+  document.getElementById("mfa-tard").onclick = plusTard;
   document.getElementById("f").onsubmit = async ev => {
     ev.preventDefault();
     const { error: e } = await sb.auth.mfa.challengeAndVerify({ factorId: data.id, code: document.getElementById("mfa-code").value.trim() });
@@ -685,6 +713,7 @@ async function afficher(o) {
     lgModifs = {}; lgNouvelles = { cours: [], services: [] };
   }
   if (o) onglet = o;
+  retenirPage();
   document.body.classList.toggle("page-large", onglet === "lignes");
   app.innerHTML = `<header class="top"><div class="wrap"><div class="marque-tete">${MONO}<div class="marque-mots">OIKOS<small>Pilotage</small></div></div>
     <nav class="onglets menu-haut">${MENU.map(m => `<button data-o="${m.pages[0]}" ${m === groupeDe(onglet) ? 'aria-current="page"' : ""}>${m.t}${m.bulle ? `<span id="${m.bulle}"></span>` : ""}</button>`).join("")}</nav>
@@ -1214,6 +1243,9 @@ const LG_COLONNES = {
   services: [["date", "Date", "date"], ["activite", "Activité", "liste", "lg-activites"], ["client", "Client", "liste", "lg-clients"], ["intervenant", "Intervenant", "liste", "lg-intervenants"], ["zone", "Zone", "liste", "lg-zones"], ["heures", "Heures", "num"], ["taux", "Taux facturé", "auto"], ["paye", "Taux payé", "auto"], ["acompte", "Acompte", "num"], ["ttc", "TTC", "euro"], ["ht", "HT", "euro"], ["cout", "Coût", "euro"], ["reste", "Reste", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["facture_interv", "Facture interv.", "txt"], ["archiver", "Archivé", "oui"]]
 };
 let lgLarg = {};
+/* Les deux cases de facture, montrées en pastille selon ce qu'elles contiennent (aspect seulement, rien n'est écrit) */
+const LG_FACT = { facture: "client", facture_interv: "interv" };
+const lgFactEtat = v => /\d/.test(v) ? "fx-faite" : String(v || "").trim() ? "fx-voir" : "fx-vide";
 const lgNb = () => Object.keys(lgModifs).length + lgNouvelles.cours.length + lgNouvelles.services.length;
 const lgCle = (o, l, c) => o + "|" + l + "|" + c;
 const lgTexte = v => v == null ? "" : String(v).replace(".", ",");
@@ -1241,8 +1273,9 @@ function lgCase(o, l, id, [c, titre, type, liste]) {
   if (type === "date") return `<td class="${classe}"><input class="lg-c w-date" type="date" ${attr} value="${esc(v)}"></td>`;
   if (type === "liste") return `<td class="${classe}"><input class="lg-c ${c === "activite" || c === "zone" ? "w-court" : "w-nom"}" type="text" list="${liste}" ${attr} value="${esc(v)}" autocomplete="off"></td>`;
   if (type === "num" || type === "auto") return `<td class="${classe}"><input class="lg-c w-num" type="text" inputmode="decimal" ${attr} value="${esc(v)}" ${type === "auto" ? `placeholder="${esc(lgTexte(l[c]) || "auto")}"` : ""}></td>`;
-  const larg = type === "txt" && lgLarg[c] ? ` style="min-width:calc(${lgLarg[c]}ch + 10px)"` : "";
-  return `<td class="${classe}"><input class="lg-c ${type === "long" ? "w-long" : "w-txt"}" type="text" ${attr} value="${esc(v)}" title="${esc(v)}"${larg}></td>`;
+  const larg = type === "txt" && lgLarg[c] ? ` style="min-width:calc(${lgLarg[c]}ch + ${c in LG_FACT ? 22 : 10}px)"` : "";
+  const fact = c in LG_FACT ? ` lg-fact lg-fact-${LG_FACT[c]} ${lgFactEtat(v)}` : "";
+  return `<td class="${classe}${fact}"><input class="lg-c ${type === "long" ? "w-long" : "w-txt"}" type="text" ${attr} value="${esc(v)}" title="${esc(v)}"${larg}></td>`;
 }
 function lgRangee(o, l, id) {
   const nouvelle = String(id)[0] === "n";
@@ -1257,7 +1290,7 @@ function lgDessiner() {
   /* Les cases de texte court (factures) prennent la largeur de leur plus long contenu : un numéro de facture se lit en entier */
   lgLarg = {};
   for (const [c, , type] of LG_COLONNES[o]) if (type === "txt") lgLarg[c] = Math.min(40, Math.max(0, ...toutes.map(l => String(l[c] ?? "").length)));
-  z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" data-col="${k[0]}" class="${k[2] === "euro" ? "n" : ""}">${k[1]}</th>`).join("")}</tr></thead>
+  z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" data-col="${k[0]}" class="${k[2] === "euro" ? "n" : ""}">${k[0] in LG_FACT ? ico("recu") : ""}${k[1]}</th>`).join("")}</tr></thead>
     <tbody>${nouvelles.map(id => lgRangee(o, {}, id)).join("")}${toutes.map(l => lgRangee(o, l, l.ligne)).join("")}</tbody></table>
     ${!toutes.length && !nouvelles.length ? `<p class="muted" style="padding:14px">Aucune ligne avec ces filtres.</p>` : ""}</div><p class="muted small" style="margin-top:6px">${toutes.length} ligne${toutes.length > 1 ? "s" : ""}${masquees ? `, ${masquees} archivée${masquees > 1 ? "s" : ""} masquée${masquees > 1 ? "s" : ""}` : ""}, de la plus récente à la plus ancienne.</p>`;
   /* Après un nouveau dessin : le client et le montant d'un élève changé, sans toucher à ce qui a été tapé */
@@ -1280,7 +1313,9 @@ function lgNoter(tr, i) {
   const o = lgOnglet, id = tr.dataset.l, c = i.dataset.c, cle = lgCle(o, id, c), v = lgLireCase(i), nouvelle = id[0] === "n";
   const initial = nouvelle ? (i.type === "checkbox" ? false : "") : lgValeurInitiale(lgOrigine(o, id), c, i.dataset.type);
   if (v === initial) delete lgModifs[cle]; else lgModifs[cle] = v;
-  i.closest("td").classList.toggle("lg-modif", cle in lgModifs);
+  const td = i.closest("td");
+  td.classList.toggle("lg-modif", cle in lgModifs);
+  if (td.classList.contains("lg-fact")) { td.classList.remove("fx-faite", "fx-voir", "fx-vide"); td.classList.add(lgFactEtat(v)); }
 }
 /* Un cours : l'élève choisi donne son client, et ses heures × son taux donnent le montant quand ce montant avait été tapé (sinon l'Excel le calcule) */
 function lgSuiteCours(tr, c, apercu) {
@@ -3056,19 +3091,23 @@ async function vueClients() {
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
     <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
-      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td></tr>`).join("")}</table></section>`);
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th><th></th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td><td>${boutonArchiverClient(c)}</td></tr>`).join("")}</table></section>`);
   const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value;
     const etatOk = r => !t || (t === "termine") === (r.dataset.etat === "termine");   // une recherche regarde aussi les anciens
     el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a))); };
   el.querySelector("#cherche").oninput = filtrer;
   el.querySelector("#filtre-act").onchange = filtrer;
   el.querySelector("#filtre-etat").onchange = filtrer;
+  if (clFiltres) { el.querySelector("#cherche").value = clFiltres.v; el.querySelector("#filtre-act").value = clFiltres.a; el.querySelector("#filtre-etat").value = clFiltres.t; clFiltres = null; }
   filtrer();
   brancherEntreprise(el);
   brancherDevis(el);
   el.querySelector("#imp").onclick = importer;
   el.querySelector("#nv").onclick = () => ficheClient(null);
   el.onclick = async e => {
+    const ar = e.target.closest("[data-archiver-client],[data-reprendre-client]");   // avant la ligne : le bouton ne doit pas ouvrir la fiche
+    if (ar) { clFiltres = { v: el.querySelector("#cherche").value, a: el.querySelector("#filtre-act").value, t: el.querySelector("#filtre-etat").value };
+      return archiverClient(ar.dataset.archiverClient || ar.dataset.reprendreClient, !!ar.dataset.reprendreClient, ar); }
     const r = e.target.closest("[data-c]"); if (r) return ficheClient(r.dataset.c);
     const b = e.target.closest("button"); if (!b) return;
     const t = tampon.find(x => x.id === (b.dataset.cree || b.dataset.majc || b.dataset.ign));
@@ -3080,6 +3119,21 @@ async function vueClients() {
       if (Object.keys(d).length) await maj(sb.from("clients").update(d).eq("id", c.id));
       await maj(sb.from("clients_import").update({ etat: "fait" }).eq("id", t.id)); toast("Client mis à jour"); afficher(); }
   };
+}
+/* Archiver depuis la ligne : le client passe dans les anciens (etat termine), comme à la fin d'une mission.
+   archive_auto faux : une facture récente ne le remet pas en cours tout seul. Rien n'est écrit dans l'Excel (jamais Oui dans ARCHIVER). */
+let clFiltres = null;
+const boutonArchiverClient = c => c.etat === "termine"
+  ? `<button class="btn flat" data-reprendre-client="${esc(c.id)}" title="Le remettre dans les clients en cours">${ico("retour")} Remettre en cours</button>`
+  : `<button class="btn flat" data-archiver-client="${esc(c.id)}" title="Le ranger dans les anciens clients ; son profil reste dans la base">${ico("archive")} Archiver</button>`;
+async function archiverClient(id, reprendre, bouton) {
+  const c = cacheClients.find(k => k.id === id); if (!c) return;
+  if (!reprendre && !confirm("Archiver " + c.nom + " ? Il passe dans les anciens clients ; son profil reste dans la base et se reprend s'il revient.")) { clFiltres = null; return; }
+  if (bouton) bouton.disabled = true;
+  try { await maj(sb.from("clients").update({ etat: reprendre ? "actif" : "termine", archive_auto: false }).eq("id", c.id)); }
+  catch (e) { if (bouton) bouton.disabled = false; clFiltres = null; return; }
+  toast(reprendre ? c.nom + " est remis dans les clients en cours" : c.nom + " est archivé : il est dans les anciens clients");
+  afficher();
 }
 const propres = t => { const d = {}; CHAMPS_CLIENT.forEach(([k]) => { if (t[k]) d[k] = t[k]; }); if (!d.activite) d.activite = "Ménage"; return d; };
 function diffClient(c, t) {
@@ -3505,7 +3559,7 @@ async function listeDemandes(zone, liste, avecClient, re, vide) {
     const suivi = accord ? "✓ " + [...oks, ...((d.mission || {}).presta_accord || [])].join(", ") + (enAttenteDe.length ? " · En attente : " + enAttenteDe.join(", ") : "") : attente ? props.filter(x => ["attente", "refus"].includes(reponseProp(x))).map(x => ({ attente: "En attente :", refus: "Refus :" }[reponseProp(x)] + " " + nomInterv(x.intervenante_id))).concat(((d.mission || {}).potentiels || []).map(n => "À contacter : " + n)).join(" · ") : "";
     const repondreAvant = accord ? "" : props.filter(x => reponseProp(x) === "attente" && x.echeance).map(x => x.echeance).sort().pop() || "";   // la dernière limite encore ouverte
     const iaEnTete = d.etat === "a_estimer" || (d.etat === "estimee" && accord);
-    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "Faire le devis" : d.estimation && !d.estimation.rattache ? "Reprendre le projet" : "Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation && !d.estimation.rattache ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">${ico("chrono")} Dossier en préparation ${aide("Analyser et estimer sera possible dans 5 minutes environ.")}</span>`) : "";
+    const pret = d.dossier_drive && c.dossier_drive, ia = attente ? (pret ? boutonIA(d.etat === "estimee" && accord ? "Faire le devis" : d.estimation && !d.estimation.rattache ? "Reprendre le projet" : "Analyser et estimer", `demande~${esc(c.dossier_drive)}~${esc(d.dossier_drive)}`, d.estimation && !d.estimation.rattache ? "Rouvre le projet enregistré : tâches, temps, articles, prix, devis" : "Analyse des photos, temps, matériel, gain estimé, puis devis", iaEnTete ? "btn primary" : "btn") : `<span class="tag warn">${ico("chrono")} Dossier en préparation ${aide("Analyser et estimer sera possible dès que le dossier est prêt : en général quelques secondes, au plus 5 minutes.")}</span>`) : "";
     const proposer = (d.etat === "estimee" || d.etat === "devis_cree") && (!accord || !signeLe(d)) ? `<button class="btn ${accord ? "" : "primary"}" data-dm-proposer>${accord || props.some(x => reponseProp(x) === "attente") ? ico("plus") + " Ajouter un presta" : props.length ? ico("mission") + " Proposer à un autre presta" : ico("mission") + " Transmettre au presta"}</button>` : "";
     const voirFeuille = ((d.estimation || {}).taches || []).length ? `<button class="btn" data-dm-feuille>${ico("oeil")} Voir la feuille de route</button>` : "";
     const principal = (iaEnTete ? ia : "") + proposer + (devisSigne(d) ? `<button class="btn go" data-dm-accepter>${ico("route")} Envoyer l'ordre de mission</button>` : "") + (d.etat === "devis_cree" && accord && !devisSigne(d) ? (d.devis_url ? `<a class="btn" href="${esc(d.devis_url)}" target="_blank" rel="noopener">${ico("recu")} Envoyer le devis</a>` : "") + `<button class="btn" disabled title="Il s'activera dès que le client aura signé le devis">${ico("route")} Ordre de mission : après signature</button>` : "") + (d.etat === "refusee" ? `<button class="btn" data-dm-reprendre>Reprendre</button>` : "") + (d.etat === "en_cours" ? `<button class="btn flat stop" data-dm-annuler-ordre>${ico("retour")} Annuler l'ordre</button><button class="btn go" data-dm-fin>${ico("drapeau")} ${d.type_prestation === "one_shot" ? "Valider la mission" : "Prestation terminée"}</button>` : "");
@@ -3629,7 +3683,7 @@ function rattacherDevis(c, re) {
 }
 function nouvelleDemande(c, re, depart = {}, apresCreation = null) {
   const activites = c ? activitesClient(c) : [], activite = ACTIVITES_DEVIS.find(a => activites.includes(a)) || "Jardinage";
-  fenetre(`<h2 style="margin:0">Demande de devis${c ? " · " + esc(c.nom) : ""} ${aide(`Un sous-dossier est créé dans CLIENTS OIKOS › ${c ? c.nom.toUpperCase() : "NOM"} › Devis. L'analyse devient possible quand il est prêt, dans les 5 minutes.`)}</h2>
+  fenetre(`<h2 style="margin:0">Demande de devis${c ? " · " + esc(c.nom) : ""} ${aide(`Un sous-dossier est créé dans CLIENTS OIKOS › ${c ? c.nom.toUpperCase() : "NOM"} › Devis. L'analyse devient possible quand il est prêt : en général quelques secondes, au plus 5 minutes.`)}</h2>
     <form id="fdm" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${champsDemande({ activite, ...depart }, c)}
       <label class="f">Photos (facultatif)<input type="file" name="photos" accept="image/*" multiple></label>
       <div class="row"><button class="btn primary" type="submit">Créer la demande</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
@@ -3643,9 +3697,31 @@ function nouvelleDemande(c, re, depart = {}, apresCreation = null) {
         await envoyerPhotosDemande(data, [...e.target.photos.files].filter(x => x.size));
         if (apresCreation) await apresCreation(data);
         await chargerBase(); fermer(); toast("Demande créée : le client est en attente de devis"); re();
+        preparerDemandeTout(re);
       } catch (x) { bouton.disabled = false; souci(x); }
     };
   });
+}
+/* Le dossier d'une demande de devis (sous-dossier Drive et demande.json) se prépare tout de suite : le pilotage réveille le Pont photos OIKOS
+   par sa porte d'entrée (Application Web, adresse posée par le pont dans depots_reglages.pont_direct, SQL 46), avec la session de Benjamin,
+   que le pont vérifie auprès de la base. Si l'appel n'aboutit pas, rien ne change : le pont passe dans les 5 minutes. */
+async function pontDirect(corps) {
+  try {
+    const { data: r } = await sb.from("depots_reglages").select("pont_direct").eq("id", 1).maybeSingle();
+    const url = r && r.pont_direct;
+    if (!url || !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) return null;
+    const { data: { session } } = await sb.auth.getSession(); if (!session) return null;
+    const ctl = new AbortController(), minuteur = setTimeout(() => ctl.abort(), 6e4);
+    try { return await (await fetch(url, { method: "POST", body: JSON.stringify({ ...corps, session: session.access_token }), signal: ctl.signal })).json(); }
+    finally { clearTimeout(minuteur); }
+  } catch (e) { return null; }
+}
+async function preparerDemandeTout(re) {
+  const page = onglet, r = await pontDirect({ action: "demandes" });
+  if (!r || r.etat !== "ok") return;
+  await chargerBase();
+  if (onglet === page && !document.querySelector(".voile")) re();   // pas de page redessinée sous une fenêtre ouverte ni ailleurs
+  toast("Dossier de la demande prêt : tu peux analyser et estimer");
 }
 function modifierDemande(d, c, re) {
   fenetre(`<h2 style="margin:0">Modifier la demande · ${esc(c.nom)}</h2>
@@ -3655,6 +3731,7 @@ function modifierDemande(d, c, re) {
       e.preventDefault(); const l = lireDemande(new FormData(e.target)); if (!l.titre) return toast("Indique la prestation");
       await maj(sb.from("demandes_devis").update({ ...l, fiche_a_refaire: true }).eq("id", d.id));
       await chargerBase(); fermer(); toast("Enregistré"); re();
+      if (!d.dossier_drive) preparerDemandeTout(re);   // dossier pas encore prêt : autant le préparer tout de suite
     };
   });
 }

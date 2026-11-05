@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=23;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=24;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1396,7 +1396,7 @@ async function envoyerProspects(manuel){
 }
 /* Emploi du temps vu dans OIKOS Pilotage : le même que l'onglet Agenda (agItems), de la semaine dernière à 8 semaines.
    Sens unique téléphone → pilotage : on change un RDV ici, jamais là-bas. */
-const PILOTE_AGENDA_SEMAINES=8;
+const PILOTE_AGENDA_SEMAINES=8,PILOTE_AGENDA_RAFRAICHIR=15*6e4;   // même sans changement, renvoyé à l'ouverture s'il date de plus de 15 min : le pilote voit qu'il est à jour
 function agendaPersonne(it){
   const i=it.ref.indexOf(":"),k=it.ref.slice(0,i),id=it.ref.slice(i+1);
   const duClient=c=>c?{cle:c.extKey||"pi:c:"+c.id,nom:fullName(c)}:null;
@@ -1410,7 +1410,7 @@ function agendaEmpreinte(t){let h=5381;for(let i=0;i<t.length;i++)h=(h*33+t.char
 async function agendaPourPilote(){
   const a=addDays(weekStart(Date.now()),-7),b=addDays(a,(PILOTE_AGENDA_SEMAINES+1)*7);
   let evenements=[];
-  if(NATIVE&&agendaState==="granted"){try{evenements=await NATIVE.listEvents(a,b)}catch(e){evenements=[]}}
+  if(NATIVE&&agendaState==="granted"){try{evenements=await Promise.race([NATIVE.listEvents(a,b),new Promise((_,non)=>setTimeout(()=>non({lent:1}),10000))])}catch(e){if(e&&e.lent)throw new Error("agenda du téléphone trop lent");evenements=[]}}   // trop lent : on n'envoie rien plutôt qu'un emploi du temps incomplet
   const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null}});
   return {debut:a,fin:b,elements};
 }
@@ -1421,7 +1421,7 @@ async function envoyerAgendaPilote(manuel){
   piloteEnCours=true;
   try{
     const contenu=await agendaPourPilote(),sig=agendaEmpreinte(JSON.stringify(contenu));
-    if(!manuel&&s.agSig===sig)return;
+    if(!manuel&&s.agSig===sig&&s.agAt&&Date.now()-s.agAt<PILOTE_AGENDA_RAFRAICHIR)return;
     const a=await piloteAuth("refresh_token",{refresh_token:s.refresh});s.refresh=a.refresh_token;piloteNote(s);
     await piloteBase(a.access_token,"pilote_documents?on_conflict=cle","POST",{cle:"agenda",version:sig,contenu:{...contenu,envoye_le:Date.now()},maj_le:new Date().toISOString()},"resolution=merge-duplicates,return=minimal");
     s.agSig=sig;s.agN=contenu.elements.length;s.agAt=Date.now();s.agErreur=false;piloteNote(s);
@@ -1468,7 +1468,7 @@ async function loadAgenda(){
   try{agendaState=await NATIVE.agendaPermission();if(agendaState!=="granted"){agenda=null;render();return}
     const from=new Date();from.setHours(0,0,0,0);agenda=await NATIVE.listEvents(from.getTime(),from.getTime()+7*864e5);}
   catch(e){agenda=null}
-  render();pkRender();occSyncSoon();
+  render();pkRender();occSyncSoon();if(db)piloteBientot();
 }
 window.addEventListener("pb-resume",()=>{stamp();loadAgenda()});
 document.addEventListener("change",async e=>{
