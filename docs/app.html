@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=22;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=23;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -742,7 +742,7 @@ async function loadWeek(force){
   try{agEvents=await NATIVE.listEvents(a,addDays(a,7))}catch(e){agEvents=[]}
   if(tab==="agenda")render();
 }
-function agItems(a,b){
+function agItems(a,b,evenements){
   const items=[],mine=new Set();
   leads.forEach(l=>{if(l.calId)mine.add(String(l.calId));
     if((l.status==="open"||!l.status)&&l.when&&l.when>=a&&l.when<b)items.push({t:l.when,end:l.when+durOf("leads",l)*6e4,title:fullName(l),sub:l.type==="rdv"?(l.address||"RDV"):"À rappeler"+(l.phone?" · "+l.phone:""),kind:l.type==="rdv"?"rdv":"call",ref:"lead:"+l.id})});
@@ -752,7 +752,7 @@ function agItems(a,b){
     if(!x.done&&x.when&&x.when>=a&&x.when<b)items.push({t:x.when,end:x.when+durOf("appts",x)*6e4,title:apptName(x),sub:x.address||x.note||"RDV",kind:"rdv",ref:"appt:"+x.id})});
   occCalIds().forEach(id=>mine.add(id));
   occList(a,b).forEach(o=>items.push({t:o.t,end:o.end,title:"🔁 "+occName(o),sub:o.c.address||slotText(o.s),kind:"occ",ref:"occ:"+o.key}));
-  (agEvents||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;
+  (evenements||agEvents||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;
     if(!mine.has(String(e.id))&&e.startDate<b&&end>a)items.push({t:e.startDate,end,title:e.title||"(sans titre)",sub:e.location||"",kind:"cal",allDay:e.isAllDay,ref:"cal:"+e.id})});
   tasks.forEach(k=>{const t=taskAt(k);if(t&&!k.done&&t>=a&&t<b)items.push({t,end:t+30*6e4,title:"✏️ "+k.text,sub:k.comment||"Tâche",kind:"task",ref:"routine:"+k.id})});
   routines.forEach(r=>{const p=periodOf(r);const {n,total}=progress(r,p);const t=p.due.getTime();
@@ -1343,8 +1343,8 @@ async function piloteCode(jeton,facteur,code){
   const defi=await envoi("/challenge",{});
   return envoi("/verify",{challenge_id:defi.id,code});
 }
-async function piloteBase(jeton,chemin,methode,corps){
-  const r=await fetch(PILOTE_URL+"/rest/v1/"+chemin,{method:methode||"GET",headers:{apikey:PILOTE_CLE,Authorization:"Bearer "+jeton,"Content-Type":"application/json",Prefer:"return=minimal"},body:corps?JSON.stringify(corps):undefined});
+async function piloteBase(jeton,chemin,methode,corps,prefere){
+  const r=await fetch(PILOTE_URL+"/rest/v1/"+chemin,{method:methode||"GET",headers:{apikey:PILOTE_CLE,Authorization:"Bearer "+jeton,"Content-Type":"application/json",Prefer:prefere||"return=minimal"},body:corps?JSON.stringify(corps):undefined});
   if(!r.ok)throw new Error("base "+r.status);
   const t=await r.text();return t?JSON.parse(t):null;
 }
@@ -1367,7 +1367,8 @@ function prospectsDuTelephone(){
   return out;
 }
 let piloteEnCours=false,piloteMinuteur=null;
-function piloteBientot(){clearTimeout(piloteMinuteur);piloteMinuteur=setTimeout(()=>envoyerProspects(false),8000)}
+function piloteBientot(){clearTimeout(piloteMinuteur);piloteMinuteur=setTimeout(()=>piloteEnvoyerTout(false),8000)}
+async function piloteEnvoyerTout(manuel){await envoyerProspects(manuel);await envoyerAgendaPilote(manuel)}
 async function envoyerProspects(manuel){
   const s=piloteLu();if(!s||piloteEnCours)return;
   const liste=prospectsDuTelephone(),sig=JSON.stringify(liste);
@@ -1393,9 +1394,48 @@ async function envoyerProspects(manuel){
     if(manuel){$("#status").textContent=e.refus?"Connexion à OIKOS Pilotage expirée : relie-le de nouveau.":"Envoi vers OIKOS Pilotage impossible ("+(e.message||"réseau")+").";render()}
   }finally{piloteEnCours=false}
 }
+/* Emploi du temps vu dans OIKOS Pilotage : le même que l'onglet Agenda (agItems), de la semaine dernière à 8 semaines.
+   Sens unique téléphone → pilotage : on change un RDV ici, jamais là-bas. */
+const PILOTE_AGENDA_SEMAINES=8;
+function agendaPersonne(it){
+  const i=it.ref.indexOf(":"),k=it.ref.slice(0,i),id=it.ref.slice(i+1);
+  const duClient=c=>c?{cle:c.extKey||"pi:c:"+c.id,nom:fullName(c)}:null;
+  if(k==="occ")return duClient(customers.find(c=>c.id===id.split("_")[0]));
+  if(k==="appt"){const x=appts.find(y=>y.id===id);return x&&x.customerId?duClient(customers.find(c=>c.id===x.customerId)):null}
+  if(k==="proj"){const x=projects.find(y=>y.id===id);if(!x)return null;const c=x.customerId&&customers.find(y=>y.id===x.customerId);return c?duClient(c):{cle:"pi:p:"+x.id,nom:fullName(x)}}
+  if(k==="lead"){const x=leads.find(y=>y.id===id);return x?{cle:"pi:l:"+x.id,nom:fullName(x)}:null}
+  return null;
+}
+function agendaEmpreinte(t){let h=5381;for(let i=0;i<t.length;i++)h=(h*33+t.charCodeAt(i))|0;return t.length+"-"+h}
+async function agendaPourPilote(){
+  const a=addDays(weekStart(Date.now()),-7),b=addDays(a,(PILOTE_AGENDA_SEMAINES+1)*7);
+  let evenements=[];
+  if(NATIVE&&agendaState==="granted"){try{evenements=await NATIVE.listEvents(a,b)}catch(e){evenements=[]}}
+  const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null}});
+  return {debut:a,fin:b,elements};
+}
+let agendaAttente=null;
+async function envoyerAgendaPilote(manuel){
+  const s=piloteLu();if(!s||s.expire||!db)return;
+  if(piloteEnCours){clearTimeout(agendaAttente);agendaAttente=setTimeout(()=>envoyerAgendaPilote(manuel),15000);return}
+  piloteEnCours=true;
+  try{
+    const contenu=await agendaPourPilote(),sig=agendaEmpreinte(JSON.stringify(contenu));
+    if(!manuel&&s.agSig===sig)return;
+    const a=await piloteAuth("refresh_token",{refresh_token:s.refresh});s.refresh=a.refresh_token;piloteNote(s);
+    await piloteBase(a.access_token,"pilote_documents?on_conflict=cle","POST",{cle:"agenda",version:sig,contenu:{...contenu,envoye_le:Date.now()},maj_le:new Date().toISOString()},"resolution=merge-duplicates,return=minimal");
+    s.agSig=sig;s.agN=contenu.elements.length;s.agAt=Date.now();s.agErreur=false;piloteNote(s);
+    if(manuel){$("#status").textContent+=" Emploi du temps envoyé.";render()}
+  }catch(e){
+    if(e.refus)s.expire=true;
+    s.agErreur=true;piloteNote(s);
+    if(manuel){$("#status").textContent+=" Emploi du temps pas envoyé ("+(e.message||"réseau")+").";render()}
+  }finally{piloteEnCours=false}
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&db)piloteBientot()});
 function piloteHTML(){
   const s=piloteLu(),relie=s&&!s.expire;
-  return `<div class="adv">${relie?`<button class="btn" data-pilote="1">Envoyer mes prospects à OIKOS Pilotage</button><button class="iconbtn" data-pilote-off="1">Délier</button>`:`<button class="btn" data-pilote="1">Relier à OIKOS Pilotage</button>`}<span class="pnote" style="padding:0">${relie?(s.at?`Envoi automatique. ${s.n} prospect${s.n>1?"s":""}, dernier envoi le ${esc(new Date(s.at).toLocaleString("fr-FR"))}.`:"Envoi automatique des personnes qui ne sont que sur ce téléphone.")+(relie&&s.noms&&s.noms.length?`<br>Envoyés : ${esc(s.noms.join(", "))}.`:"")+(relie&&s.sans&&s.sans.length?`<br>Sans téléphone, e-mail ni adresse, donc pas envoyés : ${esc(s.sans.join(", "))}.`:""):"Envoie tout seul les personnes qui ne sont que sur ce téléphone vers la section Prospects."}</span></div>`;
+  return `<div class="adv">${relie?`<button class="btn" data-pilote="1">Envoyer mes prospects et mon emploi du temps à OIKOS Pilotage</button><button class="iconbtn" data-pilote-off="1">Délier</button>`:`<button class="btn" data-pilote="1">Relier à OIKOS Pilotage</button>`}<span class="pnote" style="padding:0">${relie?(s.at?`Envoi automatique. ${s.n} prospect${s.n>1?"s":""}, dernier envoi le ${esc(new Date(s.at).toLocaleString("fr-FR"))}.`:"Envoi automatique des personnes qui ne sont que sur ce téléphone.")+(relie&&s.noms&&s.noms.length?`<br>Envoyés : ${esc(s.noms.join(", "))}.`:"")+(relie&&s.sans&&s.sans.length?`<br>Sans téléphone, e-mail ni adresse, donc pas envoyés : ${esc(s.sans.join(", "))}.`:"")+(relie?(s.agAt?`<br>Emploi du temps : ${s.agN} élément${s.agN>1?"s":""}, dernier envoi le ${esc(new Date(s.agAt).toLocaleString("fr-FR"))}.`:"")+(s.agErreur?"<br>Dernier envoi de l'emploi du temps impossible, il repartira tout seul.":""):""):"Envoie tout seul vers le pilotage les personnes qui ne sont que sur ce téléphone et ton emploi du temps."}</span></div>`;
 }
 function openPilote(){
   const root=$("#sheet-root");
@@ -1411,7 +1451,7 @@ function openPilote(){
     try{let a=await piloteAuth("password",{email:$("#pi-e").value.trim().toLowerCase(),password:$("#pi-m").value});
       const facteur=((a.user&&a.user.factors)||[]).find(f=>f.factor_type==="totp"&&f.status==="verified");
       if(facteur)a=await piloteCode(a.access_token,facteur.id,$("#pi-c").value.trim());
-      piloteNote({refresh:a.refresh_token});root.innerHTML="";await envoyerProspects(true);render()}
+      piloteNote({refresh:a.refresh_token});root.innerHTML="";await piloteEnvoyerTout(true);render()}
     catch(e){$("#pi-s").textContent=e.refus?"E-mail, mot de passe ou code incorrect.":"Pas de réseau."}});
 }
 async function openCalPicker(){
@@ -2129,7 +2169,7 @@ document.addEventListener("click",e=>{
     return}
   if(g("[data-calpick]")){if(NATIVE)openCalPicker();return}
   if(g("[data-pilote-off]")){piloteNote(null);render();return}
-  if(g("[data-pilote]")){const s=piloteLu();if(s&&!s.expire)envoyerProspects(true);else openPilote();return}
+  if(g("[data-pilote]")){const s=piloteLu();if(s&&!s.expire)piloteEnvoyerTout(true);else openPilote();return}
   if(g("[data-agenda-allow]")){if(NATIVE)NATIVE.askAgenda().then(loadAgenda);return}
   if(g("[data-backup]")){if(NATIVE)NATIVE.exportData().catch(()=>{$("#status").textContent="Sauvegarde impossible."});return}
   if(g("[data-update]")){if(NATIVE){$("#status").textContent="Recherche de mise à jour…";NATIVE.checkUpdate().then(r=>{$("#status").textContent={uptodate:"✓ Ton appli est à jour.",updated:"Mise à jour en cours…",none:"Mises à jour automatiques non configurées.",error:"Impossible de vérifier : "+(window.PB_lastUpdateError||"pas de connexion ?")}[r]||""})}return}
@@ -2357,10 +2397,10 @@ render();
   db.collection("routines").orderBy("order").onSnapshot(s=>{routines=s.docs.map(x=>({id:x.id,...x.data()}));render()},e=>{$("#status").textContent="Connexion perdue. Recharge la page."});
   db.collection("projects").onSnapshot(s=>{projects=s.docs.map(x=>{const b=x.data();return {id:x.id,...b,done:{...(b.done||{})},steps:(b.steps||[]).map(t=>({...t}))}});render();piloteBientot()},()=>{});
   db.collection("leads").onSnapshot(s=>{leads=s.docs.map(x=>({id:x.id,...x.data()}));render();piloteBientot()},()=>{});
-  db.collection("appts").onSnapshot(s=>{appts=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
-  db.collection("tasks").onSnapshot(s=>{tasks=s.docs.map(x=>({id:x.id,...x.data()}));render()},()=>{});
+  db.collection("appts").onSnapshot(s=>{appts=s.docs.map(x=>({id:x.id,...x.data()}));render();piloteBientot()},()=>{});
+  db.collection("tasks").onSnapshot(s=>{tasks=s.docs.map(x=>({id:x.id,...x.data()}));render();piloteBientot()},()=>{});
   db.collection("customers").onSnapshot(s=>{customers=s.docs.map(x=>({id:x.id,...x.data()}));render();occSyncSoon();piloteBientot()},()=>{});
-  db.collection("skips").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());skips=m;render();occSyncSoon()},()=>{});
+  db.collection("skips").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());skips=m;render();occSyncSoon();piloteBientot()},()=>{});
   db.collection("occcal").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());occcal=m},()=>{});
   db.collection("config").onSnapshot(s=>{const m={};s.docs.forEach(x=>m[x.id]=x.data());cfg=m;render();vacAuto()},()=>{});
   setTimeout(()=>window.dispatchEvent(new Event("pb-data-changed")),2500); // rappels des séances régulières

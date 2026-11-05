@@ -124,6 +124,10 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .vignette img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
 .photo figcaption{padding:8px 10px;font-size:13px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
+.em-table{min-width:900px;table-layout:fixed}.em-table th:first-child{width:120px}.em-table td{vertical-align:top}
+.em-ev{display:block;width:100%;text-align:left;margin-bottom:4px;padding:5px 7px;font-size:13px;font-weight:400;background:var(--surface);color:inherit;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;overflow-wrap:anywhere}
+button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
+.em-ev.em-call,.em-ev.em-task,.em-ev.em-todo{border-left-color:var(--warn)}.em-ev.em-cal{border-left-color:var(--muted)}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .pk{display:flex;flex-direction:column;gap:8px;color:var(--ink)}
@@ -310,6 +314,23 @@ input[type=date],input[type=time],input[type=datetime-local],input[type=search]{
 .proc>span:nth-child(2){flex:1;min-width:0}
 .proc-prog{flex:none;display:inline-flex;color:var(--accent)}
 .proc-prog .ico{width:14px;height:14px}
+.proc-ligne{display:flex;flex-direction:column;gap:3px}
+.proc-action{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:5px 10px;border:1px solid var(--accent);border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer}
+.proc-action:hover{background:var(--accent-fort);border-color:var(--accent-fort)}
+.proc-action .ico{flex:none;width:15px;height:15px}
+.ad-tour{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.ad-titre{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--muted);padding:2px}
+.ad-ligne{display:flex;align-items:center;gap:8px}
+.ad-ligne>input[type=checkbox]{flex:none;width:20px;height:20px;margin:0;accent-color:var(--go);cursor:pointer}
+.ad-ligne>.proc,.ad-ligne>.proc-ligne{flex:1;min-width:0}
+.ad-annuler{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;font-size:12.5px;color:var(--muted);padding:2px 2px 6px}
+.act.prog.page .ico{fill:none}
+.hd-fiche{padding:8px 10px;border-radius:10px;background:var(--sunk);font-size:14px;line-height:1.45}
+.hd-fiche.manque{background:var(--warn-soft);color:var(--warn);font-weight:600}
+.hd-coche{display:flex;align-items:center;gap:8px;align-self:end;min-height:40px;font-size:14px}
+.hd-coche input{width:18px!important;height:18px;flex:none}
+.hd-droite{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right}
+.hd-total{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px}
 .proc[aria-current="true"] .proc-prog{color:inherit}
 /* Menu, sous-boutons, recherche */
 .haut-droite{display:flex;align-items:center;gap:6px;margin-left:auto}
@@ -641,13 +662,13 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["papiers", "Papiers demandés"]];
 const MENU = [
-  { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir"], bulle: "b-avoir" },
+  { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir", "emploi"], bulle: "b-avoir" },
   { k: "clients", t: "Clients", pages: ["clients", "dossiers"], bulle: "b-clients" },
   { k: "equipe", t: "Équipe", pages: ["intervenantes", "planning", "reporting"] },
   { k: "messages", t: "Messages", pages: ["messages"], bulle: "b-messages" },
-  { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi"] }];
+  { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi", "heures"] }];
 const groupeDe = o => MENU.find(m => m.pages.includes(o));
 const nomPage = o => (ONGLETS.find(x => x[0] === o) || [])[1] || "";
 async function afficher(o) {
@@ -669,7 +690,7 @@ async function afficher(o) {
   document.getElementById("cherche-ouvrir").onclick = ouvrirRecherche;
   brancherSousMenu();
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, jour: vueJour })[onglet]();
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, jour: vueJour, emploi: vueEmploi })[onglet]();
     const zoneSous = document.getElementById("sous-menu-zone"); if (zoneSous) zoneSous.innerHTML = sousMenu(); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
@@ -836,18 +857,21 @@ async function demarrerRail() {
     if (copie) { carteP = copie.contenu; carteP.copie_du = copie.maj_le; indexerCarte(); }
   }
   dessinerRail();
+  await adCharger().catch(() => {});
+  adRafraichir(adNombre() > 0);
   setInterval(verifierPc, 5 * 60 * 1000);   // garde le programme allumé tant que le pilotage est ouvert
 }
 async function verifierPc() {
   const avant = pcRelie;
   try { await chargerDuPc(); } catch (e) { pcRelie = false; }
   if (avant !== pcRelie) { dessinerRail(); if (voletId) ouvrirVolet(voletId); }
+  adVerifier();
 }
 function relierPc() {
   let essais = 0;
   const t = setInterval(async () => {
     if (++essais > 15) { clearInterval(t); toast("Le PC ne répond pas. Le bouton est-il installé sur ce PC ?"); return; }
-    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); if (voletId) ouvrirVolet(voletId); } catch (e) {}
+    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); if (onglet === "heures") vueHeures(); if (voletId) ouvrirVolet(voletId); } catch (e) {}
   }, 2000);
 }
 const boutonRelier = () => SUR_TELEPHONE ? "" : `<a class="btn" href="oikos-carte:demarrer" data-relier>Relier le PC</a>${aide("Allume le programme de la carte sur ce PC. Une seule installation par PC : « Installer le bouton du PC » dans le dossier Plateforme intervenantes, raccourci.")}`;
@@ -872,7 +896,13 @@ function actionsDe(n) {
   }
   return a;
 }
-const boutonProc = n => `<button class="proc" data-proc="${esc(n.id)}" aria-current="${voletId === n.id}">${etatDe(n)}<span>${esc(sansEmoji(n.t))}</span>${actionsDe(n).programmes.length ? `<span class="proc-prog" title="Un programme à lancer">${ico("lancer")}</span>` : ""}</button>`;
+/* Une tâche de la carte dont l'action est une page du pilote : le bouton est sur sa ligne, et en tête de son volet */
+const ACCES_CARTE = { m3: { page: "heures", nom: "Déclarer mes heures" } };
+const boutonProc = n => {
+  const b = `<button class="proc" data-proc="${esc(n.id)}" aria-current="${voletId === n.id}">${etatDe(n)}<span>${esc(sansEmoji(n.t))}</span>${actionsDe(n).programmes.length ? `<span class="proc-prog" title="Un programme à lancer">${ico("lancer")}</span>` : ""}</button>`;
+  const acces = ACCES_CARTE[n.id];
+  return acces ? `<div class="proc-ligne">${b}<button class="proc-action" data-aller-page="${acces.page}">${ico("stylo")}<span>${acces.nom}</span></button></div>` : b;
+};
 const utile = n => !!((n.enfants || []).length || (n.etapes || []).length || (n.liens || []).length || n.note);
 /* Un groupe sans contenu propre se déplie dans la colonne ; le reste s'ouvre dans le volet */
 /* Fermés par défaut, sauf les groupes à l'intérieur ; ce pilote retient ce que tu as laissé ouvert */
@@ -895,9 +925,137 @@ function dessinerRail() {
   const fermer = `<button class="btn flat rail-ouvrir" data-fermer-rail>Fermer</button>`;
   if (!carteP) { r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}<p class="muted small">Les boutons arrivent une fois le PC relié une première fois.</p>`; return; }
   const titres = { admin: "Administratif", entreprise: "Tâches ponctuelles" };
-  r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}` + carteP.branches.map(b => `<details class="rail-branche" ${railOuvert(b.id, false) ? "open" : ""} data-groupe="${esc(b.id)}"><summary>${titres[b.id] || esc(sansEmoji(b.t))}</summary><div class="rail-liste">${(b.enfants || []).map(blocRail).join("")}</div></details>`).join("");
+  r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}` + htmlRoutineRail() + carteP.branches.map(b => `<details class="rail-branche" ${railOuvert(b.id, false) ? "open" : ""} data-groupe="${esc(b.id)}"><summary>${titres[b.id] || esc(sansEmoji(b.t))}</summary><div class="rail-liste">${(b.enfants || []).map(blocRail).join("")}</div></details>`).join("");
   r.querySelectorAll("details[data-groupe]").forEach(d => { d.ontoggle = () => retenirRail(d.dataset.groupe, d.open); });
 }
+/* ===================== Routine administrative : le mois et le trimestre, à cocher =====================
+   Les tâches suivent la carte (enfants de « Tous les mois » et « Tous les trimestres »). Une nouvelle liste apparaît le 1er du mois,
+   le 1er janvier, avril, juillet et octobre pour le trimestre. Ce qui n'est pas coché reste, ce qui est coché disparaît.
+   Une liste est figée quand la suivante arrive ; seule la liste en cours suit encore la carte.
+   L'état est dans pilote_documents, clé « routine » (SQL 44). Tant que la base refuse, il reste sur cet appareil. */
+const AD_CLE = "routine", AD_STOCK = "pilote-routine";
+const AD_DEBUT = { mois: 2026 * 12 + 11, trimestre: 2026 * 4 + 3 };   // premières listes : décembre 2026, et le trimestre en cours (octobre à décembre 2026)
+const AD_NOEUD = { mois: "adm-mois", trimestre: "adm-trim" };
+const AD_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+let adEtat = { tours: {} }, adHorsBase = false, adDernier = null, adFile = Promise.resolve(), adEnCours = 0, adMinuteur = null;
+const adRang = (sorte, d = new Date()) => sorte === "mois" ? d.getFullYear() * 12 + d.getMonth() : d.getFullYear() * 4 + Math.floor(d.getMonth() / 3);
+const adCleDe = (sorte, i) => sorte === "mois" ? Math.floor(i / 12) + "-" + String(i % 12 + 1).padStart(2, "0") : Math.floor(i / 4) + "-T" + (i % 4 + 1);
+/* Les listes déjà arrivées, de la plus ancienne à celle en cours */
+function adTours(sorte) {
+  const l = [];
+  for (let i = AD_DEBUT[sorte], fin = adRang(sorte); i <= fin; i++) l.push(adCleDe(sorte, i));
+  return l;
+}
+function adTitre(cle) {
+  const m = cle.match(/^(\d+)-(T?)(\d+)$/), annee = m[1], n = +m[3];
+  if (m[2]) return "Trimestre : " + AD_MOIS.slice((n - 1) * 3, n * 3).join(", ") + " " + annee;
+  const nom = AD_MOIS[n - 1];
+  return nom.charAt(0).toUpperCase() + nom.slice(1) + " " + annee;
+}
+function adProchaine(sorte) {
+  const i = Math.max(adRang(sorte) + 1, AD_DEBUT[sorte]);
+  return "le 1er " + (sorte === "mois" ? AD_MOIS[i % 12] : AD_MOIS[(i % 4) * 3]);
+}
+function adListeCarte(sorte) {
+  const x = carteIndex[AD_NOEUD[sorte]];
+  return x ? (x.n.enfants || []).filter(n => sansEmoji(n.t)).map(n => ({ id: n.id, t: sansEmoji(n.t) })) : null;
+}
+/* Crée les listes arrivées et aligne celle en cours sur la carte. Répond true si quelque chose a changé. */
+function adSynchroniser() {
+  let change = false;
+  for (const sorte of Object.keys(AD_NOEUD)) {
+    const liste = adListeCarte(sorte), cles = adTours(sorte);
+    if (!liste || !liste.length || !cles.length) continue;
+    for (const c of cles) if (!adEtat.tours[c]) { adEtat.tours[c] = { liste, faits: {} }; change = true; }
+    const tour = adEtat.tours[cles[cles.length - 1]];
+    if (JSON.stringify(tour.liste) !== JSON.stringify(liste)) { tour.liste = liste; change = true; }
+  }
+  return change;
+}
+/* Ce qu'il reste à cocher, liste par liste : le mois d'abord, puis le trimestre */
+function adReste() {
+  const groupes = [];
+  for (const sorte of Object.keys(AD_NOEUD)) {
+    const cles = adTours(sorte);
+    for (const cle of cles) {
+      const tour = adEtat.tours[cle]; if (!tour) continue;
+      const liste = (tour.liste || []).filter(x => !(tour.faits || {})[x.id]);
+      if (liste.length) groupes.push({ cle, titre: adTitre(cle), liste, ancien: cle !== cles[cles.length - 1] });
+    }
+  }
+  return groupes;
+}
+const adNombre = () => adReste().reduce((n, g) => n + g.liste.length, 0);
+const adVide = () => `<p class="muted small" style="margin:2px">Rien à cocher. Prochaine liste du mois : ${adProchaine("mois")}. Prochaine liste du trimestre : ${adProchaine("trimestre")}.</p>`;
+function htmlRoutine() {
+  const ligne = (g, x) => { const c = carteIndex[x.id]; return `<div class="ad-ligne"><input type="checkbox" data-ad="${esc(g.cle)}" data-ad-id="${esc(x.id)}" title="Fait" aria-label="${esc("Fait : " + x.t)}">${c ? boutonProc(c.n) : `<span class="proc">${esc(x.t)}</span>`}</div>`; };
+  return (adDernier ? `<div class="ad-annuler"><span>Validé : ${esc(adDernier.t)}</span><button class="btn flat small" data-ad-annuler>Annuler</button></div>` : "")
+    + adReste().map(g => `<div class="ad-tour"><div class="ad-titre"><span>${esc(g.titre)}</span>${g.ancien ? `<span class="tag warn">pas fini</span>` : ""}</div>${g.liste.map(x => ligne(g, x)).join("")}</div>`).join("")
+    + (adHorsBase ? `<p class="muted small" style="margin:2px">Cases gardées sur cet appareil pour l'instant : elles ne sont pas encore dans la base.</p>` : "");
+}
+const htmlRoutineRail = () => { const n = adNombre(); return `<details class="rail-branche" ${railOuvert("ad-routine", true) ? "open" : ""} data-groupe="ad-routine"><summary><span>À cocher${n ? ` <span class="tag">${n}</span>` : ""}</span></summary><div class="rail-liste">${htmlRoutine()}${n ? "" : adVide()}</div></details>`; };
+const htmlRoutinePage = () => { const n = adNombre(); return n || adDernier ? `<section class="card" style="margin-top:12px"><h2 style="margin:0 0 10px">Administratif du mois et du trimestre${n ? ` <span class="tag">${n} à cocher</span>` : ""}</h2>${htmlRoutine()}</section>` : ""; };
+function adRafraichir(avecJour = true) {
+  dessinerRail();
+  const z = document.getElementById("ad-page"); if (z) z.innerHTML = htmlRoutinePage();
+  if (avecJour && document.querySelector("#contenu .jour-date")) vueJour().catch(() => {});
+}
+function adGarder() { try { localStorage.setItem(AD_STOCK, JSON.stringify({ tours: adEtat.tours, aEnvoyer: adHorsBase })); } catch (e) {} }
+async function adLire() {
+  try {
+    const { data, error } = await sb.from("pilote_documents").select("contenu").eq("cle", AD_CLE).maybeSingle();
+    return error ? { erreur: true } : { contenu: data && data.contenu && data.contenu.tours ? data.contenu : null };
+  } catch (e) { return { erreur: true }; }
+}
+/* Ce qui attend d'être envoyé s'ajoute à ce que dit la base */
+function adFusionner(base) {
+  for (const [c, t] of Object.entries(adEtat.tours)) {
+    if (!base.tours[c]) base.tours[c] = t;
+    else base.tours[c].faits = { ...(t.faits || {}), ...(base.tours[c].faits || {}) };
+  }
+}
+/* Relit la base avant d'écrire : ne pas écraser ce qui a été coché depuis un autre appareil */
+async function adEnregistrer(changer) {
+  const lu = await adLire();
+  if (lu.contenu) { if (adHorsBase) adFusionner(lu.contenu); adEtat = lu.contenu; }
+  if (changer) changer(adEtat);
+  adSynchroniser();
+  let ok = false;
+  if (!lu.erreur) {
+    try { const { error } = await sb.from("pilote_documents").upsert({ cle: AD_CLE, version: new Date().toISOString(), contenu: adEtat, maj_le: new Date().toISOString() }); ok = !error; } catch (e) {}
+  }
+  adHorsBase = !ok;
+  adGarder();
+}
+/* Une écriture à la fois ; l'écran se redessine quand la file est vide */
+function adEnFile(changer) {
+  adEnCours++;
+  adFile = adFile.then(() => adEnregistrer(changer)).catch(() => {}).then(() => { if (!--adEnCours) adRafraichir(); });
+  return adFile;
+}
+async function adCharger() {
+  try { const l = JSON.parse(localStorage.getItem(AD_STOCK) || "null"); if (l && l.tours) { adEtat = { tours: l.tours }; adHorsBase = !!l.aEnvoyer; } } catch (e) {}
+  const lu = await adLire();
+  if (lu.erreur) { if (adSynchroniser()) adHorsBase = true; adGarder(); return; }
+  if (lu.contenu) { if (adHorsBase) adFusionner(lu.contenu); adEtat = lu.contenu; }
+  if (adSynchroniser() || adHorsBase) await adEnregistrer(); else adGarder();
+}
+/* Page restée ouverte : le 1er arrive, ou la carte a changé */
+function adVerifier() { if (adSynchroniser()) { adRafraichir(); adEnFile(); } }
+function adCocher(cle, id, fait) {
+  const applique = e => { const tour = e.tours[cle]; if (!tour) return; tour.faits = tour.faits || {}; if (fait) tour.faits[id] = tour.faits[id] || new Date().toISOString(); else delete tour.faits[id]; };
+  applique(adEtat);
+  clearTimeout(adMinuteur);
+  if (fait) {
+    const x = ((adEtat.tours[cle] || {}).liste || []).find(y => y.id === id);
+    adDernier = { cle, id, t: x ? x.t : "" };
+    adMinuteur = setTimeout(() => { adDernier = null; adRafraichir(false); }, 60000);
+  } else adDernier = null;
+  adRafraichir();
+  adEnFile(applique);
+}
+document.addEventListener("change", e => { if (e.target.matches && e.target.matches("[data-ad]")) adCocher(e.target.dataset.ad, e.target.dataset.adId, e.target.checked); });
+document.addEventListener("click", e => { if (e.target.closest("[data-ad-annuler]") && adDernier) adCocher(adDernier.cle, adDernier.id, false); });
 /* Texte de la carte : [nom](adresse ou chemin) devient un lien, tout le reste est échappé */
 function texteCarte(t, id) {
   const profil = (carteIndex[id] || {}).profil || "";
@@ -930,6 +1088,7 @@ function ouvrirVolet(id) {
   const rienAFaire = !surPc && !a.sites.length && !(n.enfants || []).length;
   v.innerHTML = `<div class="volet-tete"><div>${parent ? `<button class="btn flat small" data-proc="${esc(parent.id)}" style="padding:0;margin-bottom:4px">‹ ${esc(sansEmoji(parent.t))}</button>` : ""}<h2 style="margin:0">${n.etat ? etatDe(n) : ""}${esc(sansEmoji(n.t))}${n.minutes ? ` <span class="tag off">${esc(n.minutes)} min</span>` : ""}</h2></div><button class="btn flat" data-fermer-volet>Fermer</button></div>
     ${surPc && !pcRelie ? `<div class="volet-pc">${SUR_TELEPHONE ? "Programmes et fichiers : depuis le PC" : `PC non relié ${boutonRelier()}`}</div>` : ""}
+    ${ACCES_CARTE[id] ? `<div class="actions"><button class="act prog page" data-aller-page="${ACCES_CARTE[id].page}">${ico("stylo")}<span>${ACCES_CARTE[id].nom}</span><b>Ouvrir</b></button></div>` : ""}
     ${a.programmes.length ? `<div class="actions">${a.programmes.map(prog).join("")}</div>` : ""}
     ${a.fichiers.length || a.sites.length ? `<div class="actions">${groupe("Fichiers et dossiers", a.fichiers, fich)}${groupe("Sites", a.sites, site)}</div>` : ""}
     ${(n.enfants || []).length ? `<div class="rail-liste">${n.enfants.map(boutonProc).join("")}</div>` : ""}
@@ -956,6 +1115,8 @@ async function ouvrirSurPc(cible, nom) {
   } catch (e) { souci(e); }
 }
 document.addEventListener("click", async e => {
+  const versPage = e.target.closest("[data-aller-page]");
+  if (versPage) { document.getElementById("rail")?.classList.remove("ouvert"); fermerVolet(); sectionDevis = null; return afficher(versPage.dataset.allerPage); }
   const proc = e.target.closest("[data-proc]");
   if (proc) { document.getElementById("rail")?.classList.remove("ouvert"); return ouvrirVolet(proc.dataset.proc); }
   if (e.target.closest("[data-fermer-volet]")) return fermerVolet();
@@ -977,7 +1138,7 @@ document.addEventListener("click", async e => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("volet") && !document.querySelector(".voile")) fermerVolet(); });
 /* Clic en dehors d'Administratif et tâches : referme le volet, le panneau et les branches dépliées.
    composedPath : un clic dans le panneau redessine son contenu, la cible n'y est alors plus rattachée. */
-const dansZoneRail = e => e.composedPath().some(n => n.matches?.("#rail,#volet,#rail-ouvrir,#toast,.aide-bulle,.voile,.recherche,[data-proc]"));
+const dansZoneRail = e => e.composedPath().some(n => n.matches?.("#rail,#volet,#rail-ouvrir,#toast,.aide-bulle,.voile,.recherche,#ad-page,[data-proc]"));
 let appuiDansRail = false;   // sélectionner du texte dans le volet et relâcher dehors ne ferme rien
 document.addEventListener("pointerdown", e => { appuiDansRail = dansZoneRail(e); }, true);
 document.addEventListener("click", e => {
@@ -1038,7 +1199,7 @@ async function vueSuivi() {
 
 /* ===================== Lignes de l'Excel : modifiées ici, écrites dans le fichier par le programme du PC (lignes_excel.py) =====================
    Rien de ces lignes n'est écrit dans cette page ni copié dans la base : sans le PC, la page ne montre rien. */
-let lgP = null, lgOnglet = "cours", lgMois = "", lgCherche = "", lgAFaire = false, lgSansArchivees = false, lgModifs = {}, lgNouvelles = { cours: [], services: [] }, lgCompte = 0, lgEnvoi = false;
+let lgP = null, lgOnglet = "cours", lgMois = "", lgCherche = "", lgAFaire = false, lgSansArchivees = true, lgModifs = {}, lgNouvelles = { cours: [], services: [] }, lgCompte = 0, lgEnvoi = false;
 const LG_ONGLETS = { cours: "Cours", services: "Services OIKOS" };
 const LG_COLONNES = {
   cours: [["date", "Date", "date"], ["prenom", "Élève", "liste", "lg-eleves"], ["client", "Client", "ro"], ["entite", "Entité", "ro"], ["heures", "Heures", "num"], ["acompte", "Acompte", "num"], ["montant", "Montant TTC", "auto"], ["ht", "HT", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["archiver", "Archivé", "oui"]],
@@ -1218,6 +1379,165 @@ async function vueLignes() {
 }
 addEventListener("beforeunload", e => { if (lgNb()) { e.preventDefault(); e.returnValue = ""; } });
 
+/* ===================== Déclarer mes heures : même saisie que le Reporting de l'appli, rattachée aux élèves de l'Excel =====================
+   Vérifier puis enregistrer écrit une ligne de SAISIE COURS, par le programme du PC (lignes_excel.py), au même format que le programme Reporting.
+   Comme Lignes Excel : rien de ces lignes n'est écrit dans cette page ni copié dans la base. OIKOS et Benjamin enseignement ne sont jamais additionnés. */
+const HD_CLE = "oikos-gerant-heures", HD_ENTITES = ["Benjamin enseignement", "OIKOS", "Entité à préciser"];
+let hdBrouillon = []; try { hdBrouillon = JSON.parse(localStorage.getItem(HD_CLE)) || []; } catch (e) {}
+const hdGarder = () => { try { localStorage.setItem(HD_CLE, JSON.stringify(hdBrouillon)); } catch (e) {} };
+let hdMois = new Date(new Date().getFullYear(), new Date().getMonth(), 1), hdErreur = "";
+const hdEntite = e => /enseignement|^be$/i.test(String(e || "").trim()) ? HD_ENTITES[0] : /^oikos$/i.test(String(e || "").trim()) ? HD_ENTITES[1] : HD_ENTITES[2];
+const hdFiche = prenom => prenom ? lgP.listes.eleves.find(x => norm(x.prenom) === norm(prenom)) : null;
+const hdNombre = v => { const n = parseFloat(String(v ?? "").trim().replace(",", ".")); return n > 0 ? n : 0; };
+const hdDuree = min => { const h = Math.floor(min / 60), m = Math.round(min - h * 60); return m ? h + "h" + pad2(m) : h + "h"; };   // « 1h30 », comme les notes du programme Reporting
+/* Même règle que le programme Reporting : la moitié payée d'avance seulement si tous ses cours (2 au moins) sont ainsi */
+function hdMoitieHabituelle(prenom) {
+  const siens = lgP.cours.filter(x => norm(x.prenom) === norm(prenom) && x.montant);
+  return siens.length >= 2 && siens.every(x => x.acompte && Math.abs(x.acompte * 2 - x.montant) < .01);
+}
+/* Sans tarif sur la fiche (la plupart aujourd'hui) : celui tapé sur la ligne, sinon celui de son dernier cours, annoncé comme tel */
+function hdTarif(l, fiche) {
+  if (fiche && fiche.taux > 0) return { taux: +fiche.taux, source: "fiche" };
+  if (hdNombre(l.tarif)) return { taux: hdNombre(l.tarif), source: "tape" };
+  const dernier = fiche && lgP.cours.find(x => norm(x.prenom) === norm(fiche.prenom) && x.heures > 0 && x.montant > 0);
+  return dernier ? { taux: Math.round(dernier.montant / dernier.heures * 100) / 100, source: "dernier" } : { taux: 0, source: "" };
+}
+function hdCalcul(l) {
+  const fiche = hdFiche(l.eleve), t = hdTarif(l, fiche), total = l.minutes > 0 && t.taux ? Math.round(l.minutes / 60 * t.taux * 100) / 100 : 0;
+  const acompte = l.moitie && total ? Math.round(total * 50) / 100 : 0;
+  return { fiche, ...t, total, acompte, reste: Math.round((total - acompte) * 100) / 100 };
+}
+const hdOk = l => { const c = hdCalcul(l); return !!(c.fiche && c.total && l.jour && l.jour <= ymd(new Date())); };
+/* Ce que dit la fiche de l'élève pour cette déclaration */
+function hdTexteFiche(l) {
+  const c = hdCalcul(l);
+  if (!c.fiche) return { manque: true, h: l.eleve ? `« ${esc(l.eleve)} » n'est plus dans CLIENTS COURS : choisis un élève de la liste.` : "Choisis l'élève : sa fiche donne le client et le tarif." };
+  const qui = `Fiche : <b>${esc(c.fiche.prenom)}</b> · ${esc(c.fiche.client) || "client manquant"} · ${esc(hdEntite(c.fiche.entite))}`;
+  if (!c.taux) return { manque: true, h: `${qui}<br>Pas de tarif sur sa fiche ni de cours passé : indique son tarif à l'heure.` };
+  const origine = c.source === "fiche" ? "tarif de sa fiche" : c.source === "dernier" ? "pas de tarif sur sa fiche, repris de son dernier cours : à vérifier" : "tarif tapé ici, sa fiche n'en a pas";
+  if (!c.total) return { manque: true, h: `${qui}<br>${suEuros(c.taux)} de l'heure (${origine}). Indique les heures.` };
+  return { manque: false, h: `${qui}<br>${heures(l.minutes)} × ${suEuros(c.taux)} (${origine}) = <b>${suEuros(c.total)}</b>${c.acompte ? `<br>Déjà payé ${suEuros(c.acompte)}, reste à payer <b>${suEuros(c.reste)}</b>` : ""}` };
+}
+function hdCarte(l) {
+  const f = hdTexteFiche(l), fiche = hdFiche(l.eleve), sansTarif = !(fiche && fiche.taux > 0);
+  const groupes = HD_ENTITES.map(nom => [nom, lgP.listes.eleves.filter(x => hdEntite(x.entite) === nom)]).filter(g => g[1].length);
+  return `<div class="card rp-ligne${hdOk(l) ? "" : " incomplete"}" data-hd="${esc(l.cle)}">
+    ${l.lu ? `<p class="muted small">« ${esc(l.lu)} »</p>` : ""}
+    <div class="row" style="flex-wrap:nowrap"><select name="eleve" aria-label="Élève" style="flex:1;min-width:0"><option value="">Quel élève ?</option>${groupes.map(([nom, liste]) => `<optgroup label="${esc(nom)}">${liste.map(x => `<option value="${esc(x.prenom)}" ${fiche && x.prenom === fiche.prenom ? "selected" : ""}>${esc(x.prenom)} (${esc(x.client)})</option>`).join("")}</optgroup>`).join("")}</select>
+      <button class="btn flat" data-hd-retirer aria-label="Retirer cette ligne" title="Retirer cette ligne">${ico("croix")}</button></div>
+    <div class="rp-champs"><label class="f">Jour<input name="jour" type="date" value="${esc(l.jour)}" max="${ymd(new Date())}"></label>
+      <label class="f">Heures<input name="heures" type="text" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label>
+      <label class="f" data-hd-tarif ${sansTarif ? "" : "hidden"}>Tarif à l'heure<input name="tarif" type="text" inputmode="decimal" value="${esc(l.tarif || "")}" placeholder="${hdCalcul(l).source === "dernier" ? lgTexte(hdCalcul(l).taux) : "ex. 30"}"></label>
+      <label class="hd-coche"><input name="moitie" type="checkbox" ${l.moitie ? "checked" : ""}>La moitié est déjà payée</label></div>
+    <label class="f">Remarque (facultatif)<input name="note" type="text" maxlength="120" value="${esc(l.note || "")}"></label>
+    <div class="hd-fiche${f.manque ? " manque" : ""}" data-hd-fiche>${f.h}</div></div>`;
+}
+function hdLigneMois(l) {
+  const fiche = hdFiche(l.prenom), paye = /^ok$/i.test(l.statut || ""), facture = /\d/.test(l.facture || "");
+  const reste = l.montant == null ? null : paye ? 0 : Math.max(0, Math.round((l.montant - (l.acompte || 0)) * 100) / 100);
+  const attendu = fiche && fiche.taux > 0 && l.heures > 0 ? Math.round(l.heures * fiche.taux * 100) / 100 : null;
+  const tags = [
+    !l.prenom || !fiche ? `<span class="tag warn">Pas de fiche</span>` : "",
+    l.montant == null ? `<span class="tag warn">Montant manquant</span>` : reste > 0 ? `<span class="tag warn">À payer ${suEuros(reste)}</span>` : `<span class="tag">Payé</span>`,
+    facture ? `<span class="tag off">Facturé</span>` : "",
+    attendu != null && l.montant != null && Math.abs(attendu - l.montant) > .01 ? `<span class="tag off">Sa fiche donnerait ${suEuros(attendu)}</span>` : ""].join("");
+  return `<div class="ligne"><span><b>${esc(l.prenom) || "Élève manquant"}</b> <span class="muted">${esc(l.client)}</span><br>
+      <span class="muted small">${dateFr(l.date)}${l.heures != null ? " · " + heures(l.heures * 60) : ""}${fiche && fiche.taux > 0 ? " · tarif de sa fiche " + suEuros(fiche.taux) : ""}${l.acompte ? " · déjà payé " + suEuros(l.acompte) : ""}</span>
+      ${l.notes ? `<br><span class="small">${esc(l.notes)}</span>` : ""}
+      <span class="row" style="gap:4px;margin-top:3px">${tags}</span></span>
+    <span class="hd-droite"><b>${l.montant == null ? "" : suEuros(l.montant)}</b><button class="btn flat small" data-aller-ligne="${esc("SAISIE COURS, ligne " + l.ligne)}">Corriger</button></span></div>`;
+}
+async function vueHeures() {
+  const titre = `<h1>Déclarer mes heures ${aide("Tes cours, depuis le PC, comme sur l'appli Reporting. Une fois vérifiés, ils s'écrivent dans SAISIE COURS du TABLEAU DE BORD, avec le client et le tarif de la fiche de l'élève (CLIENTS COURS). Excel fermé. Copie de sécurité avant chaque enregistrement. Avant Générer les factures, ouvre et enregistre l'Excel dans WPS.")}</h1>`;
+  try { lgP = await pc("/lignes", null, 30000); }
+  catch (e) {
+    if (SUR_TELEPHONE) return contenu(`${titre}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : les heures se déclarent ici seulement depuis le PC.</p>`);
+    return contenu(`${titre}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour déclarer tes heures.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
+  }
+  const m0 = hdMois, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1), moisCle = ymd(m0).slice(0, 7);
+  const duMois = lgP.cours.filter(l => l.date.slice(0, 7) === moisCle);
+  const blocs = HD_ENTITES.map(nom => {
+    const liste = duMois.filter(l => hdEntite(l.entite) === nom);
+    if (!liste.length) return "";
+    const somme = f => liste.reduce((s, l) => s + (f(l) || 0), 0);
+    const aPayer = somme(l => /^ok$/i.test(l.statut || "") || l.montant == null ? 0 : Math.max(0, l.montant - (l.acompte || 0)));
+    return `<section class="card" style="margin-top:12px"><h3 style="margin-top:0">${esc(nom)}</h3>
+      <div class="hd-total"><span>Heures <b>${heures(somme(l => l.heures) * 60)}</b></span><span>Montant <b>${suEuros(somme(l => l.montant))}</b></span><span>Reste à payer <b>${suEuros(aPayer)}</b></span></div>
+      ${liste.map(hdLigneMois).join("")}</section>`;
+  }).join("");
+  const n = hdBrouillon.length;
+  const el = contenu(`<div class="row" style="justify-content:space-between">${titre}${lgP.chemin ? `<button class="btn flat" data-pc="${esc(lgP.chemin)}">Ouvrir l'Excel</button>` : ""}</div>
+    <section class="card" style="margin-top:12px"><label class="f" for="hd-texte">Ce que tu as fait</label>
+      <textarea id="hd-texte" rows="3" placeholder="Ex. Emma 1h30 hier, Léo 2h ce matin"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="hd-verifier">Vérifier</button><button class="btn flat" id="hd-vide">${ico("plus")} Ajouter une ligne à la main</button></div></section>
+    ${hdErreur ? `<div class="card lg-erreur" style="margin-top:12px"><b>${ico("alerte")} Pas enregistré.</b> ${esc(hdErreur)} <button class="btn" id="hd-relire" type="button">Relire l'Excel</button></div>` : ""}
+    ${n ? `<h2>À vérifier avant d'enregistrer</h2>${hdBrouillon.map(hdCarte).join("")}
+      <button class="btn go" id="hd-enregistrer" style="margin-top:12px">${ico("envoi")} Enregistrer ${n} cours dans l'Excel</button>
+      <p class="muted small" style="margin-top:6px">Une ligne orange est incomplète : choisis l'élève, le jour et les heures.</p>` : ""}
+    <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn" id="hd-prec" aria-label="Mois précédent">‹</button>
+      <h2 style="margin:0;text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</h2>
+      <button class="btn" id="hd-suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>›</button></div>
+    ${blocs || `<p class="muted" style="margin-top:12px">Aucun cours ce mois-ci.</p>`}`);
+  const ajouter = ls => { hdBrouillon = hdBrouillon.concat(ls.map(l => ({ eleve: l.eleve || "", jour: l.jour, minutes: l.minutes || 0, tarif: "", moitie: !!l.eleve && hdMoitieHabituelle(l.eleve), note: l.note || "", lu: l.lu || "", cle: Math.random().toString(36).slice(2) }))); hdGarder(); };
+  const pourLecture = lgP.listes.eleves.map(x => ({ id: x.prenom, nom: x.prenom }));
+  el.querySelector("#hd-verifier").onclick = () => {
+    const ls = lireDeclaration(el.querySelector("#hd-texte").value, pourLecture).map(l => ({ ...l, eleve: l.client_id }));
+    if (!ls.length) return toast("Écris par exemple : Emma 1h30 hier");
+    ajouter(ls);
+    const manque = hdBrouillon.slice(-ls.length).filter(l => !hdOk(l)).length;
+    toast(ls.length + " cours à vérifier" + (manque ? " (" + manque + " à compléter)" : ""));
+    afficher("heures");
+  };
+  el.querySelector("#hd-vide").onclick = () => { ajouter([{ jour: ymd(new Date()) }]); afficher("heures"); };
+  el.querySelector("#hd-prec").onclick = () => { hdMois = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); afficher("heures"); };
+  el.querySelector("#hd-suiv").onclick = () => { hdMois = m1; afficher("heures"); };
+  if (el.querySelector("#hd-relire")) el.querySelector("#hd-relire").onclick = () => { hdErreur = ""; afficher("heures"); };
+  // chaque changement dans une ligne est gardé tout de suite, et la fiche suit
+  el.addEventListener("input", e => {
+    const c = e.target.closest("[data-hd]"); if (!c) return;
+    const l = hdBrouillon.find(x => x.cle === c.dataset.hd), n = e.target.name;
+    if (!l || !n) return;
+    if (n === "heures") l.minutes = minutesSaisie(e.target.value);
+    else if (n === "moitie") l.moitie = e.target.checked;
+    else l[n] = e.target.value;
+    if (n === "eleve") { l.moitie = !!l.eleve && hdMoitieHabituelle(l.eleve); l.tarif = ""; c.querySelector("[name=moitie]").checked = l.moitie; c.querySelector("[name=tarif]").value = ""; }
+    const f = hdTexteFiche(l), fiche = hdFiche(l.eleve), zone = c.querySelector("[data-hd-fiche]"), calcul = hdCalcul(l);
+    zone.innerHTML = f.h; zone.classList.toggle("manque", f.manque);
+    c.querySelector("[data-hd-tarif]").hidden = !!(fiche && fiche.taux > 0);
+    c.querySelector("[name=tarif]").placeholder = calcul.source === "dernier" ? lgTexte(calcul.taux) : "ex. 30";
+    c.classList.toggle("incomplete", !hdOk(l));
+    hdGarder();
+  });
+  el.addEventListener("click", e => {
+    const s = e.target.closest("[data-hd-retirer]"); if (!s) return;
+    hdBrouillon = hdBrouillon.filter(x => x.cle !== s.closest("[data-hd]").dataset.hd); hdGarder(); afficher("heures");
+  });
+  if (el.querySelector("#hd-enregistrer")) el.querySelector("#hd-enregistrer").onclick = async e => {
+    if (!hdBrouillon.every(hdOk)) return toast("Complète les lignes en orange (élève, jour, heures) ou retire-les");
+    const lignes = [...hdBrouillon].sort((a, b) => a.jour.localeCompare(b.jour));
+    // Le même cours a pu être noté sur le téléphone : il serait facturé deux fois
+    const memeEleve = (a, b) => norm(a) === norm(b);
+    const doublons = lignes.filter((l, i) => lgP.cours.some(x => memeEleve(x.prenom, l.eleve) && x.date === l.jour) || lignes.some((y, j) => j !== i && memeEleve(y.eleve, l.eleve) && y.jour === l.jour));
+    if (doublons.length && !confirm("Déjà un cours le même jour pour :\n" + [...new Set(doublons.map(l => "- " + l.eleve + " (" + dateFr(l.jour) + ")"))].join("\n") + "\n\nEnregistrer quand même ?")) return;
+    const bouton = e.currentTarget; bouton.disabled = true;
+    const changements = lignes.map(l => {
+      const c = hdCalcul(l), note = (l.note || "").trim();
+      const v = { date: l.jour, prenom: c.fiche.prenom, heures: Math.round(l.minutes / 60 * 1e4) / 1e4, montant: c.total,   // montant figé, comme le programme Reporting : un tarif changé plus tard ne touche pas le passé
+        notes: `${hdDuree(l.minutes)}${c.acompte ? " payé" : ""} ${c.fiche.prenom} ${dateFr(l.jour)}${note ? " " + note : ""}` };
+      if (c.acompte) v.acompte = c.acompte;
+      return { onglet: "cours", ligne: null, valeurs: v };
+    });
+    try { lgP = await pc("/lignes", { version: lgP.version, changements }, 90000); }
+    catch (err) { hdErreur = err.message || String(err); return afficher("heures"); }
+    const nb = lignes.length;
+    hdBrouillon = []; hdGarder(); hdErreur = "";
+    hdMois = (d => new Date(d.getFullYear(), d.getMonth(), 1))(new Date(lignes[nb - 1].jour + "T12:00"));
+    suiviP = null; chargerSuiviPc().catch(() => {});
+    toast(nb + " cours enregistré" + (nb > 1 ? "s" : "") + " dans l'Excel. Une copie de sécurité a été faite avant.");
+    afficher("heures");
+  };
+}
+
 /* ===================== Aujourd'hui : une liste, une action par ligne ===================== */
 let jourDernier = null, nbAFaire = null;   // la dernière ligne marquée faite, pour pouvoir annuler ; le nombre affiché sur le menu
 const ouvrirSection = s => { sectionDevis = s; afficher("clients"); };
@@ -1266,6 +1586,8 @@ async function lignesDuJour() {
     autres: [["Valider", async () => { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", d.id)); re(); }], ["Refuser", () => refuserDoc(d.id, re)]] }));
   notes.forEach(n => faire.push({ icone: "bulle", quoi: nomInterv(n.intervenante_id) + " a laissé une note", detail: nomClient(n.client_id) + " · " + n.texte, action: "Fait", agir: async () => { await maj(vu("notes_terrain", n.id)); jourDernier = { texte: "Note marquée faite", defaire: () => pasVu("notes_terrain", n.id) }; re(); },
     autres: [["Ouvrir le client", () => ficheClient(n.client_id, "fil")]] }));
+  const nbRoutine = adNombre();
+  if (nbRoutine) faire.push({ icone: "drapeau", quoi: nbRoutine + (nbRoutine > 1 ? " tâches administratives à cocher" : " tâche administrative à cocher"), detail: adReste().map(g => g.titre).join(" · "), action: "Cocher", agir: () => afficher("taches"), autres: [] });
   if (garde.liste.length) faire.push({ icone: "dossier", quoi: "Fichiers des presta à regarder", detail: garde.liste.length + " en attente", action: "Voir", agir: () => afficher("avoir"), autres: [] });
   if (tampon.length) faire.push({ icone: "telecharger", quoi: tampon.length + (tampon.length > 1 ? " clients à traiter" : " client à traiter") + " dans la zone tampon", detail: "Nouveaux clients VosFactures ou extraction", action: "Traiter", agir: () => ouvrirSection(null), autres: [] });
   // En attente d'une réponse
@@ -1695,6 +2017,65 @@ async function vuePlanning() {
     if (a) { const [id, j] = a.dataset.ajout.split("|"); return fichePassagePrevu(null, id, j); }
   };
 }
+/* ===================== Emploi du temps : celui de Pense intelligent, vu depuis le pilotage (SQL 43) =====================
+   Pense intelligent vit sur le téléphone : relié avec le compte gérant, il dépose son emploi du temps dans pilote_documents (clé « agenda ») à chaque changement et à chaque ouverture.
+   Sens unique : on lit ici, on change sur le téléphone. OIKOS et Benjamin enseignement restent sur des lignes séparées, un client des deux est sur les deux. */
+const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"], ["AUTRE", "Hors client"]];
+const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine" };
+let emSemaine = lundi(new Date()), emVue = "semaine", emJour = ymd(new Date());
+const emClientDe = x => (x.cle && cacheClients.find(c => c.source_pense === x.cle)) || (x.nom && cacheClients.find(c => motsNom(c.nom) === motsNom(x.nom))) || null;
+const emSectionsDe = c => { if (!c) return ["AUTRE"]; if (c.etat === "prospect") return ["PROSPECT"]; const l = entreprisesDe(c); return l.length ? l : ["AUTRE"]; };
+const emHeure = x => x.jour_entier ? "Journée" : x.fin > x.t ? `${hm(x.t)}–${hm(x.fin)}` : hm(x.t);
+function emRecu(doc) {
+  if (!doc) return null;
+  const c = doc.contenu || {};
+  const elements = (Array.isArray(c.elements) ? c.elements : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { ...x, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client) }; }).sort((a, b) => a.t - b.t);
+  return { elements, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le };
+}
+async function vueEmploi() {
+  await chargerBase();
+  const ag = emRecu(await lireCopie("agenda"));
+  if (!ag) return emPasRecu();
+  const aujourdhui = ymd(new Date()), vieux = Date.now() - new Date(ag.recu).getTime() > 864e5;
+  const enSemaine = emVue === "semaine", jourD = new Date(emJour + "T12:00"), debutS = enSemaine ? emSemaine : lundi(jourD);
+  const jours = [0, 1, 2, 3, 4, 5, 6].map(i => plusJours(debutS, i));
+  const titre = enSemaine ? `${jours[0].getDate()} ${jours[0].toLocaleDateString("fr-FR", { month: "short" })} – ${jours[6].getDate()} ${jours[6].toLocaleDateString("fr-FR", { month: "short" })}` : jourD.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const cestMaintenant = enSemaine ? ymd(emSemaine) === ymd(lundi(new Date())) : emJour === aujourdhui;
+  const borneA = enSemaine ? emSemaine.getTime() : new Date(emJour + "T00:00").getTime(), borneB = plusJours(new Date(borneA), enSemaine ? 7 : 1).getTime();
+  const horsFenetre = (ag.fin && borneA >= ag.fin) || (ag.debut && borneB <= ag.debut);
+  const vus = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.t >= borneA && x.t < borneB);
+  const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)}`, bulle = esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
+    return x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`; };
+  const presentes = EM_SECTIONS.filter(([k]) => k === "OIKOS" || k === "BE" || vus.some(([x]) => x.sections.includes(k)));
+  const semaine = () => `<div class="card" style="overflow-x:auto;padding:8px"><table class="em-table"><tr><th></th>${jours.map(j => `<th><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour" style="${ymd(j) === aujourdhui ? "color:var(--accent)" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button></th>`).join("")}</tr>
+      ${presentes.map(([k, t]) => `<tr><td><b>${t}</b></td>${jours.map(j => `<td>${vus.map(([x, i]) => x.jour === ymd(j) && x.sections.includes(k) ? ev(x, i) : "").join("")}</td>`).join("")}</tr>`).join("")}</table></div>`;
+  const jour = () => presentes.map(([k, t]) => { const l = vus.filter(([x]) => x.sections.includes(k));
+      return `<section class="card" style="margin-bottom:12px"><h2 style="margin:0">${t}</h2>${l.map(([x, i]) => `<div class="ligne"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(EM_SORTES[x.sorte] || "Agenda")}</span>${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span>${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</div>`).join("") || `<p class="muted small" style="margin:8px 0 0">Rien ce jour-là.</p>`}</section>`; }).join("");
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1>
+      <span class="row"><button class="btn" data-em-pas="-1" aria-label="${enSemaine ? "Semaine précédente" : "Jour précédent"}">‹</button><b>${esc(titre)}</b><button class="btn" data-em-pas="1" aria-label="${enSemaine ? "Semaine suivante" : "Jour suivant"}">›</button>
+      ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
+      <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
+      <button class="btn" id="em-maj">Actualiser</button></span></div>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone.</p>
+    ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
+    ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
+    ${enSemaine ? semaine() : jour()}`);
+  el.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.id === "em-maj") return afficher("emploi");
+    if (b.dataset.emVue) { emVue = b.dataset.emVue; if (emVue === "semaine") emSemaine = lundi(jourD); else if (ymd(lundi(jourD)) !== ymd(emSemaine)) emJour = ymd(emSemaine) === ymd(lundi(new Date())) ? aujourdhui : ymd(emSemaine); return afficher("emploi"); }
+    if (b.dataset.emAuj) { emSemaine = lundi(new Date()); emJour = aujourdhui; return afficher("emploi"); }
+    if (b.dataset.emPas) { const n = Number(b.dataset.emPas); if (enSemaine) emSemaine = plusJours(emSemaine, 7 * n); else { emJour = ymd(plusJours(jourD, n)); emSemaine = lundi(new Date(emJour + "T12:00")); } return afficher("emploi"); }
+    if (b.dataset.emJour) { emJour = b.dataset.emJour; emSemaine = lundi(new Date(emJour + "T12:00")); emVue = "jour"; return afficher("emploi"); }
+    if (b.dataset.emFiche !== undefined) { const x = ag.elements[Number(b.dataset.emFiche)]; if (x && x.client) return ficheClient(x.client.id); }
+  };
+}
+function emPasRecu() {
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1><button class="btn" id="em-maj">Actualiser</button></div>
+    <section class="card" style="margin-top:12px"><p style="margin:0 0 8px">${ico("portable")} <b>L'emploi du temps de Pense intelligent n'est pas encore arrivé.</b></p>
+      <p class="muted small" style="margin:0">Sur le téléphone : mets Pense intelligent à jour (Vérifier les mises à jour), puis ouvre-le. Il part tout seul si l'appli est reliée à OIKOS Pilotage. Sinon : Routines, Mes données et rappels, Relier à OIKOS Pilotage.</p></section>`);
+  el.querySelector("#em-maj").onclick = () => afficher("emploi");
+}
 /* ===================== Reporting : le mois d'une intervenante, et ses passages saisis à sa place ===================== */
 /* Même lecture que l'onglet Reporting de l'appli : « Bibas 3h ce matin, Haddad 9h-12h hier » */
 const MOIS_FR = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
@@ -2103,6 +2484,7 @@ async function vueTaches() {
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>À faire</h1>
       <span class="row"><select id="qui" style="max-width:220px"><option value="">Tous les intervenants</option>${gens.map(p => `<option value="${p.id}" ${p.id === taQui ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select>
       <button class="btn" id="archive">${ico("archive")} Archive des tâches</button></span></div>
+    <div id="ad-page">${htmlRoutinePage()}</div>
     <form class="card" id="fa" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
       <div class="row" style="flex-wrap:nowrap"><input type="text" name="texte" required maxlength="500" placeholder="Nouvelle tâche…" autocomplete="off">
         <button class="btn primary" type="submit" ${gens.length ? "" : "disabled"}>Ajouter</button></div>
