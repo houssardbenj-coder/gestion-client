@@ -962,7 +962,7 @@ document.addEventListener("click", async e => {
   if (e.target.closest("[data-fermer-rail]")) return document.getElementById("rail")?.classList.remove("ouvert");
   if (e.target.closest("[data-relier]")) return relierPc();
   const allerLigne = e.target.closest("[data-aller-ligne]");
-  if (allerLigne) { const m = allerLigne.dataset.allerLigne.match(/^SAISIE (COURS|SERVICES), (ligne \d+)$/); if (m) { lgOnglet = m[1] === "COURS" ? "cours" : "services"; lgMois = ""; lgAFaire = false; lgCherche = m[2]; return afficher("lignes"); } }
+  if (allerLigne) { const m = allerLigne.dataset.allerLigne.match(/^SAISIE (COURS|SERVICES), (ligne \d+)$/); if (m) { lgOnglet = m[1] === "COURS" ? "cours" : "services"; lgMois = ""; lgAFaire = false; lgSansArchivees = false; lgCherche = m[2]; return afficher("lignes"); } }
   const fichier = e.target.closest("[data-pc]");
   if (fichier) return ouvrirSurPc(fichier.dataset.pc, fichier.dataset.nom || fichier.textContent);
   const web = e.target.closest("[data-web]");
@@ -975,6 +975,19 @@ document.addEventListener("click", async e => {
   }
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("volet") && !document.querySelector(".voile")) fermerVolet(); });
+/* Clic en dehors d'Administratif et tâches : referme le volet, le panneau et les branches dépliées.
+   composedPath : un clic dans le panneau redessine son contenu, la cible n'y est alors plus rattachée. */
+const dansZoneRail = e => e.composedPath().some(n => n.matches?.("#rail,#volet,#rail-ouvrir,#toast,.aide-bulle,.voile,.recherche,[data-proc]"));
+let appuiDansRail = false;   // sélectionner du texte dans le volet et relâcher dehors ne ferme rien
+document.addEventListener("pointerdown", e => { appuiDansRail = dansZoneRail(e); }, true);
+document.addEventListener("click", e => {
+  const depuisRail = appuiDansRail; appuiDansRail = false;
+  if (!e.isTrusted || depuisRail || dansZoneRail(e) || document.querySelector(".voile,.recherche")) return;
+  const r = document.getElementById("rail");
+  if (r?.classList.contains("ouvert")) r.classList.remove("ouvert");
+  else if (r?.getClientRects().length) r.querySelectorAll("details.rail-branche[open]").forEach(d => { d.open = false; retenirRail(d.dataset.groupe, false); });
+  if (document.getElementById("volet")) fermerVolet();
+});
 
 /* Onglet Suivi Excel : mêmes calculs que l'onglet TABLEAU DE BORD (IA automatisation facture test\suivi_tableau.py) */
 let suAnnee = null;
@@ -1025,7 +1038,7 @@ async function vueSuivi() {
 
 /* ===================== Lignes de l'Excel : modifiées ici, écrites dans le fichier par le programme du PC (lignes_excel.py) =====================
    Rien de ces lignes n'est écrit dans cette page ni copié dans la base : sans le PC, la page ne montre rien. */
-let lgP = null, lgOnglet = "cours", lgMois = "", lgCherche = "", lgAFaire = false, lgModifs = {}, lgNouvelles = { cours: [], services: [] }, lgCompte = 0, lgEnvoi = false;
+let lgP = null, lgOnglet = "cours", lgMois = "", lgCherche = "", lgAFaire = false, lgSansArchivees = false, lgModifs = {}, lgNouvelles = { cours: [], services: [] }, lgCompte = 0, lgEnvoi = false;
 const LG_ONGLETS = { cours: "Cours", services: "Services OIKOS" };
 const LG_COLONNES = {
   cours: [["date", "Date", "date"], ["prenom", "Élève", "liste", "lg-eleves"], ["client", "Client", "ro"], ["entite", "Entité", "ro"], ["heures", "Heures", "num"], ["acompte", "Acompte", "num"], ["montant", "Montant TTC", "auto"], ["ht", "HT", "euro"], ["mois", "Mois fact.", "ro"], ["notes", "Notes", "long"], ["statut", "Payé", "ok"], ["facture", "Facture", "txt"], ["archiver", "Archivé", "oui"]],
@@ -1036,6 +1049,9 @@ const lgCle = (o, l, c) => o + "|" + l + "|" + c;
 const lgTexte = v => v == null ? "" : String(v).replace(".", ",");
 const lgEntite = e => /enseignement/i.test(e || "") ? "BE" : (e || "");
 const lgManque = (o, l) => o === "cours" ? (!l.prenom || l.montant == null) : (!l.client || l.taux == null || l.paye == null);
+/* Même règle que les programmes du PC (Générer les factures, intervenants, NOVA). Une ligne qui a un changement à enregistrer reste affichée : on voit ce qu'on enregistre. */
+const lgArchivee = l => /^(oui|yes|true|1)$/i.test(String(l.archiver || "").trim());
+const lgMasquee = (o, l) => lgSansArchivees && lgArchivee(l) && !Object.keys(lgModifs).some(k => k.startsWith(lgCle(o, l.ligne, "")));
 const lgOrigine = (o, id) => (lgP[o].find(x => String(x.ligne) === String(id)) || {});
 /* Ce que la case affiche quand rien n'a été changé. Une case « auto » est vide : son montant calculé est écrit en gris dedans. */
 function lgValeurInitiale(l, c, type) {
@@ -1063,11 +1079,12 @@ function lgRangee(o, l, id) {
 function lgDessiner() {
   const z = document.getElementById("lg-zone"); if (!z) return;
   const o = lgOnglet, mot = norm(lgCherche);
-  const toutes = lgP[o].filter(l => (!lgMois || l.mois === lgMois) && (!lgAFaire || lgManque(o, l)) && (!mot || norm("ligne " + l.ligne + " " + Object.values(l).join(" ")).includes(mot)));
+  const retenues = lgP[o].filter(l => (!lgMois || l.mois === lgMois) && (!lgAFaire || lgManque(o, l)) && (!mot || norm("ligne " + l.ligne + " " + Object.values(l).join(" ")).includes(mot)));
+  const toutes = retenues.filter(l => !lgMasquee(o, l)), masquees = retenues.length - toutes.length;
   const nouvelles = lgNouvelles[o];
   z.innerHTML = `<div class="card lg-boite"><table class="lg-table"><thead><tr><th class="lg-num" scope="col" title="Numéro de ligne dans l'Excel">N°</th>${LG_COLONNES[o].map(k => `<th scope="col" data-col="${k[0]}" class="${k[2] === "euro" ? "n" : ""}">${k[1]}</th>`).join("")}</tr></thead>
     <tbody>${nouvelles.map(id => lgRangee(o, {}, id)).join("")}${toutes.map(l => lgRangee(o, l, l.ligne)).join("")}</tbody></table>
-    ${!toutes.length && !nouvelles.length ? `<p class="muted" style="padding:14px">Aucune ligne avec ces filtres.</p>` : ""}</div><p class="muted small" style="margin-top:6px">${toutes.length} ligne${toutes.length > 1 ? "s" : ""}, de la plus récente à la plus ancienne.</p>`;
+    ${!toutes.length && !nouvelles.length ? `<p class="muted" style="padding:14px">Aucune ligne avec ces filtres.</p>` : ""}</div><p class="muted small" style="margin-top:6px">${toutes.length} ligne${toutes.length > 1 ? "s" : ""}${masquees ? `, ${masquees} archivée${masquees > 1 ? "s" : ""} masquée${masquees > 1 ? "s" : ""}` : ""}, de la plus récente à la plus ancienne.</p>`;
   /* Après un nouveau dessin : le client et le montant d'un élève changé, sans toucher à ce qui a été tapé */
   z.querySelectorAll("tr[data-l]").forEach(tr => { if (lgCle(o, tr.dataset.l, "prenom") in lgModifs) lgSuiteCours(tr, "prenom", true); });
   lgBarre();
@@ -1145,11 +1162,12 @@ function lgEntete() {
   const e = document.getElementById("lg-entete"); if (!e) return;
   const o = lgOnglet, moisDispos = [...new Set(lgP[o].map(l => l.mois).filter(Boolean))].sort((a, b) => (b.slice(3) + b.slice(0, 2)).localeCompare(a.slice(3) + a.slice(0, 2)));
   if (lgMois && !moisDispos.includes(lgMois)) lgMois = "";
-  const nb = lgP[o].filter(l => lgManque(o, l)).length;
+  const nb = lgP[o].filter(l => lgManque(o, l)).length, nbArchivees = lgP[o].filter(lgArchivee).length;
   e.innerHTML = `<div class="chips" id="lg-onglets">${Object.entries(LG_ONGLETS).map(([k, t]) => `<button class="chip" data-lg-o="${k}" aria-pressed="${k === o}">${t} (${lgP[k].length})</button>`).join("")}</div>
     <div class="row lg-filtres"><select id="lg-mois" aria-label="Mois de facturation"><option value="">Tous les mois</option>${moisDispos.map(m => `<option ${m === lgMois ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>
       <input id="lg-cherche" type="search" placeholder="Chercher un nom, une note, un n° de ligne…" value="${esc(lgCherche)}">
       <button class="chip" id="lg-afaire" aria-pressed="${lgAFaire}">Incomplètes (${nb})</button>
+      <button class="chip" id="lg-sans-archivees" aria-pressed="${lgSansArchivees}">Masquer les archivées (${nbArchivees})</button>
       <span style="flex:1"></span><button class="btn" id="lg-ajouter" type="button">${ico("plus")} Nouvelle ligne</button></div>`;
 }
 async function vueLignes() {
@@ -1184,6 +1202,7 @@ async function vueLignes() {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.lgO) { lgOnglet = b.dataset.lgO; lgMois = ""; lgEntete(); return lgDessiner(); }
     if (b.id === "lg-afaire") { lgAFaire = !lgAFaire; b.setAttribute("aria-pressed", lgAFaire); return lgDessiner(); }
+    if (b.id === "lg-sans-archivees") { lgSansArchivees = !lgSansArchivees; b.setAttribute("aria-pressed", lgSansArchivees); return lgDessiner(); }
     if (b.id === "lg-ajouter") {
       const id = "n" + (++lgCompte); lgNouvelles[lgOnglet].unshift(id); lgModifs[lgCle(lgOnglet, id, "date")] = ymd(new Date());
       lgDessiner(); document.querySelector(`tr[data-l="${id}"] [data-c="${lgOnglet === "cours" ? "prenom" : "activite"}"]`).focus(); return;
