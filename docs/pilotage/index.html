@@ -331,6 +331,8 @@ input[type=date],input[type=time],input[type=datetime-local],input[type=search]{
 .hd-coche input{width:18px!important;height:18px;flex:none}
 .hd-droite{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right}
 .hd-total{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px}
+.hd-propos{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.hd-propos:empty{display:none}
+.hd-propo[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .proc[aria-current="true"] .proc-prog{color:inherit}
 /* Menu, sous-boutons, recherche */
 .haut-droite{display:flex;align-items:center;gap:6px;margin-left:auto}
@@ -1386,8 +1388,9 @@ addEventListener("beforeunload", e => { if (lgNb()) { e.preventDefault(); e.retu
 
 /* ===================== Déclarer mes heures : même saisie que le Reporting de l'appli, rattachée aux élèves de l'Excel =====================
    Vérifier puis enregistrer écrit une ligne de SAISIE COURS, par le programme du PC (lignes_excel.py), au même format que le programme Reporting.
-   Comme Lignes Excel : rien de ces lignes n'est écrit dans cette page ni copié dans la base. OIKOS et Benjamin enseignement ne sont jamais additionnés. */
-const HD_CLE = "oikos-gerant-heures", HD_ENTITES = ["Benjamin enseignement", "OIKOS", "Entité à préciser"];
+   Comme Lignes Excel : rien de ces lignes n'est écrit dans cette page ni copié dans la base. OIKOS et Benjamin enseignement ne sont jamais additionnés.
+   L'élève se tape au clavier : la page propose les fiches les plus proches, et retient l'écriture choisie (« simon » → SIMON) pour les fois suivantes. */
+const HD_CLE = "oikos-gerant-heures", HD_MEM = "oikos-gerant-ecritures", HD_ENTITES = ["Benjamin enseignement", "OIKOS", "Entité à préciser"];
 let hdBrouillon = []; try { hdBrouillon = JSON.parse(localStorage.getItem(HD_CLE)) || []; } catch (e) {}
 const hdGarder = () => { try { localStorage.setItem(HD_CLE, JSON.stringify(hdBrouillon)); } catch (e) {} };
 let hdMois = new Date(new Date().getFullYear(), new Date().getMonth(), 1), hdErreur = "";
@@ -1395,6 +1398,56 @@ const hdEntite = e => /enseignement|^be$/i.test(String(e || "").trim()) ? HD_ENT
 const hdFiche = prenom => prenom ? lgP.listes.eleves.find(x => norm(x.prenom) === norm(prenom)) : null;
 const hdNombre = v => { const n = parseFloat(String(v ?? "").trim().replace(",", ".")); return n > 0 ? n : 0; };
 const hdDuree = min => { const h = Math.floor(min / 60), m = Math.round(min - h * 60); return m ? h + "h" + pad2(m) : h + "h"; };   // « 1h30 », comme les notes du programme Reporting
+/* Les écritures retenues : { « simon » : { p: "SIMON", t: quand } }. Gardées dans ce navigateur et, si la base l'accepte (SQL 45), dans pilote_documents pour l'autre PC. */
+let hdMemoire = {}; try { hdMemoire = JSON.parse(localStorage.getItem(HD_MEM)) || {}; } catch (e) {}
+let hdMemoireLue = false;
+async function hdMemoireLire() {
+  if (hdMemoireLue) return; hdMemoireLue = true;
+  try {
+    const c = await lireCopie("ecritures"), d = (c && c.contenu) || {};
+    Object.entries(d).forEach(([k, v]) => { if (v && v.p && (!hdMemoire[k] || (hdMemoire[k].t || 0) < (v.t || 0))) hdMemoire[k] = v; });
+    try { localStorage.setItem(HD_MEM, JSON.stringify(hdMemoire)); } catch (e) {}
+  } catch (e) {}
+}
+function hdRetenir(ecrit, prenom) {
+  const k = norm(ecrit); if (k.length < 2 || !prenom || norm(prenom) === k && !hdMemoire[k]) return;
+  if (hdMemoire[k] && hdMemoire[k].p === prenom) return;
+  hdMemoire[k] = { p: prenom, t: Date.now() };
+  try { localStorage.setItem(HD_MEM, JSON.stringify(hdMemoire)); } catch (e) {}
+  if (typeof sb !== "undefined") copierDansBase("ecritures", String(Date.now()), hdMemoire).catch(() => {});
+}
+const hdMots = s => norm(s).split(" ").filter(m => m && !VIDES.has(m) && !/^\d+$/.test(m));
+/* Les fiches qui ressemblent le plus à ce qui est écrit, la meilleure d'abord :
+   écriture déjà retenue, puis prénom exact (« simon » → SIMON avant « simon p »), puis début du prénom, puis ressemblance (prénom ou client). */
+function hdClasser(ecrit) {
+  const k = norm(ecrit), mots = hdMots(ecrit);
+  if (!k) return [];
+  const retenu = (hdMemoire[k] || mots.map(m => hdMemoire[m]).find(Boolean) || {}).p || "";
+  const usage = {}; lgP.cours.forEach(c => { const n = norm(c.prenom); usage[n] = (usage[n] || 0) + 1; });
+  const vus = new Set(), res = [];
+  lgP.listes.eleves.forEach(x => {
+    const p = norm(x.prenom); if (!p || vus.has(p)) return; vus.add(p);   // même prénom écrit deux fois (casse) : la première fiche, comme l'Excel
+    const siens = p.split(" ");
+    let s;
+    if (retenu && norm(retenu) === p) s = 3;
+    else if (p === k || mots.join(" ") === p) s = 2;
+    else if (mots.length === 1 && siens[0] === mots[0]) s = 1.5;
+    else if (p.startsWith(k)) s = 1.2;
+    else {
+      const prenom = Math.max(0, ...mots.map(m => Math.max(0, ...siens.map(w => ressemblance(m, w)))));
+      const oublies = siens.filter(w => !mots.some(m => ressemblance(m, w) >= .75)).length;   // « simon » ressemble moins à « simon p » qu'à « simon »
+      const client = Math.max(0, ...mots.filter(m => m.length >= 3).map(m => Math.max(0, ...norm(x.client).split(" ").filter(w => w.length >= 3).map(w => ressemblance(m, w))))) * .85;
+      s = Math.max(prenom - .1 * oublies, client);
+    }
+    if (s >= .6) res.push({ x, s: s + Math.min(usage[p] || 0, 20) / 1000 });   // à égalité, l'élève qui a le plus de cours
+  });
+  return res.sort((a, b) => b.s - a.s);
+}
+/* Choisi d'office seulement si une fiche se détache nettement des autres */
+function hdDeviner(ecrit) {
+  const [a, b] = hdClasser(ecrit);
+  return a && a.s >= .75 && (!b || a.s - b.s > .05) ? a.x.prenom : "";
+}
 /* Même règle que le programme Reporting : la moitié payée d'avance seulement si tous ses cours (2 au moins) sont ainsi */
 function hdMoitieHabituelle(prenom) {
   const siens = lgP.cours.filter(x => norm(x.prenom) === norm(prenom) && x.montant);
@@ -1416,26 +1469,43 @@ const hdOk = l => { const c = hdCalcul(l); return !!(c.fiche && c.total && l.jou
 /* Ce que dit la fiche de l'élève pour cette déclaration */
 function hdTexteFiche(l) {
   const c = hdCalcul(l);
-  if (!c.fiche) return { manque: true, h: l.eleve ? `« ${esc(l.eleve)} » n'est plus dans CLIENTS COURS : choisis un élève de la liste.` : "Choisis l'élève : sa fiche donne le client et le tarif." };
+  if (!c.fiche) return { manque: true, h: (l.saisie ?? l.ecrit) ? `Pas de fiche à ce nom : choisis parmi les propositions, ou mets la ligne de côté.` : "Tape le prénom de l'élève : sa fiche donne le client et le tarif." };
   const qui = `Fiche : <b>${esc(c.fiche.prenom)}</b> · ${esc(c.fiche.client) || "client manquant"} · ${esc(hdEntite(c.fiche.entite))}`;
   if (!c.taux) return { manque: true, h: `${qui}<br>Pas de tarif sur sa fiche ni de cours passé : indique son tarif à l'heure.` };
   const origine = c.source === "fiche" ? "tarif de sa fiche" : c.source === "dernier" ? "pas de tarif sur sa fiche, repris de son dernier cours : à vérifier" : "tarif tapé ici, sa fiche n'en a pas";
   if (!c.total) return { manque: true, h: `${qui}<br>${suEuros(c.taux)} de l'heure (${origine}). Indique les heures.` };
   return { manque: false, h: `${qui}<br>${heures(l.minutes)} × ${suEuros(c.taux)} (${origine}) = <b>${suEuros(c.total)}</b>${c.acompte ? `<br>Déjà payé ${suEuros(c.acompte)}, reste à payer <b>${suEuros(c.reste)}</b>` : ""}` };
 }
+/* Les propositions sous le champ Élève : visibles tant qu'aucune fiche n'est choisie, ou pendant la frappe */
+function hdPropositions(l, texte) {
+  const liste = hdClasser(texte).slice(0, 6);
+  if (!liste.length) return texte ? `<span class="muted small">Aucune fiche ne ressemble à « ${esc(texte)} ».</span>` : "";
+  return `<span class="muted small">${hdFiche(l.eleve) ? "Autres fiches :" : "Tu voulais dire :"}</span>` + liste.map((r, i) =>
+    `<button type="button" class="chip hd-propo" role="option" data-hd-choisir="${esc(r.x.prenom)}" aria-selected="${i === 0}">${esc(r.x.prenom)} <span class="muted">· ${esc(r.x.client) || "client manquant"}</span></button>`).join("");
+}
 function hdCarte(l) {
   const f = hdTexteFiche(l), fiche = hdFiche(l.eleve), sansTarif = !(fiche && fiche.taux > 0);
-  const groupes = HD_ENTITES.map(nom => [nom, lgP.listes.eleves.filter(x => hdEntite(x.entite) === nom)]).filter(g => g[1].length);
+  const texte = fiche ? fiche.prenom : (l.saisie ?? l.ecrit ?? "");
   return `<div class="card rp-ligne${hdOk(l) ? "" : " incomplete"}" data-hd="${esc(l.cle)}">
     ${l.lu ? `<p class="muted small">« ${esc(l.lu)} »</p>` : ""}
-    <div class="row" style="flex-wrap:nowrap"><select name="eleve" aria-label="Élève" style="flex:1;min-width:0"><option value="">Quel élève ?</option>${groupes.map(([nom, liste]) => `<optgroup label="${esc(nom)}">${liste.map(x => `<option value="${esc(x.prenom)}" ${fiche && x.prenom === fiche.prenom ? "selected" : ""}>${esc(x.prenom)} (${esc(x.client)})</option>`).join("")}</optgroup>`).join("")}</select>
+    <div class="row" style="flex-wrap:nowrap"><input name="eleve" type="text" autocomplete="off" spellcheck="false" aria-label="Élève" placeholder="Tape le prénom de l'élève…" value="${esc(texte)}" style="flex:1;min-width:0">
+      <button class="btn flat small" data-hd-cote title="La garder plus bas, sans l'enregistrer">Mettre de côté</button>
       <button class="btn flat" data-hd-retirer aria-label="Retirer cette ligne" title="Retirer cette ligne">${ico("croix")}</button></div>
+    <div class="hd-propos" role="listbox" aria-label="Fiches proposées" data-hd-propos ${fiche ? "hidden" : ""}>${fiche ? "" : hdPropositions(l, texte)}</div>
     <div class="rp-champs"><label class="f">Jour<input name="jour" type="date" value="${esc(l.jour)}" max="${ymd(new Date())}"></label>
       <label class="f">Heures<input name="heures" type="text" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label>
       <label class="f" data-hd-tarif ${sansTarif ? "" : "hidden"}>Tarif à l'heure<input name="tarif" type="text" inputmode="decimal" value="${esc(l.tarif || "")}" placeholder="${hdCalcul(l).source === "dernier" ? lgTexte(hdCalcul(l).taux) : "ex. 30"}"></label>
       <label class="hd-coche"><input name="moitie" type="checkbox" ${l.moitie ? "checked" : ""}>La moitié est déjà payée</label></div>
     <label class="f">Remarque (facultatif)<input name="note" type="text" maxlength="120" value="${esc(l.note || "")}"></label>
     <div class="hd-fiche${f.manque ? " manque" : ""}" data-hd-fiche>${f.h}</div></div>`;
+}
+/* Une ligne mise de côté : pas enregistrée, gardée jusqu'à ce qu'on la reprenne ou la retire */
+function hdCarteCote(l) {
+  const fiche = hdFiche(l.eleve);
+  return `<div class="ligne" data-hd="${esc(l.cle)}"><span><b>${esc(fiche ? fiche.prenom : (l.saisie ?? l.ecrit ?? "") || "Élève à trouver")}</b>
+      <span class="muted small">${l.jour ? dateFr(l.jour) : ""}${l.minutes ? " · " + heures(l.minutes) : ""}</span>
+      ${l.lu ? `<br><span class="muted small">« ${esc(l.lu)} »</span>` : ""}</span>
+    <span class="row" style="gap:4px;flex:none"><button class="btn small" data-hd-reprendre>Reprendre</button><button class="btn flat" data-hd-retirer aria-label="Retirer cette ligne" title="Retirer cette ligne">${ico("croix")}</button></span></div>`;
 }
 function hdLigneMois(l) {
   const fiche = hdFiche(l.prenom), paye = /^ok$/i.test(l.statut || ""), facture = /\d/.test(l.facture || "");
@@ -1452,13 +1522,20 @@ function hdLigneMois(l) {
       <span class="row" style="gap:4px;margin-top:3px">${tags}</span></span>
     <span class="hd-droite"><b>${l.montant == null ? "" : suEuros(l.montant)}</b><button class="btn flat small" data-aller-ligne="${esc("SAISIE COURS, ligne " + l.ligne)}">Corriger</button></span></div>`;
 }
+const hdTitre = () => `<h1>Déclarer mes heures ${aide("Tes cours, depuis le PC, comme sur l'appli Reporting. Tape le prénom de l'élève : la page propose les fiches les plus proches et retient ton écriture pour la prochaine fois. Une fois vérifiés, les cours s'écrivent dans SAISIE COURS du TABLEAU DE BORD, avec le client et le tarif de la fiche de l'élève (CLIENTS COURS). Excel fermé. Copie de sécurité avant chaque enregistrement. Avant Générer les factures, ouvre et enregistre l'Excel dans WPS.")}</h1>`;
 async function vueHeures() {
-  const titre = `<h1>Déclarer mes heures ${aide("Tes cours, depuis le PC, comme sur l'appli Reporting. Une fois vérifiés, ils s'écrivent dans SAISIE COURS du TABLEAU DE BORD, avec le client et le tarif de la fiche de l'élève (CLIENTS COURS). Excel fermé. Copie de sécurité avant chaque enregistrement. Avant Générer les factures, ouvre et enregistre l'Excel dans WPS.")}</h1>`;
   try { lgP = await pc("/lignes", null, 30000); }
   catch (e) {
-    if (SUR_TELEPHONE) return contenu(`${titre}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : les heures se déclarent ici seulement depuis le PC.</p>`);
-    return contenu(`${titre}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour déclarer tes heures.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
+    if (SUR_TELEPHONE) return contenu(`${hdTitre()}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : les heures se déclarent ici seulement depuis le PC.</p>`);
+    return contenu(`${hdTitre()}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour déclarer tes heures.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
   }
+  await hdMemoireLire();
+  hdDessiner();
+}
+/* Redessine la page sans relire l'Excel et sans remonter en haut ; ancre : la carte qui prend la place de celle qu'on vient d'ôter */
+function hdDessiner(focus, ancre) {
+  if (onglet !== "heures" || !lgP) return;
+  const y = scrollY;
   const m0 = hdMois, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1), moisCle = ymd(m0).slice(0, 7);
   const duMois = lgP.cours.filter(l => l.date.slice(0, 7) === moisCle);
   const blocs = HD_ENTITES.map(nom => {
@@ -1470,77 +1547,130 @@ async function vueHeures() {
       <div class="hd-total"><span>Heures <b>${heures(somme(l => l.heures) * 60)}</b></span><span>Montant <b>${suEuros(somme(l => l.montant))}</b></span><span>Reste à payer <b>${suEuros(aPayer)}</b></span></div>
       ${liste.map(hdLigneMois).join("")}</section>`;
   }).join("");
-  const n = hdBrouillon.length;
-  const el = contenu(`<div class="row" style="justify-content:space-between">${titre}${lgP.chemin ? `<button class="btn flat" data-pc="${esc(lgP.chemin)}">Ouvrir l'Excel</button>` : ""}</div>
+  const actives = hdBrouillon.filter(l => !l.cote), cote = hdBrouillon.filter(l => l.cote), n = actives.length;
+  const el = contenu(`<div class="row" style="justify-content:space-between">${hdTitre()}${lgP.chemin ? `<button class="btn flat" data-pc="${esc(lgP.chemin)}">Ouvrir l'Excel</button>` : ""}</div>
     <section class="card" style="margin-top:12px"><label class="f" for="hd-texte">Ce que tu as fait</label>
       <textarea id="hd-texte" rows="3" placeholder="Ex. Emma 1h30 hier, Léo 2h ce matin"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn primary" id="hd-verifier">Vérifier</button><button class="btn flat" id="hd-vide">${ico("plus")} Ajouter une ligne à la main</button></div></section>
     ${hdErreur ? `<div class="card lg-erreur" style="margin-top:12px"><b>${ico("alerte")} Pas enregistré.</b> ${esc(hdErreur)} <button class="btn" id="hd-relire" type="button">Relire l'Excel</button></div>` : ""}
-    ${n ? `<h2>À vérifier avant d'enregistrer</h2>${hdBrouillon.map(hdCarte).join("")}
+    ${n ? `<h2>À vérifier avant d'enregistrer</h2>${actives.map(hdCarte).join("")}
       <button class="btn go" id="hd-enregistrer" style="margin-top:12px">${ico("envoi")} Enregistrer ${n} cours dans l'Excel</button>
-      <p class="muted small" style="margin-top:6px">Une ligne orange est incomplète : choisis l'élève, le jour et les heures.</p>` : ""}
+      <p class="muted small" style="margin-top:6px">Une ligne orange est incomplète : choisis l'élève, le jour et les heures, ou mets-la de côté.</p>` : ""}
+    ${cote.length ? `<details class="card" style="margin-top:12px" ${n ? "" : "open"}><summary><b>Mis de côté (${cote.length})</b> <span class="muted small">pas enregistrés, gardés ici</span></summary>${cote.map(hdCarteCote).join("")}</details>` : ""}
     <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn" id="hd-prec" aria-label="Mois précédent">‹</button>
       <h2 style="margin:0;text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</h2>
       <button class="btn" id="hd-suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>›</button></div>
     ${blocs || `<p class="muted" style="margin-top:12px">Aucun cours ce mois-ci.</p>`}`);
-  const ajouter = ls => { hdBrouillon = hdBrouillon.concat(ls.map(l => ({ eleve: l.eleve || "", jour: l.jour, minutes: l.minutes || 0, tarif: "", moitie: !!l.eleve && hdMoitieHabituelle(l.eleve), note: l.note || "", lu: l.lu || "", cle: Math.random().toString(36).slice(2) }))); hdGarder(); };
+  scrollTo(0, y);
+  if (ancre) { const cs = el.querySelectorAll(".rp-ligne[data-hd]"), t = cs[ancre.idx] || cs[ancre.idx - 1] || el.querySelector("#hd-prec"); if (t) scrollBy(0, t.getBoundingClientRect().top - ancre.top); }
+  if (focus) { const i = el.querySelector(`[data-hd="${focus}"] [name=eleve]`); if (i) { i.focus({ preventScroll: true }); i.scrollIntoView({ block: "center" }); } }
+  const ajouter = ls => { const neuves = ls.map(l => ({ eleve: l.eleve || "", ecrit: l.ecrit || "", jour: l.jour, minutes: l.minutes || 0, tarif: "", moitie: !!l.eleve && hdMoitieHabituelle(l.eleve), note: l.note || "", lu: l.lu || "", cle: Math.random().toString(36).slice(2) })); hdBrouillon = hdBrouillon.concat(neuves); hdGarder(); return neuves; };
   const pourLecture = lgP.listes.eleves.map(x => ({ id: x.prenom, nom: x.prenom }));
   el.querySelector("#hd-verifier").onclick = () => {
-    const ls = lireDeclaration(el.querySelector("#hd-texte").value, pourLecture).map(l => ({ ...l, eleve: l.client_id }));
+    const ls = lireDeclaration(el.querySelector("#hd-texte").value, pourLecture).map(l => {
+      const ecrit = hdMots(l.reste || "").join(" ");
+      return { ...l, ecrit, eleve: (ecrit && hdDeviner(ecrit)) || l.client_id };
+    });
     if (!ls.length) return toast("Écris par exemple : Emma 1h30 hier");
-    ajouter(ls);
-    const manque = hdBrouillon.slice(-ls.length).filter(l => !hdOk(l)).length;
+    const neuves = ajouter(ls), manque = neuves.filter(l => !hdOk(l)).length;
     toast(ls.length + " cours à vérifier" + (manque ? " (" + manque + " à compléter)" : ""));
-    afficher("heures");
+    hdDessiner();
   };
-  el.querySelector("#hd-vide").onclick = () => { ajouter([{ jour: ymd(new Date()) }]); afficher("heures"); };
-  el.querySelector("#hd-prec").onclick = () => { hdMois = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); afficher("heures"); };
-  el.querySelector("#hd-suiv").onclick = () => { hdMois = m1; afficher("heures"); };
-  if (el.querySelector("#hd-relire")) el.querySelector("#hd-relire").onclick = () => { hdErreur = ""; afficher("heures"); };
-  // chaque changement dans une ligne est gardé tout de suite, et la fiche suit
-  el.addEventListener("input", e => {
-    const c = e.target.closest("[data-hd]"); if (!c) return;
-    const l = hdBrouillon.find(x => x.cle === c.dataset.hd), n = e.target.name;
-    if (!l || !n) return;
-    if (n === "heures") l.minutes = minutesSaisie(e.target.value);
-    else if (n === "moitie") l.moitie = e.target.checked;
-    else l[n] = e.target.value;
-    if (n === "eleve") { l.moitie = !!l.eleve && hdMoitieHabituelle(l.eleve); l.tarif = ""; c.querySelector("[name=moitie]").checked = l.moitie; c.querySelector("[name=tarif]").value = ""; }
+  el.querySelector("#hd-vide").onclick = () => { const [l] = ajouter([{ jour: ymd(new Date()) }]); hdDessiner(l.cle); };
+  el.querySelector("#hd-prec").onclick = () => { hdMois = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); hdDessiner(); };
+  el.querySelector("#hd-suiv").onclick = () => { hdMois = m1; hdDessiner(); };
+  if (el.querySelector("#hd-relire")) el.querySelector("#hd-relire").onclick = () => { hdErreur = ""; vueHeures(); };
+  const ligneDe = c => hdBrouillon.find(x => x.cle === c.dataset.hd);
+  // la fiche, le tarif et la couleur de la carte suivent chaque changement, sans redessiner la page
+  const suivre = (c, l) => {
     const f = hdTexteFiche(l), fiche = hdFiche(l.eleve), zone = c.querySelector("[data-hd-fiche]"), calcul = hdCalcul(l);
     zone.innerHTML = f.h; zone.classList.toggle("manque", f.manque);
     c.querySelector("[data-hd-tarif]").hidden = !!(fiche && fiche.taux > 0);
     c.querySelector("[name=tarif]").placeholder = calcul.source === "dernier" ? lgTexte(calcul.taux) : "ex. 30";
     c.classList.toggle("incomplete", !hdOk(l));
     hdGarder();
-  });
-  el.addEventListener("click", e => {
-    const s = e.target.closest("[data-hd-retirer]"); if (!s) return;
-    hdBrouillon = hdBrouillon.filter(x => x.cle !== s.closest("[data-hd]").dataset.hd); hdGarder(); afficher("heures");
-  });
-  if (el.querySelector("#hd-enregistrer")) el.querySelector("#hd-enregistrer").onclick = async e => {
-    if (!hdBrouillon.every(hdOk)) return toast("Complète les lignes en orange (élève, jour, heures) ou retire-les");
-    const lignes = [...hdBrouillon].sort((a, b) => a.jour.localeCompare(b.jour));
-    // Le même cours a pu être noté sur le téléphone : il serait facturé deux fois
-    const memeEleve = (a, b) => norm(a) === norm(b);
-    const doublons = lignes.filter((l, i) => lgP.cours.some(x => memeEleve(x.prenom, l.eleve) && x.date === l.jour) || lignes.some((y, j) => j !== i && memeEleve(y.eleve, l.eleve) && y.jour === l.jour));
-    if (doublons.length && !confirm("Déjà un cours le même jour pour :\n" + [...new Set(doublons.map(l => "- " + l.eleve + " (" + dateFr(l.jour) + ")"))].join("\n") + "\n\nEnregistrer quand même ?")) return;
-    const bouton = e.currentTarget; bouton.disabled = true;
-    const changements = lignes.map(l => {
-      const c = hdCalcul(l), note = (l.note || "").trim();
-      const v = { date: l.jour, prenom: c.fiche.prenom, heures: Math.round(l.minutes / 60 * 1e4) / 1e4, montant: c.total,   // montant figé, comme le programme Reporting : un tarif changé plus tard ne touche pas le passé
-        notes: `${hdDuree(l.minutes)}${c.acompte ? " payé" : ""} ${c.fiche.prenom} ${dateFr(l.jour)}${note ? " " + note : ""}` };
-      if (c.acompte) v.acompte = c.acompte;
-      return { onglet: "cours", ligne: null, valeurs: v };
-    });
-    try { lgP = await pc("/lignes", { version: lgP.version, changements }, 90000); }
-    catch (err) { hdErreur = err.message || String(err); return afficher("heures"); }
-    const nb = lignes.length;
-    hdBrouillon = []; hdGarder(); hdErreur = "";
-    hdMois = (d => new Date(d.getFullYear(), d.getMonth(), 1))(new Date(lignes[nb - 1].jour + "T12:00"));
-    suiviP = null; chargerSuiviPc().catch(() => {});
-    toast(nb + " cours enregistré" + (nb > 1 ? "s" : "") + " dans l'Excel. Une copie de sécurité a été faite avant.");
-    afficher("heures");
   };
+  const changerEleve = (c, l, prenom) => {
+    const avant = l.eleve; l.eleve = prenom;
+    if (norm(avant) !== norm(prenom)) { l.moitie = !!prenom && hdMoitieHabituelle(prenom); l.tarif = ""; c.querySelector("[name=moitie]").checked = l.moitie; c.querySelector("[name=tarif]").value = ""; }
+  };
+  const montrerPropos = (c, l, texte) => {
+    const z = c.querySelector("[data-hd-propos]"), h = texte || !hdFiche(l.eleve) ? hdPropositions(l, texte) : "";
+    z.innerHTML = h; z.hidden = !h;
+  };
+  const choisir = (c, l, prenom) => {
+    const champ = c.querySelector("[name=eleve]"), tape = l.saisie ?? "";
+    changerEleve(c, l, prenom);
+    if (l.ecrit) hdRetenir(l.ecrit, prenom);                       // l'écriture de la dictée : « Simon 2h » → SIMON
+    if (tape.length >= 3 && norm(tape) !== norm(l.ecrit)) hdRetenir(tape, prenom);   // et ce qui a été tapé dans le champ
+    delete l.saisie; champ.value = prenom;
+    const z = c.querySelector("[data-hd-propos]"); z.innerHTML = ""; z.hidden = true;
+    suivre(c, l);
+  };
+  el.oninput = e => {
+    const c = e.target.closest("[data-hd]"); if (!c) return;
+    const l = ligneDe(c), n = e.target.name;
+    if (!l || !n) return;
+    if (n === "eleve") {
+      l.saisie = e.target.value;
+      const exact = hdFiche(l.saisie);
+      changerEleve(c, l, exact ? exact.prenom : "");
+      montrerPropos(c, l, l.saisie);
+    }
+    else if (n === "heures") l.minutes = minutesSaisie(e.target.value);
+    else if (n === "moitie") l.moitie = e.target.checked;
+    else l[n] = e.target.value;
+    suivre(c, l);
+  };
+  // au clavier : flèches pour passer d'une proposition à l'autre, Entrée pour choisir, Échap pour fermer
+  el.onkeydown = e => {
+    if (e.target.name !== "eleve") return;
+    const c = e.target.closest("[data-hd]"), l = c && ligneDe(c); if (!l) return;
+    const propos = [...c.querySelectorAll("[data-hd-choisir]")];
+    if (!propos.length) return;
+    let i = propos.findIndex(b => b.getAttribute("aria-selected") === "true");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); i = (i + (e.key === "ArrowDown" ? 1 : propos.length - 1)) % propos.length;
+      propos.forEach((b, j) => b.setAttribute("aria-selected", j === i));
+    } else if (e.key === "Enter") { e.preventDefault(); choisir(c, l, propos[Math.max(0, i)].dataset.hdChoisir); }
+    else if (e.key === "Escape" && hdFiche(l.eleve)) { const z = c.querySelector("[data-hd-propos]"); z.innerHTML = ""; z.hidden = true; }
+  };
+  el.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const c = b.closest("[data-hd]"), l = c && ligneDe(c);
+    const ancre = c && { idx: [...el.querySelectorAll(".rp-ligne[data-hd]")].indexOf(c), top: c.getBoundingClientRect().top };
+    if (b.dataset.hdChoisir && l) return choisir(c, l, b.dataset.hdChoisir);
+    if ("hdRetirer" in b.dataset && l) { hdBrouillon = hdBrouillon.filter(x => x !== l); hdGarder(); return hdDessiner(null, ancre.idx >= 0 ? ancre : null); }
+    if ("hdCote" in b.dataset && l) { l.cote = true; hdGarder(); toast("Mise de côté : elle reste plus bas, pas enregistrée"); return hdDessiner(null, ancre); }
+    if ("hdReprendre" in b.dataset && l) { delete l.cote; hdGarder(); return hdDessiner(l.cle); }
+    if (b.id === "hd-enregistrer") return hdEnregistrer(b);
+  };
+}
+async function hdEnregistrer(bouton) {
+  const actives = hdBrouillon.filter(l => !l.cote);
+  if (!actives.every(hdOk)) return toast("Complète les lignes en orange (élève, jour, heures), mets-les de côté ou retire-les");
+  const lignes = [...actives].sort((a, b) => a.jour.localeCompare(b.jour));
+  // Le même cours a pu être noté sur le téléphone : il serait facturé deux fois
+  const memeEleve = (a, b) => norm(a) === norm(b);
+  const doublons = lignes.filter((l, i) => lgP.cours.some(x => memeEleve(x.prenom, l.eleve) && x.date === l.jour) || lignes.some((y, j) => j !== i && memeEleve(y.eleve, l.eleve) && y.jour === l.jour));
+  if (doublons.length && !confirm("Déjà un cours le même jour pour :\n" + [...new Set(doublons.map(l => "- " + l.eleve + " (" + dateFr(l.jour) + ")"))].join("\n") + "\n\nEnregistrer quand même ?")) return;
+  bouton.disabled = true;
+  const changements = lignes.map(l => {
+    const c = hdCalcul(l), note = (l.note || "").trim();
+    const v = { date: l.jour, prenom: c.fiche.prenom, heures: Math.round(l.minutes / 60 * 1e4) / 1e4, montant: c.total,   // montant figé, comme le programme Reporting : un tarif changé plus tard ne touche pas le passé
+      notes: `${hdDuree(l.minutes)}${c.acompte ? " payé" : ""} ${c.fiche.prenom} ${dateFr(l.jour)}${note ? " " + note : ""}` };
+    if (c.acompte) v.acompte = c.acompte;
+    return { onglet: "cours", ligne: null, valeurs: v };
+  });
+  try { lgP = await pc("/lignes", { version: lgP.version, changements }, 90000); }
+  catch (err) { hdErreur = err.message || String(err); return hdDessiner(); }
+  lignes.forEach(l => { if (l.ecrit) hdRetenir(l.ecrit, hdFiche(l.eleve).prenom); });   // ce qui a été enregistré confirme l'écriture
+  const nb = lignes.length;
+  hdBrouillon = hdBrouillon.filter(l => l.cote); hdGarder(); hdErreur = "";
+  hdMois = (d => new Date(d.getFullYear(), d.getMonth(), 1))(new Date(lignes[nb - 1].jour + "T12:00"));
+  suiviP = null; chargerSuiviPc().catch(() => {});
+  toast(nb + " cours enregistré" + (nb > 1 ? "s" : "") + " dans l'Excel. Une copie de sécurité a été faite avant.");
+  hdDessiner();
 }
 
 /* ===================== Aujourd'hui : une liste, une action par ligne ===================== */
@@ -2154,6 +2284,7 @@ function lireMorceau(brut, jourParDefaut, clients) {
   }
   const mots = t.split(/[^a-z0-9]+/).filter(x => x.length >= 2 && !VIDES.has(x) && !/^\d+$/.test(x));
   l.client_id = devinerClient(mots, clients);
+  l.reste = t.trim();   // ce qui reste une fois le jour et la durée ôtés : le nom tel qu'il a été écrit
   l.lu = brut.trim();
   return l;
 }
