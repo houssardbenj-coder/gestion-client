@@ -522,6 +522,13 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .lg-table td.fx-faite.lg-fact-client input.lg-c:not(:focus){background:var(--accent-soft);color:var(--accent-fort);font-weight:600;border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 .lg-table td.fx-faite.lg-fact-interv input.lg-c:not(:focus){background:var(--info-soft);color:var(--info);font-weight:600;border-color:color-mix(in srgb,var(--info) 35%,transparent)}
 .lg-table td.fx-voir input.lg-c:not(:focus){background:var(--warn-soft);color:var(--warn);font-weight:600;border-color:color-mix(in srgb,var(--warn-vif) 45%,transparent)}
+/* Facture presta aérée (06/11/2026) : la colonne « Facture interv. » ne colle plus à la facture client. Un filet et un espace la séparent,
+   elle a sa propre bande bleu-gris très légère, son titre tient sur deux lignes (la colonne reste étroite) et la pastille est un peu plus discrète. Aspect seulement. */
+.lg-table td.lg-fact-client,.lg-table th[data-col="facture"]{padding-right:10px}
+.lg-table td.lg-fact-interv,.lg-table th[data-col="facture_interv"]{border-left:1px dashed color-mix(in srgb,var(--info) 40%,transparent);padding-left:10px;padding-right:8px}
+.lg-table td.lg-fact-interv{background:color-mix(in srgb,var(--info-soft) 35%,transparent)}
+.lg-table th[data-col="facture_interv"]{background:color-mix(in srgb,var(--info-soft) 70%,var(--surface));color:var(--info);white-space:normal;width:1%}
+.lg-table td.lg-fact-interv input.lg-c{font-size:12px;padding:3px 8px}
 .lg-table td.lg-modif,.lg-table tbody tr:hover td.lg-modif{background:var(--warn-soft);box-shadow:inset 0 0 0 1.5px var(--warn-vif);border-radius:6px}
 .lg-nouvelle td{background:color-mix(in srgb,var(--go-soft) 55%,transparent)}
 .lg-barre{--accent:#C8DE85;--accent-fort:#DCEBA9;--accent-ink:#1B1D15;--accent-soft:rgb(255 255 255 / .16);position:sticky;bottom:10px;z-index:4;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding:10px 16px;background:var(--tete);color:#F7F5EE;border-radius:14px;box-shadow:0 8px 24px rgb(0 0 0 / .3)}
@@ -545,6 +552,22 @@ tr:hover .btn.flat.ligne-action,.btn.flat.ligne-action:focus-visible{color:var(-
 .lg-vue .chip{display:inline-flex;align-items:center;gap:5px}
 .lg-vue .chip .ico{width:14px;height:14px}
 .lg-vue .chip .nb{font-weight:500;opacity:.75;font-variant-numeric:tabular-nums}
+/* Trajets IK (06/11/2026) */
+.ik-ajout{display:grid;grid-template-columns:150px minmax(160px,1fr) minmax(220px,2fr) minmax(140px,1fr) auto;gap:8px;align-items:end}
+.ik-ajout label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+@media (max-width:900px){.ik-ajout{grid-template-columns:1fr 1fr}}
+.ik-table td{padding:6px 8px;vertical-align:top}
+.ik-table thead th{padding:7px 8px;text-align:left}
+.ik-table tr.ik-jour td{border-top:2px solid var(--line)}
+.ik-table td.ik-date{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
+.ik-table tr.ik-jour td.ik-date{color:var(--ink);font-weight:600}
+.ik-table a.ik-adr{display:inline-flex;gap:5px;align-items:flex-start;color:inherit;text-decoration:none}
+.ik-table a.ik-adr:hover{text-decoration:underline}
+.ik-table a.ik-adr .ico{width:14px;height:14px;flex:none;margin-top:2px;color:var(--accent)}
+.ik-manque{color:var(--stop);font-weight:600}
+.ik-src{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.ik-src.reporting{background:var(--accent-soft);color:var(--accent-fort)}
+.ik-src.pilote{background:var(--info-soft);color:var(--info)}
 .lg-coche input[data-c="archiver"]{accent-color:var(--accent)}
 .lg-table tr.lg-archivee td:not(.lg-modif) input.lg-c:not(:focus),.lg-table tr.lg-archivee td.lg-ro{color:var(--muted)}
 </style>
@@ -720,13 +743,13 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
 const MENU = [
   { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir", "emploi"], bulle: "b-avoir" },
   { k: "clients", t: "Clients", pages: ["clients", "dossiers"], bulle: "b-clients" },
   { k: "equipe", t: "Équipe", pages: ["intervenantes", "planning", "reporting"] },
   { k: "messages", t: "Messages", pages: ["messages"], bulle: "b-messages" },
-  { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi", "heures"] }];
+  { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi", "heures", "ik"] }];
 const groupeDe = o => MENU.find(m => m.pages.includes(o));
 const nomPage = o => (ONGLETS.find(x => x[0] === o) || [])[1] || "";
 async function afficher(o) {
@@ -749,7 +772,7 @@ async function afficher(o) {
   document.getElementById("cherche-ouvrir").onclick = ouvrirRecherche;
   brancherSousMenu();
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, jour: vueJour, emploi: vueEmploi })[onglet]();
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi })[onglet]();
     const zoneSous = document.getElementById("sous-menu-zone"); if (zoneSous) zoneSous.innerHTML = sousMenu(); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
@@ -930,7 +953,7 @@ function relierPc() {
   let essais = 0;
   const t = setInterval(async () => {
     if (++essais > 15) { clearInterval(t); toast("Le PC ne répond pas. Le bouton est-il installé sur ce PC ?"); return; }
-    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); if (onglet === "heures") vueHeures(); if (voletId) ouvrirVolet(voletId); } catch (e) {}
+    try { await chargerDuPc(); clearInterval(t); dessinerRail(); toast("PC relié"); if (onglet === "suivi") vueSuivi(); if (onglet === "lignes") vueLignes(); if (onglet === "heures") vueHeures(); if (onglet === "ik") vueIk(); if (voletId) ouvrirVolet(voletId); } catch (e) {}
   }, 2000);
 }
 const boutonRelier = () => SUR_TELEPHONE ? "" : `<a class="btn" href="oikos-carte:demarrer" data-relier>Relier le PC</a>${aide("Allume le programme de la carte sur ce PC. Une seule installation par PC : « Installer le bouton du PC » dans le dossier Plateforme intervenantes, raccourci.")}`;
@@ -1449,6 +1472,97 @@ async function vueLignes() {
   };
 }
 addEventListener("beforeunload", e => { if (lgNb()) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ===================== Trajets IK : les adresses des déplacements du mois, prêtes à exporter =====================
+   Lues par le programme du PC (trajets_ik.py), comme le programme « Calculer les IK » : cours OIKOS, services de Benjamin,
+   déplacements de la zone 1 de IK BENJAMIN (écrits par l'appli Reporting ou tapés dans l'Excel). Les cours de Benjamin
+   enseignement n'y sont pas : ce ne sont pas des trajets OIKOS. « Ajouter le trajet » écrit une ligne dans IK BENJAMIN.
+   Rien de ces trajets n'est écrit dans cette page ni copié dans la base. Les km restent calculés par « Calculer les IK ». */
+let ikP = null, ikMois = new Date(new Date().getFullYear(), new Date().getMonth(), 1), ikSource = "", ikErreur = "";
+const IK_SOURCES = { reporting: "Appli Reporting", excel: "Excel", pilote: "Ajouté ici" };
+const IK_TYPES = { cours: "Cours", service: "Service", deplacement: "Déplacement" };
+const ikJour = d => d ? d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4) : "";
+const ikNomMois = m => m.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+const ikDuMois = () => { const cle = ymd(ikMois).slice(0, 7); return ikP.trajets.filter(t => t.date.slice(0, 7) === cle); };
+const ikTitre = () => `<h1>Trajets IK ${aide("Les adresses des trajets du mois, comme les lit le programme Calculer les IK : cours OIKOS, services faits par Benjamin, et déplacements de l'onglet IK BENJAMIN (écrits par l'appli Reporting ou tapés dans l'Excel). Les cours de Benjamin enseignement n'y sont pas. Ajouter le trajet écrit une ligne dans IK BENJAMIN, avec une copie de sécurité avant. Les km se calculent toujours avec Calculer les IK.")}</h1>`;
+async function vueIk() {
+  try { ikP = await pc("/ik", null, 30000); }
+  catch (e) {
+    if (SUR_TELEPHONE) return contenu(`${ikTitre()}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : les trajets IK ne s'ouvrent que depuis le PC.</p>`);
+    return contenu(`${ikTitre()}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour voir les trajets IK.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
+  }
+  ikDessiner();
+}
+function ikLigne(t, i, liste) {
+  const nouveauJour = !i || liste[i - 1].date !== t.date;
+  const carte = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(t.adresse);
+  const adresse = t.adresse ? `<a class="ik-adr" href="${esc(carte)}" target="_blank" rel="noopener" title="Voir sur la carte">${ico("lieu")}<span>${esc(t.adresse)}</span></a>${t.adresse_reprise ? ` <span class="muted small">(reprise d'un trajet plus ancien)</span>` : ""}` : `<span class="ik-manque">Adresse manquante</span>`;
+  const qui = esc(t.lieu) + (t.eleve && norm(t.eleve) !== norm(t.lieu) ? ` <span class="muted small">${esc(t.eleve)}</span>` : "");
+  return `<tr class="${nouveauJour ? "ik-jour" : ""}"><td class="ik-date">${nouveauJour ? ikJour(t.date) : ""}</td><td>${qui}</td><td>${adresse}</td><td>${esc(t.motif)}</td>
+    <td>${IK_TYPES[t.type] || ""}</td><td><span class="ik-src ${esc(t.source)}" title="${esc(t.feuille)}, ligne ${Number(t.ligne) || ""}">${IK_SOURCES[t.source] || ""}</span></td></tr>`;
+}
+function ikDessiner() {
+  if (onglet !== "ik" || !ikP) return;
+  const y = scrollY, m1 = new Date(ikMois.getFullYear(), ikMois.getMonth() + 1, 1);
+  const duMois = ikDuMois(), liste = duMois.filter(t => !ikSource || t.source === ikSource);
+  const nb = s => duMois.filter(t => !s || t.source === s).length, manque = liste.filter(t => !t.adresse).length;
+  const puce = (s, t) => `<button class="chip" type="button" data-ik-source="${s}" aria-pressed="${ikSource === s}">${t} <span class="nb">${nb(s)}</span></button>`;
+  const el = contenu(`<div class="row" style="justify-content:space-between">${ikTitre()}${ikP.chemin ? `<button class="btn flat" data-pc="${esc(ikP.chemin)}">Ouvrir l'Excel</button>` : ""}</div>
+    <section class="card" style="margin-top:12px"><h3 style="margin-top:0">Ajouter un trajet</h3>
+      <form class="ik-ajout" id="ik-form" autocomplete="off">
+        <label>Date<input type="date" name="date" value="${ymd(new Date())}" max="${ymd(new Date())}" required></label>
+        <label>Lieu ou personne<input type="text" name="lieu" list="ik-lieux" maxlength="120" required placeholder="Ex. décheterie"></label>
+        <label>Adresse<input type="text" name="adresse" maxlength="300" required placeholder="N°, rue, code postal, ville"></label>
+        <label>Motif (facultatif)<input type="text" name="motif" maxlength="200"></label>
+        <button class="btn primary" type="submit" id="ik-ajouter">${ico("plus")} Ajouter le trajet</button>
+      </form>
+      <datalist id="ik-lieux">${ikP.lieux.map(l => `<option value="${esc(l[0])}">${esc(l[1])}</option>`).join("")}</datalist>
+      <p class="muted small" style="margin:6px 0 0">Écrit une ligne dans l'onglet ${esc(ikP.zone)} de l'Excel. Un lieu déjà connu reprend son adresse.</p></section>
+    ${ikErreur ? `<div class="card lg-erreur" style="margin-top:12px"><b>${ico("alerte")} Pas enregistré.</b> ${esc(ikErreur)} <button class="btn" id="ik-relire" type="button">Relire l'Excel</button></div>` : ""}
+    <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn" id="ik-prec" aria-label="Mois précédent">‹</button>
+      <h2 style="margin:0;text-transform:capitalize">${ikNomMois(ikMois)}</h2>
+      <button class="btn" id="ik-suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>›</button></div>
+    <div class="row" style="justify-content:space-between;margin-top:10px"><span class="row">${puce("", "Tous")}${puce("reporting", IK_SOURCES.reporting)}${puce("excel", IK_SOURCES.excel)}${puce("pilote", IK_SOURCES.pilote)}</span>
+      <button class="btn" id="ik-exporter" type="button" ${liste.length ? "" : "disabled"}>${ico("telecharger")} Exporter le tableau</button></div>
+    ${liste.length ? `<div class="card lg-boite" style="margin-top:10px"><table class="lg-table ik-table"><thead><tr><th>Date</th><th>Lieu / personne</th><th>Adresse</th><th>Motif</th><th>Type</th><th>D'où</th></tr></thead>
+      <tbody>${liste.map(ikLigne).join("")}</tbody></table></div>
+      <p class="muted small" style="margin-top:6px">${liste.length} trajet${liste.length > 1 ? "s" : ""}, ${new Set(liste.map(t => t.date)).size} jour${new Set(liste.map(t => t.date)).size > 1 ? "s" : ""}${manque ? ` · <span class="ik-manque">${manque} sans adresse</span> : à compléter dans l'Excel` : ""}. Départ : ${esc(ikP.domicile || "domicile")}. Les km se calculent avec Calculer les IK.</p>`
+      : `<p class="muted" style="margin-top:12px">Aucun trajet ${ikSource ? "de cette origine " : ""}ce mois-ci.</p>`}`);
+  scrollTo(0, y);
+  const f = el.querySelector("#ik-form");
+  f.lieu.oninput = () => { const connu = ikP.lieux.find(l => norm(l[0]) === norm(f.lieu.value)); if (connu && !f.adresse.value.trim()) f.adresse.value = connu[1]; };
+  f.onsubmit = e => { e.preventDefault(); ikAjouter(f); };
+  el.querySelector("#ik-prec").onclick = () => { ikMois = new Date(ikMois.getFullYear(), ikMois.getMonth() - 1, 1); ikDessiner(); };
+  el.querySelector("#ik-suiv").onclick = () => { ikMois = m1; ikDessiner(); };
+  el.querySelectorAll("[data-ik-source]").forEach(b => b.onclick = () => { ikSource = b.dataset.ikSource; ikDessiner(); });
+  el.querySelector("#ik-exporter").onclick = () => ikExporter(liste);
+  if (el.querySelector("#ik-relire")) el.querySelector("#ik-relire").onclick = () => { ikErreur = ""; vueIk(); };
+}
+async function ikAjouter(f, confirmer) {
+  const trajet = { date: f.date.value, lieu: f.lieu.value.trim(), adresse: f.adresse.value.trim(), motif: f.motif.value.trim() };
+  if (!trajet.date || !trajet.lieu || !trajet.adresse) return toast("Il faut la date, le lieu et l'adresse");
+  const b = f.querySelector("#ik-ajouter"); b.disabled = true;
+  try {
+    const r = await pc("/ik", { version: ikP.version, trajet, confirmer: !!confirmer }, 60000);
+    if (r.doublon) { b.disabled = false; if (confirm(r.doublon + " L'ajouter quand même ?")) return ikAjouter(f, true); return; }
+    ikP = r; ikErreur = ""; ikSource = "";
+    ikMois = new Date(Number(trajet.date.slice(0, 4)), Number(trajet.date.slice(5, 7)) - 1, 1);
+    toast("Trajet ajouté dans l'Excel (ligne " + r.ajoute.ligne + ")");
+    ikDessiner();
+  } catch (e) { ikErreur = e.message || String(e); ikDessiner(); }
+}
+/* Export : un fichier CSV que WPS et Excel ouvrent directement (point-virgule, accents gardés), une ligne par trajet, colonne km vide pour le comptable */
+function ikExporter(liste) {
+  const cellule = v => { let t = String(v ?? ""); if (/^[=+\-@]/.test(t)) t = "'" + t; return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const lignes = [["date", "lieu/personne", "adresse", "km", "motif", "type", "d'où"]].concat(liste.map(t => [ikJour(t.date), t.lieu, t.adresse, "", t.motif, IK_TYPES[t.type] || "", IK_SOURCES[t.source] || ""]));
+  const texte = "﻿" + lignes.map(l => l.map(cellule).join(";")).join("\r\n") + "\r\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([texte], { type: "text/csv;charset=utf-8" }));
+  a.download = "Trajets IK " + ikNomMois(ikMois) + (ikSource ? " - " + IK_SOURCES[ikSource] : "") + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(liste.length + " trajet" + (liste.length > 1 ? "s" : "") + " exporté" + (liste.length > 1 ? "s" : ""));
+}
 
 /* ===================== Déclarer mes heures : même saisie que le Reporting de l'appli, rattachée aux élèves de l'Excel =====================
    Vérifier puis enregistrer écrit une ligne de SAISIE COURS, par le programme du PC (lignes_excel.py), au même format que le programme Reporting.
