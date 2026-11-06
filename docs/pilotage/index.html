@@ -122,6 +122,9 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .photo{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
 .vignette{display:block;width:100%;border:0;padding:0;cursor:zoom-in;background:var(--sunk)}
 .vignette img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.plante-ligne{display:flex;gap:10px;align-items:flex-start;margin:0 0 10px}
+.plante-photo{flex:none;width:56px;height:56px;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--sunk);cursor:zoom-in}
+.plante-photo img{display:block;width:100%;height:100%;object-fit:cover}
 .photo figcaption{padding:8px 10px;font-size:13px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .em-table{min-width:900px;table-layout:fixed}.em-table th:first-child{width:120px}.em-table td{vertical-align:top}
@@ -525,6 +528,25 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .lg-barre .btn.flat{color:#F7F5EE}
 .lg-erreur{margin-bottom:10px;border-color:var(--stop);border-left-width:6px;background:color-mix(in srgb,var(--stop-soft) 50%,var(--surface))}
 .su-note{white-space:normal;color:var(--muted);font-size:13px}
+/* Épuré (05/11/2026) : les boutons d'archivage restent sur la ligne mais en retrait ; une page = un titre, puis des blocs bien séparés */
+#contenu > .row:first-child{margin-bottom:6px}
+#contenu > .chips{margin-top:4px}
+.btn.flat.ligne-action{padding:4px 9px;gap:5px;font-size:13px;font-weight:500;color:var(--muted);white-space:nowrap;border-radius:999px}
+.btn.flat.ligne-action .ico{width:15px;height:15px}
+tr:hover .btn.flat.ligne-action,.btn.flat.ligne-action:focus-visible{color:var(--accent-fort)}
+.btn.flat.ligne-action:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-fort)}
+.btn.flat.ligne-action.reprendre{color:var(--accent)}
+#tc td{vertical-align:middle}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+#tc td.td-action,#tc th.td-action{width:1%;text-align:right;white-space:nowrap;padding-right:4px}
+.lg-filtres{gap:10px}
+.lg-filtres input[type="search"]{flex:1 1 220px;max-width:340px}
+.lg-vue{display:inline-flex;gap:6px;padding-left:10px;border-left:1px solid var(--line)}
+.lg-vue .chip{display:inline-flex;align-items:center;gap:5px}
+.lg-vue .chip .ico{width:14px;height:14px}
+.lg-vue .chip .nb{font-weight:500;opacity:.75;font-variant-numeric:tabular-nums}
+.lg-coche input[data-c="archiver"]{accent-color:var(--accent)}
+.lg-table tr.lg-archivee td:not(.lg-modif) input.lg-c:not(:focus),.lg-table tr.lg-archivee td.lg-ro{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -1279,7 +1301,7 @@ function lgCase(o, l, id, [c, titre, type, liste]) {
 }
 function lgRangee(o, l, id) {
   const nouvelle = String(id)[0] === "n";
-  return `<tr data-l="${esc(id)}" class="${nouvelle ? "lg-nouvelle" : ""}"><th scope="row" class="lg-num">${nouvelle ? `<button class="btn flat stop" data-lg-retirer="${esc(id)}" aria-label="Retirer cette nouvelle ligne" title="Retirer cette nouvelle ligne">${ico("croix")}</button>` : l.ligne}</th>${LG_COLONNES[o].map(k => lgCase(o, l, id, k)).join("")}</tr>`;
+  return `<tr data-l="${esc(id)}" class="${nouvelle ? "lg-nouvelle" : lgArchivee(l) ? "lg-archivee" : ""}"><th scope="row" class="lg-num">${nouvelle ? `<button class="btn flat stop" data-lg-retirer="${esc(id)}" aria-label="Retirer cette nouvelle ligne" title="Retirer cette nouvelle ligne">${ico("croix")}</button>` : l.ligne}</th>${LG_COLONNES[o].map(k => lgCase(o, l, id, k)).join("")}</tr>`;
 }
 function lgDessiner() {
   const z = document.getElementById("lg-zone"); if (!z) return;
@@ -1376,8 +1398,8 @@ function lgEntete() {
   e.innerHTML = `<div class="chips" id="lg-onglets">${Object.entries(LG_ONGLETS).map(([k, t]) => `<button class="chip" data-lg-o="${k}" aria-pressed="${k === o}">${t} (${lgP[k].length})</button>`).join("")}</div>
     <div class="row lg-filtres"><select id="lg-mois" aria-label="Mois de facturation"><option value="">Tous les mois</option>${moisDispos.map(m => `<option ${m === lgMois ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>
       <input id="lg-cherche" type="search" placeholder="Chercher un nom, une note, un n° de ligne…" value="${esc(lgCherche)}">
-      <button class="chip" id="lg-afaire" aria-pressed="${lgAFaire}">Incomplètes (${nb})</button>
-      <button class="chip" id="lg-sans-archivees" title="Lignes Archivé à Oui, et lignes payées (ok) : elles s'archivent toutes seules" aria-pressed="${lgSansArchivees}">Masquer les archivées (${nbArchivees})</button>
+      <span class="lg-vue"><button class="chip" id="lg-afaire" aria-pressed="${lgAFaire}">${ico("alerte")} Incomplètes <span class="nb">${nb}</span></button>
+      <button class="chip" id="lg-sans-archivees" title="Lignes Archivé à Oui, et lignes payées (ok) : elles s'archivent toutes seules" aria-pressed="${lgSansArchivees}">${ico("archive")} Masquer les archivées <span class="nb">${nbArchivees}</span></button></span>
       <span style="flex:1"></span><button class="btn" id="lg-ajouter" type="button">${ico("plus")} Nouvelle ligne</button></div>`;
 }
 async function vueLignes() {
@@ -1537,7 +1559,7 @@ function hdCarte(l) {
     <div class="rp-champs"><label class="f">Jour<input name="jour" type="date" value="${esc(l.jour)}" max="${ymd(new Date())}"></label>
       <label class="f">Heures<input name="heures" type="text" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label>
       <label class="f" data-hd-tarif ${sansTarif ? "" : "hidden"}>Tarif à l'heure<input name="tarif" type="text" inputmode="decimal" value="${esc(l.tarif || "")}" placeholder="${hdCalcul(l).source === "dernier" ? lgTexte(hdCalcul(l).taux) : "ex. 30"}"></label>
-      <label class="hd-coche"><input name="moitie" type="checkbox" ${l.moitie ? "checked" : ""}>La moitié est déjà payée</label></div>
+      <div class="hd-coche"><input name="moitie" type="checkbox" aria-label="La moitié est déjà payée" ${l.moitie ? "checked" : ""}><span>La moitié est déjà payée</span></div></div>
     <label class="f">Remarque (facultatif)<input name="note" type="text" maxlength="120" value="${esc(l.note || "")}"></label>
     <div class="hd-fiche${f.manque ? " manque" : ""}" data-hd-fiche>${f.h}</div></div>`;
 }
@@ -3091,7 +3113,7 @@ async function vueClients() {
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
     <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
-      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th><th></th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td><td>${boutonArchiverClient(c)}</td></tr>`).join("")}</table></section>`);
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th><th class="td-action"><span class="sr-only">Archiver</span></th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td><td class="td-action">${boutonArchiverClient(c)}</td></tr>`).join("")}</table></section>`);
   const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value;
     const etatOk = r => !t || (t === "termine") === (r.dataset.etat === "termine");   // une recherche regarde aussi les anciens
     el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a))); };
@@ -3124,8 +3146,8 @@ async function vueClients() {
    archive_auto faux : une facture récente ne le remet pas en cours tout seul. Rien n'est écrit dans l'Excel (jamais Oui dans ARCHIVER). */
 let clFiltres = null;
 const boutonArchiverClient = c => c.etat === "termine"
-  ? `<button class="btn flat" data-reprendre-client="${esc(c.id)}" title="Le remettre dans les clients en cours">${ico("retour")} Remettre en cours</button>`
-  : `<button class="btn flat" data-archiver-client="${esc(c.id)}" title="Le ranger dans les anciens clients ; son profil reste dans la base">${ico("archive")} Archiver</button>`;
+  ? `<button class="btn flat ligne-action reprendre" data-reprendre-client="${esc(c.id)}" title="Le remettre dans les clients en cours">${ico("retour")} Remettre en cours</button>`
+  : `<button class="btn flat ligne-action" data-archiver-client="${esc(c.id)}" title="Le ranger dans les anciens clients ; son profil reste dans la base">${ico("archive")} Archiver</button>`;
 async function archiverClient(id, reprendre, bouton) {
   const c = cacheClients.find(k => k.id === id); if (!c) return;
   if (!reprendre && !confirm("Archiver " + c.nom + " ? Il passe dans les anciens clients ; son profil reste dans la base et se reprend s'il revient.")) { clFiltres = null; return; }
@@ -3208,6 +3230,26 @@ async function urlsSignees(chemins) {
   const { data, error } = await sb.storage.from("dossiers").createSignedUrls(chemins, 3600);
   if (!error) data.forEach(x => { if (x.signedUrl) o[x.path] = x.signedUrl; });
   return o;
+}
+/* Photos des plantes : une photo libre de droits par essence. Le Pont photos la range dans le dossier « Photos des plantes OIKOS » du Drive
+   et en dépose une copie dans la base (dossiers/plantes/<clé>.jpg). Même clé que la page d'analyse et le pont. Pas de photo : la plante s'affiche comme avant. */
+function clePlante(v) {
+  const s = String((v && (v.latin || v.nom)) || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/['‘’"“”«»][^'‘’"“”«»]*['‘’"“”«»]/g, " ").replace(/\([^)]*\)/g, " ");
+  return s.split(/[^a-z0-9]+/).filter(m => m && !["x", "sp", "spp", "var", "subsp", "ssp", "cv", "f"].includes(m)).slice(0, 2).join("-").slice(0, 60);
+}
+const vignettePlante = v => { const k = clePlante(v); return k ? `<button type="button" class="plante-photo" data-plante-photo="plantes/${k}.jpg" data-nom="${esc(v.nom || v.latin || "")}" title="Agrandir la photo" aria-label="Agrandir la photo : ${esc(v.nom || v.latin || "")}" hidden><img alt=""></button>` : ""; };
+async function poserPhotosPlantes(zone) {
+  const cases = [...zone.querySelectorAll("[data-plante-photo]")]; if (!cases.length) return;
+  const urls = await urlsSignees([...new Set(cases.map(b => b.dataset.plantePhoto))]);
+  cases.forEach(b => {
+    const url = urls[b.dataset.plantePhoto]; if (!url) return;
+    b.querySelector("img").src = url; b.hidden = false;
+    b.onclick = e => { e.preventDefault(); e.stopPropagation();
+      fenetre(`<div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(b.dataset.nom)}</h2><button class="btn flat" data-fermer>Fermer</button></div>
+        <img src="${esc(url)}" alt="${esc(b.dataset.nom || "Photo de la plante")}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:12px">
+        <p class="muted small" style="margin:0">Photo libre de droits (Wikimedia Commons), pour reconnaître l'essence : ce n'est pas une photo du jardin du client.</p>`); };
+  });
 }
 async function ouvrirStockage(chemin) {
   const { data, error } = await sb.storage.from("dossiers").createSignedUrl(chemin, 300);
@@ -3372,7 +3414,7 @@ async function dosAnalyses(c, corps, re) {
       <div style="overflow-x:auto"><table><tr><th>Tâche</th><th>Quand</th><th>Durée</th><th>Prio.</th>${modif ? "<th></th>" : ""}</tr>
         ${tab(r.taches).map((t, i) => `<tr><td><b>${esc(t.titre)}</b>${t.detail ? `<br><span class="muted small">${esc(t.detail)}</span>` : ""}</td><td class="small">${esc(quandTache(t))}</td><td>${t.duree_min ? esc(t.duree_min) + " min" : "—"}</td><td>${esc(t.priorite || 3)}/5</td>
           ${modif ? `<td><span class="row" style="gap:2px"><button class="btn flat" data-tmod="${i}">Modifier</button><button class="btn flat stop" data-tret="${i}">Retirer</button></span></td>` : ""}</tr>`).join("") || `<tr><td colspan="5" class="muted">Aucune tâche.</td></tr>`}</table></div>
-      ${tab(r.vegetaux).length ? `<h3>Végétaux repérés</h3>${tab(r.vegetaux).map(v => `<p class="small" style="margin:0 0 8px"><b>${esc(v.nom)}</b> ${v.latin ? `<i>${esc(v.latin)}</i>` : ""} <span class="tag ${/s[uû]r/i.test(v.certitude || "") ? "" : "warn"}">${esc(v.certitude || "à confirmer")}</span>${v.etat ? `<br>${esc(v.etat)}` : ""}${tab(v.entretien).map(x => `<br>· ${esc(x)}`).join("")}${v.attention ? `<br>${ico("alerte")} ${esc(v.attention)}` : ""}</p>`).join("")}` : ""}
+      ${tab(r.vegetaux).length ? `<h3>Végétaux repérés</h3>${tab(r.vegetaux).map(v => `<div class="plante-ligne">${vignettePlante(v)}<p class="small" style="margin:0"><b>${esc(v.nom)}</b> ${v.latin ? `<i>${esc(v.latin)}</i>` : ""} <span class="tag ${/s[uû]r/i.test(v.certitude || "") ? "" : "warn"}">${esc(v.certitude || "à confirmer")}</span>${v.etat ? `<br>${esc(v.etat)}` : ""}${tab(v.entretien).map(x => `<br>· ${esc(x)}`).join("")}${v.attention ? `<br>${ico("alerte")} ${esc(v.attention)}` : ""}</p></div>`).join("")}` : ""}
       ${tab(r.pieces).length ? `<h3>Pièce par pièce</h3><p class="small">${tab(r.pieces).map(p => `<b>${esc(p.piece)}</b> : ${esc(p.etat)}`).join("<br>")}</p>` : ""}
       ${tab(r.produits).concat(tab(r.materiel)).length ? `<h3>À emporter (pour l'intervenant)</h3><p class="small">${tab(r.produits).concat(tab(r.materiel)).map(esc).join(" · ")}</p>` : ""}
       ${r.dechets ? `<h3>Déchets verts</h3><p class="small">${esc(r.dechets)}</p>` : ""}
@@ -3380,6 +3422,7 @@ async function dosAnalyses(c, corps, re) {
       ${tab(r.remarques).length ? `<h3>Points d'attention (toi seul)</h3><p class="small">${tab(r.remarques).map(esc).join("<br>")}</p>` : ""}
       ${tab(a.photos).length ? `<p class="muted small" style="margin-top:10px">Photos étudiées : ${tab(a.photos).map(esc).join(" · ")}</p>` : ""}</details>`; }).join("")
     || `<p class="muted">Aucune analyse pour l'instant. Lance-en une avec le bouton « Analyse IA » : elle arrivera ici toute seule, dans les 5 minutes.</p>`) + blocNettoyages(bilans);
+  poserPhotosPlantes(corps);
   // une analyse retouchée à la main est gardée d'office : la prochaine analyse ne doit pas effacer ce travail
   const garder = async a => { await maj(sb.from("client_analyses").update({ rapport: a.rapport, doc_a_refaire: true, ...("garder" in a ? { garder: true } : {}) }).eq("id", a.id)); };
   corps.onclick = async e => {
