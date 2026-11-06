@@ -3099,6 +3099,15 @@ async function ficheIntervenante(id) {
 
 /* ===================== Clients + zone tampon ===================== */
 const CHAMPS_CLIENT = [["nom", "Nom"], ["telephone", "Téléphone"], ["email", "E-mail"], ["adresse", "Adresse"], ["activite", "Activité"]];
+/* Clients affiliés à une intervenante : ses attributions en cours (comme la colonne Prestataire). Sans compte dans l'appli : son nom libre.
+   Le menu ne propose que les presta des clients de la section ouverte : OIKOS et Benjamin enseignement restent séparés. */
+const clePresta = a => a.intervenante_id ? "i:" + a.intervenante_id : "l:" + motsPresta(a.nom_libre || "");
+const affilsClient = c => cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a) && (a.intervenante_id || (a.nom_libre || "").trim()));
+function choixPresta(liste) {
+  const m = new Map();
+  liste.forEach(c => affilsClient(c).forEach(a => { const k = clePresta(a), e = m.get(k) || { nom: nomPresta(a), n: new Set() }; e.n.add(c.id); m.set(k, e); }));
+  return [...m].map(([k, e]) => [k, e.nom, e.n.size]).sort((x, y) => norm(x[1]) < norm(y[1]) ? -1 : 1);
+}
 async function vueClients() {
   if (sectionDevis) return vueDemandes();
   await chargerBase();
@@ -3112,15 +3121,16 @@ async function vueClients() {
         return `<tr><td><b>${esc(t.nom)}</b><br><span class="muted small">${esc([t.telephone, t.email, t.adresse].filter(Boolean).join(" · "))}</span></td>
         <td>${t.etat === "nouveau" ? `<span class="tag warn">nouveau client</span>` : `<span class="tag">= ${esc(c ? c.nom : "?")}</span><div class="diff small">${diffClient(c, t)}</div>`}</td>
         <td><span class="row">${t.etat === "nouveau" ? `<button class="btn go" data-cree="${t.id}">Créer</button>` : `<button class="btn go" data-majc="${t.id}">Mettre à jour</button>`}<button class="btn flat" data-ign="${t.id}">Ignorer</button></span></td></tr>`; }).join("")}</table></section>` : ""}
-    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
-      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th><th class="td-action"><span class="sr-only">Archiver</span></th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td><td class="td-action">${boutonArchiverClient(c)}</td></tr>`).join("")}</table></section>`);
-  const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value;
+    <section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ENTREPRISES.find(([k]) => k === entreprise)[1]} : ${liste.length - anciens} en cours, ${anciens} ancien${anciens > 1 ? "s" : ""}</h2><span class="row"><select id="filtre-etat" aria-label="État" style="max-width:150px"><option value="vif">En cours</option><option value="termine">Anciens</option><option value="">Tous</option></select><select id="filtre-act" aria-label="Activité" style="max-width:170px"><option value="">Toutes les activités</option>${ACTIVITES_CLIENT.map(a => `<option>${a}</option>`).join("")}</select><select id="filtre-presta" aria-label="Clients d'une intervenante" title="Voir les clients d'une intervenante" style="max-width:220px"><option value="">Toutes les intervenantes</option>${choixPresta(liste).map(([k, nom, n]) => `<option value="${esc(k)}">${esc(nom)} (${n} client${n > 1 ? "s" : ""})</option>`).join("")}</select><input type="text" id="cherche" placeholder="Chercher un client ou un élève…" style="max-width:240px"></span></div>
+      <table id="tc"><tr><th>Nom</th><th>Activité</th><th>Prestataire</th><th>Dernière facture</th><th>Téléphone</th><th>Adresse</th><th>Zone</th><th>État</th><th class="td-action"><span class="sr-only">Archiver</span></th></tr>${liste.map(c => `<tr class="cliquable" data-c="${c.id}" data-etat="${esc(c.etat)}" data-act="${esc(activitesClient(c).join("|"))}" data-presta="${esc([...new Set(affilsClient(c).map(clePresta))].join("|"))}"><td><b>${esc(c.nom)}</b>${elevesClient(c) ? `<br><span class="muted small">Élèves : ${esc(elevesClient(c))}</span>` : ""}</td><td>${esc(activitesClient(c).join(", "))}</td><td>${esc(prestatairesActuels(c))}${prestaPotentiels(c) ? `<div class="muted small">Potentiel : ${esc(prestaPotentiels(c))}</div>` : ""}</td><td>${c.derniere_facture ? new Date(c.derniere_facture + "T12:00").toLocaleDateString("fr-FR") : ""}</td><td>${esc(c.telephone || "")}</td><td>${esc(c.adresse || "")}</td><td>${c.zone || ""}</td><td>${esc(c.etat)}</td><td class="td-action">${boutonArchiverClient(c)}</td></tr>`).join("")}</table></section>`);
+  const filtrer = () => { const v = norm(el.querySelector("#cherche").value), a = el.querySelector("#filtre-act").value, t = el.querySelector("#filtre-etat").value, p = el.querySelector("#filtre-presta").value;
     const etatOk = r => !t || (t === "termine") === (r.dataset.etat === "termine");   // une recherche regarde aussi les anciens
-    el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a))); };
+    el.querySelectorAll("#tc tr[data-c]").forEach(r => r.hidden = (v ? !norm(r.textContent).includes(v) : !etatOk(r)) || (a && !r.dataset.act.split("|").includes(a)) || (p && !r.dataset.presta.split("|").includes(p))); };
   el.querySelector("#cherche").oninput = filtrer;
   el.querySelector("#filtre-act").onchange = filtrer;
   el.querySelector("#filtre-etat").onchange = filtrer;
-  if (clFiltres) { el.querySelector("#cherche").value = clFiltres.v; el.querySelector("#filtre-act").value = clFiltres.a; el.querySelector("#filtre-etat").value = clFiltres.t; clFiltres = null; }
+  el.querySelector("#filtre-presta").onchange = () => { if (el.querySelector("#filtre-presta").value) el.querySelector("#filtre-etat").value = ""; filtrer(); };   // ses clients, anciens compris
+  if (clFiltres) { el.querySelector("#cherche").value = clFiltres.v; el.querySelector("#filtre-act").value = clFiltres.a; el.querySelector("#filtre-etat").value = clFiltres.t; el.querySelector("#filtre-presta").value = clFiltres.p || ""; clFiltres = null; }
   filtrer();
   brancherEntreprise(el);
   brancherDevis(el);
@@ -3128,7 +3138,7 @@ async function vueClients() {
   el.querySelector("#nv").onclick = () => ficheClient(null);
   el.onclick = async e => {
     const ar = e.target.closest("[data-archiver-client],[data-reprendre-client]");   // avant la ligne : le bouton ne doit pas ouvrir la fiche
-    if (ar) { clFiltres = { v: el.querySelector("#cherche").value, a: el.querySelector("#filtre-act").value, t: el.querySelector("#filtre-etat").value };
+    if (ar) { clFiltres = { v: el.querySelector("#cherche").value, a: el.querySelector("#filtre-act").value, t: el.querySelector("#filtre-etat").value, p: el.querySelector("#filtre-presta").value };
       return archiverClient(ar.dataset.archiverClient || ar.dataset.reprendreClient, !!ar.dataset.reprendreClient, ar); }
     const r = e.target.closest("[data-c]"); if (r) return ficheClient(r.dataset.c);
     const b = e.target.closest("button"); if (!b) return;
@@ -3264,6 +3274,7 @@ function ficheClient(id, ong = "ensemble") {
       ${peutAvoirDevis(c) ? `<button class="btn primary" type="button" id="dm-nv">${ico("stylo")} Demande de devis</button><button class="btn" type="button" id="dm-rat">${ico("mission")} Mobiliser des presta</button>` : ""}
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Son dossier Drive</a>` : ""}
+      <button class="btn" type="button" id="dos-jur">${ico("cadenas")} Dossier juridique</button>
       <button class="btn flat" data-fermer>Fermer</button></span></div>
     <div class="row" id="fiche-choix" style="margin:8px 0">${casesActivites(c)}${casesEntreprise(c)}
       ${c.etat === "prospect" ? `<button class="btn go" type="button" id="devenu-client">✓ Devenu client</button>` : ""}</div>
@@ -3281,6 +3292,7 @@ function ficheClient(id, ong = "ensemble") {
     if (nvDm) nvDm.onclick = () => nouvelleDemande(c, () => { afficher(); aller("devis"); });
     const ratDm = el.querySelector("#dm-rat");
     if (ratDm) ratDm.onclick = () => mobiliserPresta(c, () => { afficher(); aller("devis"); });
+    el.querySelector("#dos-jur").onclick = () => aller("juridique");   // le volet Juridique : pièces, rappels, et accès à son sous-dossier du Drive
     el.querySelector("#dos-ong").onclick = e => { const b = e.target.closest("[data-dos]"); if (b) aller(b.dataset.dos); };
     el.querySelector("#fiche-choix").onchange = async e => {
       const coches = n => [...el.querySelectorAll(`#fiche-choix [name=${n}]:checked`)].map(x => x.value);
@@ -4545,7 +4557,12 @@ async function envoyerPhoto(f, d) {
 async function dosJuridique(c, corps, re) {
   const liste = await q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("date_evt", { ascending: false, nullsFirst: false }).order("cree_le", { ascending: false }));
   const dans7 = ymd(plusJours(new Date(), 7));
+  /* Accès au sous-dossier Juridique du Drive : la base ne garde que le dossier du client (dossier_drive), pas l'identifiant de son sous-dossier Juridique.
+     On ouvre donc le dossier du client, où Juridique est à un clic. */
   corps.innerHTML = `<p class="muted small" style="margin-bottom:8px">${ico("cadenas")} Visible par toi seul, jamais par les intervenants. Les pièces sont rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Juridique).</p>
+    <div class="row" style="margin-bottom:8px">${c.dossier_drive
+      ? `<a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Ouvrir son dossier Drive</a><span class="muted small">puis le sous-dossier Juridique</span>`
+      : `<span class="tag warn">${ico("dossier")} Pas encore de dossier Drive : il se crée au premier rangement du pont</span>`}</div>
     <form id="fj" class="card" style="display:flex;flex-direction:column;gap:8px">
       <div class="deux"><label class="f">Type<select name="type">${Object.entries(TYPES_J).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
         <label class="f">Titre<input type="text" name="titre" required maxlength="200" placeholder="Ex. contrat signé, réclamation vitre cassée…"></label></div>
@@ -4556,6 +4573,7 @@ async function dosJuridique(c, corps, re) {
       <div><button class="btn primary" type="submit">Ajouter au dossier</button></div></form>
     <section class="card" style="margin-top:12px">${liste.length ? liste.map(x => `<div class="ligne" data-j="${x.id}"><span style="min-width:0">
         <span class="tag">${TYPES_J[x.type]}</span> <b>${esc(x.titre)}</b>${x.date_evt ? ` <span class="muted small">· ${new Date(x.date_evt + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}
+        ${x.fichier && !x.drive_url ? ` <span class="tag warn">pas encore rangée dans le Drive</span>` : ""}
         ${x.echeance ? ` <span class="tag ${!x.traite && x.echeance <= dans7 ? "warn" : x.traite ? "off" : ""}">${x.traite ? "✓ traité" : "rappel le " + new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}
         ${x.texte ? `<br><span style="white-space:pre-wrap">${esc(x.texte)}</span>` : ""}</span>
       <span class="row" style="flex:none">${x.drive_url || x.fichier ? `<button class="btn" data-jvoir>${ico("trombone")} Pièce</button>` : ""}${x.echeance && !x.traite ? `<button class="btn go" data-jok>Fait</button>` : ""}<button class="btn flat stop" data-jsup>Supprimer</button></span></div>`).join("")
