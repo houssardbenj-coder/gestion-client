@@ -1483,7 +1483,15 @@ const IK_SOURCES = { reporting: "Appli Reporting", excel: "Excel", pilote: "Ajou
 const IK_TYPES = { cours: "Cours", service: "Service", deplacement: "Déplacement" };
 const ikJour = d => d ? d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4) : "";
 const ikNomMois = m => m.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-const ikDuMois = () => { const cle = ymd(ikMois).slice(0, 7); return ikP.trajets.filter(t => t.date.slice(0, 7) === cle); };
+const ikDuMois = (m = ikMois) => { const cle = ymd(m).slice(0, 7); return ikP.trajets.filter(t => t.date.slice(0, 7) === cle); };
+const ikTraite = m => (ikP.traites || []).includes(ymd(m).slice(0, 7));
+const ikEtat = m => ikTraite(m) ? `<span class="ik-src pilote" style="font-size:.55em;vertical-align:middle" title="Le fichier IK de ce mois est dans le dossier Récaps des IK">Traité</span>` : `<span class="ik-manque" style="font-size:.55em;vertical-align:middle" title="Pas encore passé dans Calculer les IK">Pas encore traité</span>`;
+function ikTableau(liste) {
+  const jours = new Set(liste.map(t => t.date)).size, manque = liste.filter(t => !t.adresse).length;
+  return `<div class="card lg-boite" style="margin-top:10px"><table class="lg-table ik-table"><thead><tr><th>Date</th><th>Lieu / personne</th><th>Adresse</th><th>Motif</th><th>Type</th><th>D'où</th></tr></thead>
+      <tbody>${liste.map(ikLigne).join("")}</tbody></table></div>
+      <p class="muted small" style="margin-top:6px">${liste.length} trajet${liste.length > 1 ? "s" : ""}, ${jours} jour${jours > 1 ? "s" : ""}${manque ? ` · <span class="ik-manque">${manque} sans adresse</span> : à compléter dans l'Excel` : ""}. Départ : ${esc(ikP.domicile || "domicile")}. Les km se calculent avec Calculer les IK.</p>`;
+}
 const ikTitre = () => `<h1>Trajets IK ${aide("Les adresses des trajets du mois, comme les lit le programme Calculer les IK : cours OIKOS, services faits par Benjamin, et déplacements de l'onglet IK BENJAMIN (écrits par l'appli Reporting ou tapés dans l'Excel). Les cours de Benjamin enseignement n'y sont pas. Ajouter le trajet écrit une ligne dans IK BENJAMIN, avec une copie de sécurité avant. Les km se calculent toujours avec Calculer les IK.")}</h1>`;
 async function vueIk() {
   try { ikP = await pc("/ik", null, 30000); }
@@ -1505,7 +1513,11 @@ function ikDessiner() {
   if (onglet !== "ik" || !ikP) return;
   const y = scrollY, m1 = new Date(ikMois.getFullYear(), ikMois.getMonth() + 1, 1);
   const duMois = ikDuMois(), liste = duMois.filter(t => !ikSource || t.source === ikSource);
-  const nb = s => duMois.filter(t => !s || t.source === s).length, manque = liste.filter(t => !t.adresse).length;
+  const nb = s => duMois.filter(t => !s || t.source === s).length;
+  /* le mois d'avant le mois en cours, tant qu'il n'est pas passé dans Calculer les IK */
+  const auj = new Date(), ceMois = ikMois.getFullYear() === auj.getFullYear() && ikMois.getMonth() === auj.getMonth();
+  const mAvant = new Date(ikMois.getFullYear(), ikMois.getMonth() - 1, 1);
+  const avant = ceMois && !ikTraite(mAvant) ? ikDuMois(mAvant).filter(t => !ikSource || t.source === ikSource) : [];
   const puce = (s, t) => `<button class="chip" type="button" data-ik-source="${s}" aria-pressed="${ikSource === s}">${t} <span class="nb">${nb(s)}</span></button>`;
   const el = contenu(`<div class="row" style="justify-content:space-between">${ikTitre()}${ikP.chemin ? `<button class="btn flat" data-pc="${esc(ikP.chemin)}">Ouvrir l'Excel</button>` : ""}</div>
     <section class="card" style="margin-top:12px"><h3 style="margin-top:0">Ajouter un trajet</h3>
@@ -1513,21 +1525,22 @@ function ikDessiner() {
         <label>Date<input type="date" name="date" value="${ymd(new Date())}" max="${ymd(new Date())}" required></label>
         <label>Lieu ou personne<input type="text" name="lieu" list="ik-lieux" maxlength="120" required placeholder="Ex. décheterie"></label>
         <label>Adresse<input type="text" name="adresse" maxlength="300" required placeholder="N°, rue, code postal, ville"></label>
-        <label>Motif (facultatif)<input type="text" name="motif" maxlength="200"></label>
+        <label>Motif (facultatif)<input type="text" name="motif" list="ik-motifs" maxlength="200" placeholder="Ex. prise de devis"></label>
         <button class="btn primary" type="submit" id="ik-ajouter">${ico("plus")} Ajouter le trajet</button>
       </form>
       <datalist id="ik-lieux">${ikP.lieux.map(l => `<option value="${esc(l[0])}">${esc(l[1])}</option>`).join("")}</datalist>
-      <p class="muted small" style="margin:6px 0 0">Écrit une ligne dans l'onglet ${esc(ikP.zone)} de l'Excel. Un lieu déjà connu reprend son adresse.</p></section>
+      <datalist id="ik-motifs"><option value="Visite de courtoisie"><option value="Prise de devis"><option value="Décheterie"><option value="Achat matériel"></datalist>
+      <p class="muted small" style="margin:6px 0 0">Pour un trajet hors prestation (visite de courtoisie, prise de devis…), même chez un client : il s'écrit dans l'onglet ${esc(ikP.zone)} de l'Excel, jamais dans SAISIE COURS ni SAISIE SERVICES, et ne compte aucune heure. Un lieu ou un client déjà connu reprend son adresse.</p></section>
     ${ikErreur ? `<div class="card lg-erreur" style="margin-top:12px"><b>${ico("alerte")} Pas enregistré.</b> ${esc(ikErreur)} <button class="btn" id="ik-relire" type="button">Relire l'Excel</button></div>` : ""}
     <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn" id="ik-prec" aria-label="Mois précédent">‹</button>
-      <h2 style="margin:0;text-transform:capitalize">${ikNomMois(ikMois)}</h2>
+      <h2 style="margin:0"><span style="text-transform:capitalize">${ikNomMois(ikMois)}</span> ${ikEtat(ikMois)}</h2>
       <button class="btn" id="ik-suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>›</button></div>
     <div class="row" style="justify-content:space-between;margin-top:10px"><span class="row">${puce("", "Tous")}${puce("reporting", IK_SOURCES.reporting)}${puce("excel", IK_SOURCES.excel)}${puce("pilote", IK_SOURCES.pilote)}</span>
       <button class="btn" id="ik-exporter" type="button" ${liste.length ? "" : "disabled"}>${ico("telecharger")} Exporter le tableau</button></div>
-    ${liste.length ? `<div class="card lg-boite" style="margin-top:10px"><table class="lg-table ik-table"><thead><tr><th>Date</th><th>Lieu / personne</th><th>Adresse</th><th>Motif</th><th>Type</th><th>D'où</th></tr></thead>
-      <tbody>${liste.map(ikLigne).join("")}</tbody></table></div>
-      <p class="muted small" style="margin-top:6px">${liste.length} trajet${liste.length > 1 ? "s" : ""}, ${new Set(liste.map(t => t.date)).size} jour${new Set(liste.map(t => t.date)).size > 1 ? "s" : ""}${manque ? ` · <span class="ik-manque">${manque} sans adresse</span> : à compléter dans l'Excel` : ""}. Départ : ${esc(ikP.domicile || "domicile")}. Les km se calculent avec Calculer les IK.</p>`
-      : `<p class="muted" style="margin-top:12px">Aucun trajet ${ikSource ? "de cette origine " : ""}ce mois-ci.</p>`}`);
+    ${liste.length ? ikTableau(liste) : `<p class="muted" style="margin-top:12px">Aucun trajet ${ikSource ? "de cette origine " : ""}ce mois-ci.</p>`}
+    ${avant.length ? `<div class="row" style="justify-content:space-between;margin-top:28px"><h2 style="margin:0">Mois précédent : <span style="text-transform:capitalize">${ikNomMois(mAvant)}</span> ${ikEtat(mAvant)}</h2>
+      <button class="btn" id="ik-exporter-avant" type="button">${ico("telecharger")} Exporter le tableau</button></div>
+      <p class="muted small" style="margin:4px 0 0">Reste affiché ici tant que ce mois n'est pas passé dans Calculer les IK.</p>${ikTableau(avant)}` : ""}`);
   scrollTo(0, y);
   const f = el.querySelector("#ik-form");
   f.lieu.oninput = () => { const connu = ikP.lieux.find(l => norm(l[0]) === norm(f.lieu.value)); if (connu && !f.adresse.value.trim()) f.adresse.value = connu[1]; };
@@ -1536,6 +1549,7 @@ function ikDessiner() {
   el.querySelector("#ik-suiv").onclick = () => { ikMois = m1; ikDessiner(); };
   el.querySelectorAll("[data-ik-source]").forEach(b => b.onclick = () => { ikSource = b.dataset.ikSource; ikDessiner(); });
   el.querySelector("#ik-exporter").onclick = () => ikExporter(liste);
+  if (el.querySelector("#ik-exporter-avant")) el.querySelector("#ik-exporter-avant").onclick = () => ikExporter(avant, mAvant);
   if (el.querySelector("#ik-relire")) el.querySelector("#ik-relire").onclick = () => { ikErreur = ""; vueIk(); };
 }
 async function ikAjouter(f, confirmer) {
@@ -1552,13 +1566,13 @@ async function ikAjouter(f, confirmer) {
   } catch (e) { ikErreur = e.message || String(e); ikDessiner(); }
 }
 /* Export : un fichier CSV que WPS et Excel ouvrent directement (point-virgule, accents gardés), une ligne par trajet, colonne km vide pour le comptable */
-function ikExporter(liste) {
+function ikExporter(liste, mois = ikMois) {
   const cellule = v => { let t = String(v ?? ""); if (/^[=+\-@]/.test(t)) t = "'" + t; return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
   const lignes = [["date", "lieu/personne", "adresse", "km", "motif", "type", "d'où"]].concat(liste.map(t => [ikJour(t.date), t.lieu, t.adresse, "", t.motif, IK_TYPES[t.type] || "", IK_SOURCES[t.source] || ""]));
   const texte = "﻿" + lignes.map(l => l.map(cellule).join(";")).join("\r\n") + "\r\n";
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([texte], { type: "text/csv;charset=utf-8" }));
-  a.download = "Trajets IK " + ikNomMois(ikMois) + (ikSource ? " - " + IK_SOURCES[ikSource] : "") + ".csv";
+  a.download = "Trajets IK " + ikNomMois(mois) + (ikSource ? " - " + IK_SOURCES[ikSource] : "") + ".csv";
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast(liste.length + " trajet" + (liste.length > 1 ? "s" : "") + " exporté" + (liste.length > 1 ? "s" : ""));
