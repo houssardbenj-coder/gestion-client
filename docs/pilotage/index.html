@@ -2619,6 +2619,7 @@ async function vueEmploi() {
   });
   ag.elements.sort((a, b) => a.t - b.t);
   const ident = x => (x.client && x.client.id) || x.cle || norm(sansEmoji(x.titre || ""));
+  const avantTri = ag.elements.slice();   // doublons compris : pour couper toutes les séances en double
   { const rang = x => ({ occ: 0, rdv: 1, rec: 3, nouveau: 4 })[x.sorte] ?? 2, garde = new Map();
     ag.elements.forEach(x => { const k = ident(x) + "|" + x.t, y = garde.get(k); if (!y || rang(x) < rang(y)) garde.set(k, x); });
     ag.elements = ag.elements.filter(x => garde.get(ident(x) + "|" + x.t) === x); }
@@ -2634,7 +2635,7 @@ async function vueEmploi() {
   const serie = x => ({
     dem: recDem.filter(d => (d.cle === x.cle || (x.client && emClientDe(d) === x.client)) && Number(d.wd) === new Date(x.t).getDay() && d.heure === emHeureTxt(x.t)),
     nv: nvTous.filter(n => n.chaque_semaine && ((n.client_id && x.client && n.client_id === x.client.id) || (n.cle && n.cle === x.cle)) && memeHeure(n.quand, x)),
-    occ: ag.elements.filter(y => y.sorte === "occ" && typeof y.occ === "string" && y.occ.split("_").length === 3 && ident(y) === ident(x) && memeHeure(y.t, x)) });
+    occ: avantTri.filter(y => y.sorte === "occ" && typeof y.occ === "string" && y.occ.split("_").length === 3 && ident(y) === ident(x) && memeHeure(y.t, x)) });
   const repete = x => { if (x.rec || x.sorte === "occ") return true; const r = serie(x); return r.dem.length + r.nv.length + r.occ.length > 0; };
   /* Enlever la répétition d'un clic : coupe toutes les répétitions de ce client à ce jour et cette heure, après ce RDV
      (ou à partir de cette séance si c'en est une) ; ce qui est avant reste */
@@ -2646,7 +2647,7 @@ async function vueEmploi() {
       .concat(r.nv.filter(n => fait(n.id)).map(n => ({ id: nid(), cust: "", slot: "pil" + n.id, jusqu, titre: "", le: Date.now() })));
     const nvIds = new Set(r.nv.filter(n => !fait(n.id)).map(n => n.id)), demIds = new Set(r.dem.map(d => d.id));
     const ok = await emEcrireRec(l => l.filter(d => !demIds.has(d.id)), l => l.concat(arrets),
-      l => l.map(n => nvIds.has(n.id) ? (ymd(new Date(n.quand)) > jusqu ? null : { ...n, chaque_semaine: false }) : n).filter(Boolean));
+      l => l.map(n => nvIds.has(n.id) ? (ymd(new Date(n.quand)) > jusqu ? null : { ...n, chaque_semaine: false }) : r.nv.some(m => m.id === n.id) ? { ...n, chaque_semaine: false } : n).filter(Boolean));
     toast(ok ? "Plus répété. Pense intelligent l'enregistre à sa prochaine ouverture." : "Pas enregistré : la base ne répond pas, réessaie.");
     if (ok) afficher("emploi"); };
   const emNvRepeter = async id => { const ok = await emEcrireRec(l => l, l => l, l => l.map(n => n.id === id ? { ...n, chaque_semaine: true } : n));
