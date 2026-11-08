@@ -2618,6 +2618,10 @@ async function vueEmploi() {
     }
   });
   ag.elements.sort((a, b) => a.t - b.t);
+  const ident = x => (x.client && x.client.id) || x.cle || norm(sansEmoji(x.titre || ""));
+  { const rang = x => ({ occ: 0, rdv: 1, rec: 3, nouveau: 4 })[x.sorte] ?? 2, garde = new Map();
+    ag.elements.forEach(x => { const k = ident(x) + "|" + x.t, y = garde.get(k); if (!y || rang(x) < rang(y)) garde.set(k, x); });
+    ag.elements = ag.elements.filter(x => garde.get(ident(x) + "|" + x.t) === x); }
   const horsFenetre = (ag.fin && borneA >= ag.fin) || (ag.debut && borneB <= ag.debut);
   const vus = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.t >= borneA && x.t < borneB);
   const annVus = ag.annules.filter(a => a.t >= borneA && a.t < borneB);
@@ -2626,15 +2630,32 @@ async function vueEmploi() {
   const dejaRegulier = x => recDem.some(d => emMemeRec(d, x)) || ag.elements.some(y => y.sorte === "occ" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
   /* Un seul bouton « Chaque semaine » : enfoncé = répété chaque semaine, un clic l'enlève ; relâché = un clic le met */
   const bascule = (on, attr) => `<button class="chip em-rep" ${attr} aria-pressed="${on}" title="${on ? "Répété chaque semaine : clique pour ne plus répéter" : "Clique pour répéter chaque semaine"}">${ico("repeter")} Chaque semaine</button>`;
+  const nvTous = emNouveaux(docRec), memeHeure = (t, x) => new Date(t).getDay() === new Date(x.t).getDay() && emHeureTxt(t) === emHeureTxt(x.t);
+  const serie = x => ({
+    dem: recDem.filter(d => (d.cle === x.cle || (x.client && emClientDe(d) === x.client)) && Number(d.wd) === new Date(x.t).getDay() && d.heure === emHeureTxt(x.t)),
+    nv: nvTous.filter(n => n.chaque_semaine && ((n.client_id && x.client && n.client_id === x.client.id) || (n.cle && n.cle === x.cle)) && memeHeure(n.quand, x)),
+    occ: ag.elements.filter(y => y.sorte === "occ" && typeof y.occ === "string" && y.occ.split("_").length === 3 && ident(y) === ident(x) && memeHeure(y.t, x)) });
+  const repete = x => { if (x.rec || x.sorte === "occ") return true; const r = serie(x); return r.dem.length + r.nv.length + r.occ.length > 0; };
+  /* Enlever la répétition d'un clic : coupe toutes les répétitions de ce client à ce jour et cette heure, après ce RDV
+     (ou à partir de cette séance si c'en est une) ; ce qui est avant reste */
+  const emCouper = async x => {
+    const r = serie(x), jusqu = x.sorte === "occ" || x.rec ? ymd(plusJours(new Date(x.jour + "T12:00"), -1)) : x.jour, fait = id => ag.recurrents[id] === "fait";
+    const nid = () => "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const arrets = [...new Set(r.occ.map(y => y.occ.split("_").slice(0, 2).join("_")))].map(k => ({ id: nid(), cust: k.split("_")[0], slot: k.split("_")[1], jusqu, titre: sansEmoji(x.titre).slice(0, 120), le: Date.now() }))
+      .concat(r.dem.map(d => ({ id: nid(), cust: "", slot: "pil" + d.id, jusqu, titre: "", le: Date.now() })))
+      .concat(r.nv.filter(n => fait(n.id)).map(n => ({ id: nid(), cust: "", slot: "pil" + n.id, jusqu, titre: "", le: Date.now() })));
+    const nvIds = new Set(r.nv.filter(n => !fait(n.id)).map(n => n.id)), demIds = new Set(r.dem.map(d => d.id));
+    const ok = await emEcrireRec(l => l.filter(d => !demIds.has(d.id)), l => l.concat(arrets),
+      l => l.map(n => nvIds.has(n.id) ? (ymd(new Date(n.quand)) > jusqu ? null : { ...n, chaque_semaine: false }) : n).filter(Boolean));
+    toast(ok ? "Plus répété. Pense intelligent l'enregistre à sa prochaine ouverture." : "Pas enregistré : la base ne répond pas, réessaie.");
+    if (ok) afficher("emploi"); };
+  const emNvRepeter = async id => { const ok = await emEcrireRec(l => l, l => l, l => l.map(n => n.id === id ? { ...n, chaque_semaine: true } : n));
+    toast(ok ? "Répété chaque semaine." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi"); };
   const occSuivante = x => ag.elements.find(y => y.sorte === "occ" && typeof y.occ === "string" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
   const action = (x, i) => {
-    if (x.rec) return bascule(true, `data-em-stop="${esc(x.rec.id)}"`);
-    if (x.sorte === "occ" && typeof x.occ === "string" && x.occ.split("_").length === 3) return bascule(true, `data-em-arret="${i}"`);
+    if (repete(x)) return bascule(true, `data-em-couper="${i}"`);
+    if (x.nv) return bascule(false, `data-em-nvrep="${esc(x.nv.id)}"`);
     if (!emEligible(x)) return "";
-    const dem = recDem.find(d => emMemeRec(d, x));
-    if (dem) return bascule(true, `data-em-stop="${esc(dem.id)}"`);
-    const y = occSuivante(x);
-    if (y) return bascule(true, `data-em-arret="${ag.elements.indexOf(y)}"`);
     return bascule(false, `data-em-rec="${i}"`); };
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
     const a = action(x, i, true), tuile = x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`;
@@ -2696,6 +2717,8 @@ async function vueEmploi() {
     }
     if (b.dataset.emPlus) { const d = new Date(); return emNouveau(enSemaine ? (cestMaintenant ? aujourdhui : ymd(emSemaine)) : emJour, Math.min(23 * 60, (d.getHours() + 1) * 60)); }
     if (b.dataset.emNvret) return emRetirerNouveau(b.dataset.emNvret);
+    if (b.dataset.emCouper !== undefined) { const x = ag.elements[Number(b.dataset.emCouper)]; if (x) return emCouper(x); }
+    if (b.dataset.emNvrep) return emNvRepeter(b.dataset.emNvrep);
     if (b.id === "em-maj") return afficher("emploi");
     if (b.dataset.emVue) { emVue = b.dataset.emVue; if (emVue === "semaine") emSemaine = lundi(jourD); else if (ymd(lundi(jourD)) !== ymd(emSemaine)) emJour = ymd(emSemaine) === ymd(lundi(new Date())) ? aujourdhui : ymd(emSemaine); return afficher("emploi"); }
     if (b.dataset.emAuj) { emSemaine = lundi(new Date()); emJour = aujourdhui; return afficher("emploi"); }

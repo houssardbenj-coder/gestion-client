@@ -589,6 +589,7 @@ function feries(y){
 }
 const ferieOf=day=>feries(Number(day.slice(0,4)))[day]||"";
 const slotsOf=c=>Array.isArray(c.slots)?c.slots.filter(s=>s&&s.id&&s.time&&s.wd!==""&&s.wd!=null):[];
+const dejaCreneau=(c,wd,time,from)=>slotsOf(c).some(s=>Number(s.wd)===Number(wd)&&s.time===time&&(!s.until||s.until>=from));   // déjà répété ce jour-là à cette heure : pas de doublon
 const occKey=(c,s,day)=>c.id+"_"+s.id+"_"+day;
 const RYTHME={1:"Chaque semaine",2:"Une semaine sur deux"};
 const slotText=s=>(Number(s.every)===2?"Un "+JOURS[s.wd]+" sur deux":"Chaque "+JOURS[s.wd])+" à "+s.time.replace(":","h")+" · "+durLabel(Number(s.dur)||60);
@@ -1169,6 +1170,7 @@ async function recurrentsDuPilote(jeton,s){
     const wd=Number(d.wd),dur0=Number(d.dur),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);   // une durée de la liste des séances
     if(!(Number.isInteger(wd)&&wd>=0&&wd<=6&&/^([01]\d|2[0-3]):[0-5]\d$/.test(d.heure||"")&&dur0>=15&&dur0<=600&&/^\d{4}-\d\d-\d\d$/.test(d.depuis||""))){etats[d.id]="illisible";continue}
     if(!c){etats[d.id]="introuvable";continue}
+    if(dejaCreneau(c,wd,d.heure,d.depuis)){faits.add(d.id);etats[d.id]="fait";continue}
     const slots=slotsOf(c).concat({id:sid,wd,time:d.heure,dur,every:1,from:d.depuis,until:""});
     try{await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots;faits.add(d.id);etats[d.id]="fait";ajoutes++}catch(e){etats[d.id]="echec"}
   }
@@ -1198,7 +1200,8 @@ async function recurrentsDuPilote(jeton,s){
       ||(n.nom?(l=>l.length===1?l[0]:null)(customers.filter(x=>motsTries(fullName(x))===motsTries(n.nom))):null)
       ||(l=>l.length===1?l[0]:null)(customers.filter(x=>{const w=motsTries(fullName(x)).split(" ").filter(Boolean),t=" "+fold(n.titre||"").replace(/[^a-z0-9]+/g," ")+" ";return w.length&&w.every(m=>m.length>2&&t.includes(" "+m+" "))}));   // fiche faite au nom de l'élève (ex. Bryan)
     try{
-      if(n.chaque_semaine&&c){const d=new Date(quand),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);
+      if(n.chaque_semaine&&c&&dejaCreneau(c,new Date(quand).getDay(),pad(new Date(quand).getHours())+":"+pad(new Date(quand).getMinutes()),ymd(new Date(quand)))){}   // déjà répété : rien à ajouter
+      else if(n.chaque_semaine&&c){const d=new Date(quand),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);
         const slots=slotsOf(c).concat({id:"pil"+n.id,wd:d.getDay(),time:pad(d.getHours())+":"+pad(d.getMinutes()),dur,every:1,from:ymd(d),until:""});
         await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots}
       else{const a={id:"pil"+n.id,firstName:c?"":String(n.titre||n.nom||"RDV").slice(0,120),lastName:"",title:"",phone:"",address:"",when:quand,dur:dur0,note:"Ajouté depuis OIKOS Pilotage",customerId:c?c.id:"",done:false,createdAt:Date.now()};

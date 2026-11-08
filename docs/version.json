@@ -1,4 +1,4 @@
 {
- "version": 30,
- "notes": "RDV ajoutés depuis OIKOS Pilotage repris dans l agenda."
+ "version": 31,
+ "notes": "Jamais deux répétitions du même client à la même heure."
 }
