@@ -131,6 +131,14 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .em-ev{display:block;width:100%;text-align:left;margin-bottom:4px;padding:5px 7px;font-size:13px;font-weight:400;background:var(--surface);color:inherit;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;overflow-wrap:anywhere}
 button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-ev.em-call,.em-ev.em-task,.em-ev.em-todo{border-left-color:var(--warn)}.em-ev.em-cal{border-left-color:var(--muted)}
+.em-ev.em-rec{border-style:dashed;border-left-style:solid}
+.em-annule{display:block;margin-bottom:4px;padding:4px 7px;font-size:12.5px;color:var(--stop);background:var(--stop-soft);border:1px solid var(--stop);border-radius:6px;overflow-wrap:anywhere}
+.em-annule b{font-weight:600}.em-annule s{color:inherit;opacity:.85}
+.em-table th.em-auj,.em-table td.em-auj{background:var(--accent-soft)}
+.em-jour{margin-bottom:14px;border-left:4px solid var(--accent)}.em-jour h2{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:17px}
+.em-jour .em-l{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:14px}.em-jour .em-l:first-of-type{border-top:0}
+.em-jour .em-l b{min-width:96px;font-variant-numeric:tabular-nums}.em-jour .em-l.em-annule{padding:5px 7px;border-top:0;margin:3px 0}
+.em-jour h3{margin:8px 0 2px;font-size:13px;color:var(--muted);font-weight:600}.em-act{display:flex;flex-wrap:wrap;gap:2px;margin:-2px 0 6px}.em-act .btn{font-size:12px;padding:2px 6px;min-height:0}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .pk{display:flex;flex-direction:column;gap:8px;color:var(--ink)}
@@ -182,6 +190,9 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .ta-ajout input[name=texte]{flex:1 1 240px;min-width:0}
 .ta-ajout .ta-pill{width:auto;flex:none;border-radius:999px;padding:7px 12px;font-size:13px}
 .ta-ajout .btn.primary{flex:none}
+.ta-ajout .ta-choix{flex:1 1 100%;align-items:center}
+.ta-ajout .ta-choix[hidden]{display:none}
+.ta-ajout .ta-choix .muted{margin-right:2px}
 .tk-grp{border-top:1px solid var(--line)}
 .tk-grp>summary{cursor:pointer;padding:9px 16px;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);list-style:none;display:flex;gap:8px;align-items:center}
 ul.tasks{list-style:none;margin:0;padding:0}
@@ -376,6 +387,14 @@ nav.menu-haut{flex:none}
 .jour-groupe>summary::-webkit-details-marker{display:none}
 .jour-groupe .jour-ligne{padding-block:10px}
 .jour-annuler{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:4px 8px 4px 16px;border-radius:14px;background:var(--sunk)}
+/* Vue d'ensemble : une ligne par sujet, toujours présente, même à zéro */
+.ve-groupe{margin-top:14px}
+.ve-groupe>h2{font-size:17px;margin:0 0 8px}
+.ve-ligne .ve-nb{flex:none;min-width:38px;text-align:right;font-family:var(--titre);font-size:22px;font-variant-numeric:tabular-nums}
+.ve-ligne.vide{opacity:.6}
+.ve-ligne.vide .ve-nb{font-size:14px;color:var(--muted);font-family:inherit}
+.ve-detail-titre{margin-top:28px}
+[id^="ve-"]{scroll-margin-top:calc(var(--haut-entete, 70px) + 14px)}
 /* Suivi de l'Excel */
 .su-chiffres{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
 .su-chiffres .card{padding:12px 14px}
@@ -581,7 +600,7 @@ tr:hover .btn.flat.ligne-action,.btn.flat.ligne-action:focus-visible{color:var(-
 <script>
 /* ===================== Réglages ===================== */
 /* Icônes dessinées (trait fin) à la place des émojis, comme dans l'appli des intervenants */
-const ICONES = { lancer: "M8 5l11 7-11 7z", site: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6", reglages: "M4 7h10M18 7h2M4 17h2M10 17h10M16 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 14.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", ouvert: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 5.6-1.5", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", portable: "M7 3h10v18H7zM11 18h2", mission: "M4 8h16v11H4zM9 8V5h6v3", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", rond: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", etincelle: "M12 3l2 6.5L20.5 12 14 14.5 12 21l-2-6.5L3.5 12 10 9.5zM19 3v4M17 5h4", recu: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6", drapeau: "M6 21V4h12l-2 4 2 4H6", balance: "M12 4v16M8 20h8M5 7h14M5 7l-2.5 7a3 3 0 0 0 5 0zM19 7l-2.5 7a3 3 0 0 0 5 0z", loupe: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4", goutte: "M12 3s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.500 10 12 3 12 3z", feuille: "M5 19C5 10 11 5 20 4c0 9-5 15-13 15zM5 21c2-5 5-8 9-10", corbeille: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5", trombone: "M20 11l-8.5 8.500a5 5 0 0 1-7-7L13 4a3.300 3.300 0 0 1 4.700 4.700L9 17.500a1.600 1.600 0 0 1-2.300-2.300l8-8", outil: "M14.500 6.500a4 4 0 0 1 5-1.500l-3 3 2 2 3-3a4 4 0 0 1-5.500 5L8 20.500 5.500 18l8.500-7.500a4 4 0 0 1 .5-4z", oeil: "M2.500 12S6 5.500 12 5.500 21.500 12 21.500 12 18 18.500 12 18.500 2.500 12 2.500 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", chrono: "M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.500 1.500M10 2.500h4", croix: "M6 6l12 12M18 6 6 18", retour: "M9 7 4 12l5 5M4 12h11a5 5 0 0 1 5 5" };
+const ICONES = { lancer: "M8 5l11 7-11 7z", site: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6", reglages: "M4 7h10M18 7h2M4 17h2M10 17h10M16 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 14.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", ouvert: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 5.6-1.5", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", portable: "M7 3h10v18H7zM11 18h2", mission: "M4 8h16v11H4zM9 8V5h6v3", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", rond: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", etincelle: "M12 3l2 6.5L20.5 12 14 14.5 12 21l-2-6.5L3.5 12 10 9.5zM19 3v4M17 5h4", recu: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6", drapeau: "M6 21V4h12l-2 4 2 4H6", balance: "M12 4v16M8 20h8M5 7h14M5 7l-2.5 7a3 3 0 0 0 5 0zM19 7l-2.5 7a3 3 0 0 0 5 0z", loupe: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4", goutte: "M12 3s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.500 10 12 3 12 3z", feuille: "M5 19C5 10 11 5 20 4c0 9-5 15-13 15zM5 21c2-5 5-8 9-10", corbeille: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5", trombone: "M20 11l-8.5 8.500a5 5 0 0 1-7-7L13 4a3.300 3.300 0 0 1 4.700 4.700L9 17.500a1.600 1.600 0 0 1-2.300-2.300l8-8", outil: "M14.500 6.500a4 4 0 0 1 5-1.500l-3 3 2 2 3-3a4 4 0 0 1-5.500 5L8 20.500 5.500 18l8.500-7.500a4 4 0 0 1 .5-4z", oeil: "M2.500 12S6 5.500 12 5.500 21.500 12 21.500 12 18 18.500 12 18.500 2.500 12 2.500 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", chrono: "M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.500 1.500M10 2.500h4", croix: "M6 6l12 12M18 6 6 18", retour: "M9 7 4 12l5 5M4 12h11a5 5 0 0 1 5 5", repeter: "M4 12a8 8 0 0 1 13.700-5.600M20 4v4h-4M20 12a8 8 0 0 1-13.700 5.600M4 20v-4h4" };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[n]}"/></svg>`;
 const MONO = `<svg class="mono" viewBox="0 0 30 28" aria-hidden="true"><path d="M17 3 28 26H6Z"/><path d="M9 2 28 21 2 26Z"/></svg>`;
 const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
@@ -743,7 +762,7 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Tout voir"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
 const MENU = [
   { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir", "emploi"], bulle: "b-avoir" },
   { k: "clients", t: "Clients", pages: ["clients", "dossiers"], bulle: "b-clients" },
@@ -1943,7 +1962,8 @@ function htmlLigne(l, i, principal, zone) {
     <button class="btn ${principal ? "primary" : ""}" data-j-agir>${esc(l.action)}</button>${autres.length ? `<button class="btn flat" data-j-plus aria-expanded="false">Autres actions</button><div class="jour-autres" hidden>${autres.map((a, n) => `<button data-j-autre="${n}">${esc(a[0])}</button>`).join("")}</div>` : ""}</div>`;
 }
 async function vueJour() {
-  const { faire, attente, info } = await lignesDuJour();
+  const [{ faire, attente, info }, docAg] = await Promise.all([lignesDuJour(), lireCopie("agenda").catch(() => null)]);
+  let emHtml = ""; try { emHtml = emAujourdhuiHtml(emRecu(docAg)); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
   nbAFaire = faire.length;
   const bulleJour = document.getElementById("b-avoir"); if (bulleJour) bulleJour.innerHTML = nbAFaire ? `<span class="bulle">${nbAFaire}</span>` : "";
   const n = faire.length, auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
@@ -1951,9 +1971,10 @@ async function vueJour() {
   const el = contenu(`<p class="jour-date">${esc(auj.charAt(0).toUpperCase() + auj.slice(1))}</p><h1 class="jour-titre">${n ? `<span class="jour-n">${n}</span>` + (n > 1 ? " choses à faire" : " chose à faire") : "Rien à faire pour le moment"}</h1>
     ${n ? `<section class="jour-liste" aria-label="À faire maintenant">${faire.map((l, i) => htmlLigne(l, i, i === 0, "f")).join("")}</section>` : ""}
     ${dernier ? `<div class="jour-annuler"><span>${esc(dernier.texte)}</span><button class="btn flat" id="j-annuler">Annuler</button></div>` : ""}
+    ${emHtml ? `<div style="margin-top:16px">${emHtml}</div>` : ""}
     ${attente.length ? `<details class="jour-groupe attente"><summary><span>En attente d'une réponse</span><span class="muted">${attente.length}</span></summary>${attente.map((l, i) => htmlLigne(l, i, false, "a")).join("")}</details>` : ""}
     ${info.length ? `<details class="jour-groupe info"><summary><span>Pour information</span><span class="muted">${info.length}</span></summary><div class="row" style="justify-content:flex-end;padding:0 18px"><button class="btn flat" id="j-tout-vu">Tout marquer fait</button></div>${info.map((l, i) => htmlLigne(l, i, false, "i")).join("")}</details>` : ""}
-    <p style="margin-top:14px"><button class="btn flat" data-page="avoir">Tout voir en détail</button></p>`);
+    <p style="margin-top:14px"><button class="btn flat" data-page="avoir">Voir la vue d'ensemble</button></p>`);
   const marquer = async l => { const r = sb.from(l.table).update({ vue_le: new Date().toISOString() }); await maj(l.ids ? r.in("id", l.ids) : r.eq("id", l.id)); };
   const ligneDe = b => { const c = b.closest("[data-j]"); if (!c) return null; const z = c.dataset.j[0], i = Number(c.dataset.j.slice(1)); return ({ f: faire, a: attente, i: info })[z][i]; };
   el.onclick = async e => {
@@ -1961,6 +1982,7 @@ async function vueJour() {
     el.querySelectorAll(".jour-autres:not([hidden])").forEach(x => { if (!b || x.previousElementSibling !== b) { x.hidden = true; x.previousElementSibling.setAttribute("aria-expanded", "false"); } });
     if (!b) return;
     if (b.dataset.page) return afficher(b.dataset.page);
+    if (b.dataset.emSemaine) { emVue = "semaine"; emSemaine = lundi(new Date()); return afficher("emploi"); }
     if (b.id === "j-annuler") { await maj(dernier.defaire()); jourDernier = null; return afficher("jour"); }
     if (b.id === "j-tout-vu") { for (const l of info) if (l.table) await marquer(l); return afficher("jour"); }
     const l = ligneDe(b); if (!l) return;
@@ -2129,7 +2151,7 @@ function tacheDepuisMessages(p, apres) {
   });
 }
 
-/* ===================== À voir ===================== */
+/* ===================== Vue d'ensemble (ancien « Tout voir ») ===================== */
 async function vueAVoir() {
   await chargerBase();
   const depuis = new Date(Date.now() - 31 * 864e5).toISOString();
@@ -2156,52 +2178,75 @@ async function vueAVoir() {
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const nonDeclares = prevus.filter(x => x.client_id && !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut)));
   const nbMessages = await compteurMessages().catch(() => 0);
-  const el = contenu(`<h1>Tout voir</h1>
-    ${nbMessages ? `<button class="card cliquable" data-o="messages" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)"><b>${ico("bulle")} ${nbMessages} message${nbMessages > 1 ? "s" : ""} non lu${nbMessages > 1 ? "s" : ""} ›</b></button>` : ""}
-    ${tampon.length ? `<button class="card cliquable" data-o="clients" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>${ico("telecharger")} ${tampon.length} client${tampon.length > 1 ? "s" : ""} à traiter dans la zone tampon ›</b> <span class="muted small">(nouveaux clients VosFactures ou extraction)</span></button>` : ""}
-    ${taches.some(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || "")) ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>${ico("mission")} ${taches.filter(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || "")).length} réponse(s) de presta à une proposition ›</b></button>` : ""}
-    ${signes.length ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>${ico("stylo")} ${signes.length} devis signé${signes.length > 1 ? "s" : ""} : ordre de mission à transmettre ›</b></button>` : ""}
-    ${attenteDevis.length ? `<button class="card cliquable" data-dsection="ATTENTE" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>${ico("stylo")} ${attenteDevis.length} client${attenteDevis.length > 1 ? "s" : ""} en attente de devis ›</b></button>` : ""}
-    ${aFinaliser.length ? `<button class="card cliquable" data-dsection="PRESTA" style="display:block;width:100%;text-align:left;margin-top:12px;border-color:var(--warn)">
-      <b>${ico("drapeau")} ${aFinaliser.length} prestation${aFinaliser.length > 1 ? "s" : ""} à finaliser ›</b></button>` : ""}
-    ${carteGardeFou(garde)}
-    ${demandesTaches.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("personne")} Propositions des presta sur les feuilles de route <span class="tag warn">${demandesTaches.length}</span></h2>${demandesTaches.map(t => ligneDemandeTache(t, true)).join("")}</section>` : ""}
+  let mesTaches = []; try { mesTaches = await q(sb.from("taches").select("id,echeance").eq("intervenante_id", moi.id).is("fait_le", null)); } catch (e) { mesTaches = []; }
+  const mesRetard = mesTaches.filter(t => t.echeance && t.echeance <= ymd(new Date())).length;
+  const reponses = taches.filter(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || ""));
+  /* Vue d'ensemble : chaque sujet a sa ligne, même à zéro, pour que rien ne reste caché. Le bouton est sur la ligne. */
+  const VE = [
+    ["À décider par toi", [
+      ["bulle", "Messages non lus", "Ce que les presta t'ont écrit", nbMessages, "Lire", 'data-o="messages"'],
+      ["telecharger", "Clients à traiter", "Nouveaux clients VosFactures ou extraction, dans la zone tampon", tampon.length, "Traiter", 'data-o="clients"'],
+      ["stylo", "Devis signés", "Ordre de mission à transmettre au presta", signes.length, "Transmettre", 'data-dsection="ATTENTE"'],
+      ["chrono", "Clients en attente de devis", "Devis à faire ou à relancer", attenteDevis.length, "Voir les devis", 'data-dsection="ATTENTE"'],
+      ["drapeau", "Prestations à finaliser", "Toutes les tâches sont cochées par le presta", aFinaliser.length, "Finaliser", 'data-dsection="PRESTA"'],
+      ["personne", "Propositions sur les feuilles de route", "Un presta propose d'ajouter, retirer ou changer", demandesTaches.length, "Décider", 'data-aller="ve-propositions"'],
+      ["mission", "Réponses des presta à une proposition", "Le presta a répondu à ce que tu lui as proposé", reponses.length, "Voir", 'data-dsection="ATTENTE"'],
+      ["doc", "Papiers reçus à vérifier", "Pièces envoyées par les presta", docs.length, "Vérifier", 'data-aller="ve-papiers"'],
+      ["dossier", "Fichiers des presta retenus", "Fichiers bloqués avant d'aller dans le Drive", garde.liste.length, "Vérifier", 'data-aller="ve-fichiers"'],
+      ["balance", "Rappels juridiques", "Échéances des 7 prochains jours ou en retard", echeances.length, "Voir", 'data-aller="ve-juridique"']]],
+    ["Envoyé par les presta", [
+      ["bulle", "Notes de terrain", "Ce que les presta ont noté chez les clients", notes.length, "Lire", 'data-aller="ve-notes"'],
+      ["ok", "Listes à faire des presta", "Tâches cochées, ajoutées ou commentées", taches.length, "Voir", 'data-aller="ve-taches"'],
+      ["dossier", "Documents dans les dossiers", "Fichiers ou mots ajoutés dans un dossier", docsTaches.length, "Voir", 'data-aller="ve-documents"'],
+      ["photo", "Photos", "Nouvelles photos prises chez les clients", photos.length, "Voir", 'data-aller="ve-photos"']]],
+    ["À surveiller", [
+      ["agenda", "Passages pas déclarés", "Prévus dans les 7 derniers jours, sans déclaration du presta", nonDeclares.length, "Voir", 'data-aller="ve-passages"'],
+      ["lieu", "Pointages GPS à vérifier", "Anciens pointages corrigés ou loin du lieu", douteux.length, "Voir", 'data-aller="ve-gps"'],
+      ["ok", "Mes tâches pas encore faites", mesRetard ? mesRetard + " pour aujourd'hui ou en retard" : "Ta propre liste À faire", mesTaches.length, "Ouvrir ma liste", 'data-o="taches"']]]];
+  const veTotal = VE[0][1].concat(VE[1][1]).reduce((n, l) => n + (l[3] ? 1 : 0), 0);
+  const veLigne = ([icone, titre, explication, nb, action, cible]) => `<div class="jour-ligne ve-ligne${nb ? "" : " vide"}"><span class="jour-icone ${nb ? (TONS_JOUR[icone] || "") : ""}">${ico(icone)}</span>
+      <div class="jour-texte"><b>${esc(titre)}</b><span>${esc(explication)}</span></div><span class="ve-nb">${nb ? nb : "Rien"}</span>
+      ${nb ? `<button class="btn" ${cible}>${esc(action)}</button>` : ""}</div>`;
+  const el = contenu(`<h1>Vue d'ensemble</h1>
+    <p class="muted">Tout ce qui attend, au même endroit. Chaque ligne donne le nombre ; « Rien » veut dire que c'est à jour. Le bouton de la ligne t'emmène au bon endroit.</p>
+    <p style="margin-top:8px"><b>${veTotal ? veTotal + (veTotal > 1 ? " sujets demandent" : " sujet demande") + " ton attention" : "Rien ne demande ton attention"}</b></p>
+    ${VE.map(([nom, lignes]) => `<section class="ve-groupe"><h2>${esc(nom)}</h2><div class="jour-liste">${lignes.map(veLigne).join("")}</div></section>`).join("")}
+    <h2 class="ve-detail-titre">Le détail</h2>
+    <div id="ve-fichiers">${carteGardeFou(garde)}</div>
+    ${demandesTaches.length ? `<section class="card" id="ve-propositions" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("personne")} Propositions des presta sur les feuilles de route <span class="tag warn">${demandesTaches.length}</span></h2>${demandesTaches.map(t => ligneDemandeTache(t, true)).join("")}</section>` : ""}
     <div class="deux" style="margin-top:12px">
-      <section class="card"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
+      <section class="card" id="ve-notes"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
         ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${esc(nomInterv(n.intervenante_id))}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
           <button class="btn" data-lu="${n.id}">Fait</button></div>`).join("") : `<p class="muted">Rien de nouveau.</p>`}</section>
-      <section class="card"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${docs.length}</span></h2>
+      <section class="card" id="ve-papiers"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${docs.length}</span></h2>
         ${docs.length ? docs.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
           <span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
     </div>
-    ${taches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenants <span class="tag">${taches.length}</span></h2>
+    ${taches.length ? `<section class="card" id="ve-taches" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenants <span class="tag">${taches.length}</span></h2>
         <button class="btn" data-tlu="tout">Tout marquer fait</button></div>
       ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté ou modifié dans sa liste" : "a commenté ou remis à faire"} : ${esc(t.texte)}${t.commentaire ? `<br><span class="muted small">${ico("bulle")} ${esc(t.commentaire)}</span>` : ""}
           ${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
         <span class="row" style="flex:none"><button class="btn" data-touvre="${t.id}">Ouvrir</button><button class="btn" data-tlu="${t.id}">Fait</button></span></div>`).join("")}</section>` : ""}
-    ${docsTaches.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ico("dossier")} Nouveaux documents dans les dossiers <span class="tag">${docsTaches.length}</span></h2>
+    ${docsTaches.length ? `<section class="card" id="ve-documents" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ico("dossier")} Nouveaux documents dans les dossiers <span class="tag">${docsTaches.length}</span></h2>
         <button class="btn" data-dlu="tout">Tout marquer fait</button></div>
       ${docsTaches.map(d => { const t = tachesDesDocs.find(x => x.id === d.tache_id) || {}; return `<div class="ligne"><span><b>${esc(nomInterv(d.ajoute_par))}</b> ${d.chemin || d.drive_url ? "a ajouté " + esc(d.nom) + (d.legende ? " : " + esc(d.legende) : "") : "a écrit : " + esc(d.legende)}<br><span class="muted small">Dossier « ${esc(t.dossier_nom || t.texte || "?")} » · ${jour(d.cree_le)} ${hm(d.cree_le)}</span></span>
         <span class="row" style="flex:none">${d.chemin || d.drive_url ? `<button class="btn" data-dvoir="${esc(d.drive_url || d.chemin)}">Voir</button>` : ""}<button class="btn" data-douvre="${d.tache_id}">Ouvrir le dossier</button><button class="btn" data-dlu="${d.id}">Fait</button></span></div>`; }).join("")}</section>` : ""}
-    ${echeances.length ? `<section class="card" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("balance")} Rappels juridiques (7 prochains jours ou en retard) <span class="tag warn">${echeances.length}</span></h2>
+    ${echeances.length ? `<section class="card" id="ve-juridique" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("balance")} Rappels juridiques (7 prochains jours ou en retard) <span class="tag warn">${echeances.length}</span></h2>
       ${echeances.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b> · ${esc(TYPES_J[x.type])} : ${esc(x.titre)}<br><span class="muted small">rappel le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span></span>
         <span class="row"><button class="btn" data-dossier="${x.client_id}|juridique">Ouvrir le dossier</button><button class="btn go" data-jtraite="${x.id}">Fait</button></span></div>`).join("")}</section>` : ""}
-    ${photos.length ? `<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ico("photo")} Nouvelles photos des intervenants <span class="tag">${photos.length}</span></h2>
+    ${photos.length ? `<section class="card" id="ve-photos" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ico("photo")} Nouvelles photos des intervenants <span class="tag">${photos.length}</span></h2>
         <button class="btn" data-phlu="tout">Tout marquer fait</button></div>
       <div class="photos">${photos.slice(0, 12).map(p => `<figure class="photo"><button class="vignette" data-dossier="${p.client_id}|photos" title="Ouvrir le dossier"><img src="${esc(apercusAVoir[p.apercu] || "")}" alt="" loading="lazy"></button>
         <figcaption><b>${esc(nomClient(p.client_id))}</b> · ${CATS[p.categorie] || "Photo"}${p.legende ? " · " + esc(p.legende) : ""}<br><span class="muted small">${esc(nomInterv(p.auteur))} · ${jour(p.prise_le)} ${hm(p.prise_le)}</span>
           <div><button class="btn" data-phlu="${p.id}" style="margin-top:4px">Fait</button></div></figcaption></figure>`).join("")}</div>
       ${photos.length > 12 ? `<p class="muted small" style="margin-top:6px">… et ${photos.length - 12} autre(s) : « Tout marquer fait » ou ouvre le dossier du client.</p>` : ""}</section>` : ""}
-    <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Prévus mais pas encore déclarés (7 derniers jours)</h2>
+    <section class="card" id="ve-passages" style="margin-top:12px"><h2 style="margin-top:0">Prévus mais pas encore déclarés (7 derniers jours)</h2>
       ${nonDeclares.length ? nonDeclares.map(x => `<div class="ligne"><span><b>${esc(nomInterv(x.intervenante_id))}</b> chez ${esc(nomClient(x.client_id))}</span><span class="muted">${jour(x.debut)} ${hm(x.debut)}–${hm(x.fin)}</span></div>`).join("") : `<p class="muted">Tout ce qui était prévu a été déclaré.</p>`}</section>
-    ${douteux.length ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Anciens pointages GPS à vérifier</h2>
+    ${douteux.length ? `<section class="card" id="ve-gps" style="margin-top:12px"><h2 style="margin-top:0">Anciens pointages GPS à vérifier</h2>
       <table><tr><th>Qui</th><th>Client</th><th>Quand</th><th>Pourquoi</th></tr>${douteux.map(p => `<tr><td>${esc(nomInterv(p.intervenante_id))}</td><td>${esc(nomClient(p.client_id))}</td><td>${jour(p.arrivee)} ${hm(p.arrivee)}–${p.depart ? hm(p.depart) : "?"}</td><td>${esc(raisonDoute(p))}</td></tr>`).join("")}</table></section>` : ""}`);
   el.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.aller) { const z = document.getElementById(b.dataset.aller); if (z) z.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
     if (b.closest("[data-gf]")) return actionGardeFou(b, garde, () => afficher());
     if (b.closest("[data-dt]")) return deciderDemandeTache(b, demandesTaches, () => afficher());
     if (b.dataset.dsection) { sectionDevis = b.dataset.dsection; return afficher("clients"); }
@@ -2356,7 +2401,7 @@ async function vuePlanning() {
    Pense intelligent vit sur le téléphone : relié avec le compte gérant, il dépose son emploi du temps dans pilote_documents (clé « agenda ») à chaque changement et à chaque ouverture.
    Sens unique : on lit ici, on change sur le téléphone. OIKOS et Benjamin enseignement restent sur des lignes séparées, un client des deux est sur les deux. */
 const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"], ["AUTRE", "Hors client"]];
-const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine" };
+const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine", rec: "Chaque semaine" };
 let emSemaine = lundi(new Date()), emVue = "semaine", emJour = ymd(new Date());
 const emClientDe = x => (x.cle && cacheClients.find(c => c.source_pense === x.cle)) || (x.nom && cacheClients.find(c => motsNom(c.nom) === motsNom(x.nom))) || null;
 const emSectionsDe = c => { if (!c) return ["AUTRE"]; if (c.etat === "prospect") return ["PROSPECT"]; const l = entreprisesDe(c); return l.length ? l : ["AUTRE"]; };
@@ -2365,33 +2410,89 @@ function emRecu(doc) {
   if (!doc) return null;
   const c = doc.contenu || {};
   const elements = (Array.isArray(c.elements) ? c.elements : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { ...x, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client) }; }).sort((a, b) => a.t - b.t);
-  return { elements, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le };
+  // Séances annulées sur le téléphone (« Annulée cette fois ») : plus des rendez-vous, une ligne rouge « rdv annulé » à leur jour
+  const annules = (Array.isArray(c.annules) ? c.annules : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Rendez-vous"), cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, annule: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client) }; })
+    .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);   // s'il est rétabli entre-temps, c'est le rendez-vous qui compte
+  return { elements, annules, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {} };
+}
+const emAnnuleHtml = (a, avecHeure = true) => `<div class="em-annule" title="Annulé sur le téléphone">${ico("croix")} <b>rdv annulé</b>${avecHeure ? ` · ${esc(hm(a.t))}` : ""} · <s>${esc(sansEmoji(a.titre))}</s></div>`;
+/* Répéter chaque semaine (SQL 47) : la demande va dans pilote_documents, clé « recurrents ». Tant que le téléphone ne l'a pas prise,
+   le pilote montre lui-même le RDV les semaines suivantes (pointillés). Pense intelligent en fait une séance régulière du client
+   à partir de la semaine d'après, puis le renvoie comme Séance. Seulement un RDV d'un client du téléphone (pas un prospect, pas l'agenda Google). */
+const EM_REC = "recurrents";
+const emHeureTxt = t => { const d = new Date(t); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
+const emEligible = x => x.sorte === "rdv" && !x.jour_entier && typeof x.cle === "string" && !!x.cle && !/^pi:[lp]:/.test(x.cle);
+const emMemeRec = (d, x) => d.cle === x.cle && Number(d.wd) === new Date(x.t).getDay() && d.heure === emHeureTxt(x.t);
+const emDemandes = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.demandes) ? doc.contenu.demandes : [];
+  return l.filter(d => d && typeof d.id === "string" && typeof d.cle === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(d.heure || "") && /^\d{4}-\d\d-\d\d$/.test(d.depuis || "")); };
+async function emEcrireRec(changer) {
+  const demandes = changer(emDemandes(await lireCopie(EM_REC)));   // relu juste avant : l'autre PC a pu en ajouter
+  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+}
+async function emRepeter(x) {
+  const d0 = new Date(x.t), depuis = plusJours(d0, 7), titre = sansEmoji(x.titre).slice(0, 120);
+  if (!confirm(`Répéter chaque semaine : ${titre}, le ${d0.toLocaleDateString("fr-FR", { weekday: "long" })} à ${hm(x.t)} ?\n\nIl reviendra tout seul chaque semaine à partir du ${depuis.toLocaleDateString("fr-FR")}. Pense intelligent en fera une séance régulière du client à sa prochaine ouverture.`)) return;
+  const dur = Math.min(600, Math.max(15, Math.round(((x.fin > x.t ? x.fin : x.t + 36e5) - x.t) / 6e4)));
+  const d = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cle: x.cle, nom: x.nom || "", titre, wd: d0.getDay(), heure: emHeureTxt(x.t), dur, depuis: ymd(depuis), le: Date.now() };
+  const ok = await emEcrireRec(l => l.some(y => emMemeRec(y, x)) ? l : l.concat(d).slice(-200));
+  toast(ok ? `Répété chaque semaine à partir du ${depuis.toLocaleDateString("fr-FR")}.` : "Pas enregistré : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
+  if (ok) afficher("emploi");
+}
+async function emNePlusRepeter(id) {
+  if (!confirm("Ne plus répéter ce rendez-vous chaque semaine ?")) return;
+  const ok = await emEcrireRec(l => l.filter(y => y.id !== id));
+  toast(ok ? "Plus répété. Si Pense intelligent l'avait déjà pris, retire la séance régulière dans la fiche du client sur le téléphone." : "Pas enregistré : la base ne répond pas, réessaie.");
+  if (ok) afficher("emploi");
 }
 async function vueEmploi() {
   await chargerBase();
-  const ag = emRecu(await lireCopie("agenda"));
+  const [docAg, docRec] = await Promise.all([lireCopie("agenda"), lireCopie(EM_REC)]);
+  const ag = emRecu(docAg);
   if (!ag) return emPasRecu();
+  const recDem = emDemandes(docRec), recEtat = d => ag.recurrents[d.id] || "";
+  const recPb = recDem.filter(d => recEtat(d) === "introuvable" || recEtat(d) === "illisible");
   const aujourdhui = ymd(new Date()), vieux = Date.now() - new Date(ag.recu).getTime() > 864e5;
   const enSemaine = emVue === "semaine", jourD = new Date(emJour + "T12:00"), debutS = enSemaine ? emSemaine : lundi(jourD);
   const jours = [0, 1, 2, 3, 4, 5, 6].map(i => plusJours(debutS, i));
   const titre = enSemaine ? `${jours[0].getDate()} ${jours[0].toLocaleDateString("fr-FR", { month: "short" })} – ${jours[6].getDate()} ${jours[6].toLocaleDateString("fr-FR", { month: "short" })}` : jourD.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   const cestMaintenant = enSemaine ? ymd(emSemaine) === ymd(lundi(new Date())) : emJour === aujourdhui;
   const borneA = enSemaine ? emSemaine.getTime() : new Date(emJour + "T00:00").getTime(), borneB = plusJours(new Date(borneA), enSemaine ? 7 : 1).getTime();
+  // RDV à répéter que le téléphone n'a pas encore pris : montrés ici, aux semaines suivantes
+  recDem.filter(d => !recEtat(d) || recEtat(d) === "echec").forEach(d => {
+    const [h, m] = d.heure.split(":").map(Number), client = emClientDe(d), dur = Math.min(600, Math.max(15, Number(d.dur) || 60));
+    for (let j = new Date(borneA); j.getTime() < borneB; j = plusJours(j, 1)) {
+      if (j.getDay() !== Number(d.wd) || ymd(j) < d.depuis) continue;
+      const t = new Date(j.getFullYear(), j.getMonth(), j.getDate(), h, m).getTime();
+      if (ag.elements.some(x => x.cle === d.cle && x.t === t) || ag.annules.some(x => x.cle === d.cle && x.t === t)) continue;
+      ag.elements.push({ t, fin: t + dur * 6e4, titre: d.titre || d.nom || "Rendez-vous", detail: "", sorte: "rec", jour_entier: false, cle: d.cle, nom: d.nom, rec: d, jour: ymd(j), client, sections: emSectionsDe(client) });
+    }
+  });
+  ag.elements.sort((a, b) => a.t - b.t);
   const horsFenetre = (ag.fin && borneA >= ag.fin) || (ag.debut && borneB <= ag.debut);
   const vus = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.t >= borneA && x.t < borneB);
+  const annVus = ag.annules.filter(a => a.t >= borneA && a.t < borneB);
+  // rendez-vous et annulés d'une case, dans l'ordre des heures
+  const caseDe = (filtre, rdv, annule) => vus.filter(([x]) => filtre(x)).map(([x, i]) => [x.t, rdv(x, i)]).concat(annVus.filter(filtre).map(a => [a.t, annule(a)])).sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
+  const dejaRegulier = x => recDem.some(d => emMemeRec(d, x)) || ag.elements.some(y => y.sorte === "occ" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
+  const action = (x, i, petit) => { const c = "btn" + (petit ? " flat" : "");
+    if (x.rec) return `<button class="${c}" data-em-stop="${esc(x.rec.id)}">${ico("croix")} Ne plus répéter</button>`;
+    if (!emEligible(x)) return "";
+    return dejaRegulier(x) ? `<span class="tag">${ico("repeter")} Chaque semaine</span>` : `<button class="${c}" data-em-rec="${i}">${ico("repeter")} Répéter chaque semaine</button>`; };
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)}`, bulle = esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
-    return x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`; };
-  const presentes = EM_SECTIONS.filter(([k]) => k === "OIKOS" || k === "BE" || vus.some(([x]) => x.sections.includes(k)));
-  const semaine = () => `<div class="card" style="overflow-x:auto;padding:8px"><table class="em-table"><tr><th></th>${jours.map(j => `<th><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour" style="${ymd(j) === aujourdhui ? "color:var(--accent)" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button></th>`).join("")}</tr>
-      ${presentes.map(([k, t]) => `<tr><td><b>${t}</b></td>${jours.map(j => `<td>${vus.map(([x, i]) => x.jour === ymd(j) && x.sections.includes(k) ? ev(x, i) : "").join("")}</td>`).join("")}</tr>`).join("")}</table></div>`;
-  const jour = () => presentes.map(([k, t]) => { const l = vus.filter(([x]) => x.sections.includes(k));
-      return `<section class="card" style="margin-bottom:12px"><h2 style="margin:0">${t}</h2>${l.map(([x, i]) => `<div class="ligne"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(EM_SORTES[x.sorte] || "Agenda")}</span>${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span>${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</div>`).join("") || `<p class="muted small" style="margin:8px 0 0">Rien ce jour-là.</p>`}</section>`; }).join("");
+    const a = action(x, i, true), tuile = x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`;
+    return tuile + (a ? `<div class="em-act">${a}</div>` : ""); };
+  const presentes = EM_SECTIONS.filter(([k]) => k === "OIKOS" || k === "BE" || vus.some(([x]) => x.sections.includes(k)) || annVus.some(a => a.sections.includes(k)));
+  const semaine = () => `<div class="card" style="overflow-x:auto;padding:8px"><table class="em-table"><tr><th></th>${jours.map(j => `<th${ymd(j) === aujourdhui ? ` class="em-auj"` : ""}><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour" style="${ymd(j) === aujourdhui ? "color:var(--accent);font-weight:700" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button></th>`).join("")}</tr>
+      ${presentes.map(([k, t]) => `<tr><td><b>${t}</b></td>${jours.map(j => `<td${ymd(j) === aujourdhui ? ` class="em-auj"` : ""}>${caseDe(x => x.jour === ymd(j) && x.sections.includes(k), ev, a => emAnnuleHtml(a))}</td>`).join("")}</tr>`).join("")}</table></div>`;
+  const jour = () => presentes.map(([k, t]) => {
+      return `<section class="card" style="margin-bottom:12px"><h2 style="margin:0">${t}</h2>${caseDe(x => x.sections.includes(k), (x, i) => `<div class="ligne"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(EM_SORTES[x.sorte] || "Agenda")}</span>${x.rec ? ` <span class="muted small">pas encore pris par le téléphone</span>` : ""}${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span><span class="row">${action(x, i, false)}${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</span></div>`, a => `<div style="margin-top:8px">${emAnnuleHtml(a)}</div>`) || `<p class="muted small" style="margin:8px 0 0">Rien ce jour-là.</p>`}</section>`; }).join("");
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1>
       <span class="row"><button class="btn" data-em-pas="-1" aria-label="${enSemaine ? "Semaine précédente" : "Jour précédent"}">‹</button><b>${esc(titre)}</b><button class="btn" data-em-pas="1" aria-label="${enSemaine ? "Semaine suivante" : "Jour suivant"}">›</button>
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone.</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone. Un rendez-vous client peut être répété chaque semaine depuis sa ligne. Un rendez-vous annulé est remplacé par une ligne rouge « rdv annulé ».</p>
+    ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
     ${enSemaine ? semaine() : jour()}`);
@@ -2403,7 +2504,22 @@ async function vueEmploi() {
     if (b.dataset.emPas) { const n = Number(b.dataset.emPas); if (enSemaine) emSemaine = plusJours(emSemaine, 7 * n); else { emJour = ymd(plusJours(jourD, n)); emSemaine = lundi(new Date(emJour + "T12:00")); } return afficher("emploi"); }
     if (b.dataset.emJour) { emJour = b.dataset.emJour; emSemaine = lundi(new Date(emJour + "T12:00")); emVue = "jour"; return afficher("emploi"); }
     if (b.dataset.emFiche !== undefined) { const x = ag.elements[Number(b.dataset.emFiche)]; if (x && x.client) return ficheClient(x.client.id); }
+    if (b.dataset.emRec !== undefined) { const x = ag.elements[Number(b.dataset.emRec)]; if (x && emEligible(x)) return emRepeter(x); }
+    if (b.dataset.emStop) return emNePlusRepeter(b.dataset.emStop);
   };
+}
+/* Mis en avant sur Aujourd'hui : l'emploi du temps du jour, rendez-vous et « rdv annulé » en rouge, OIKOS et Benjamin enseignement séparés */
+function emAujourdhuiHtml(ag) {
+  if (!ag) return "";
+  const auj = ymd(new Date()), el = ag.elements.filter(x => x.jour === auj), an = ag.annules.filter(a => a.jour === auj);
+  const blocs = EM_SECTIONS.map(([k, t]) => {
+    const l = el.filter(x => x.sections.includes(k)).map(x => [x.t, `<div class="em-l"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" ? ` <span class="muted small">· ${esc(EM_SORTES[x.sorte])}</span>` : ""}</span></div>`])
+      .concat(an.filter(a => a.sections.includes(k)).map(a => [a.t, `<div class="em-l em-annule"><b>${esc(hm(a.t))}</b><span>${ico("croix")} rdv annulé · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
+      .sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
+    return l ? `<h3>${t}</h3>${l}` : ""; }).join("");
+  return `<section class="card em-jour" aria-label="Emploi du temps d'aujourd'hui"><h2>${ico("agenda")} Emploi du temps d'aujourd'hui</h2>
+    ${blocs || `<p class="muted small" style="margin:0">Aucun rendez-vous aujourd'hui.</p>`}
+    <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="btn" data-em-semaine="1">Voir la semaine</button></div></section>`;
 }
 function emPasRecu() {
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1><button class="btn" id="em-maj">Actualiser</button></div>
@@ -2809,11 +2925,14 @@ const taLigne = (t, nb, avecQui) => `<li class="${t.fait_le ? "is-done" : ""}" d
 const taNomQui = id => moi && id === moi.id ? "Moi" : nomInterv(id);
 const TA_QUAND = [["today", "Aujourd'hui"], ["tomorrow", "Demain"], ["week", "Cette semaine"], ["next", "Semaine pro"], ["none", "Pas pressé"], ["pick", "Une date…"]];
 let taQui = "moi", taPour = "", taQuand = "today", taDate = "", taOuverts = new Set(["late", "today", "week", "next", "later", "none", "done"]);
+/* « Pour quelques presta… » : les presta cochées pour la même tâche (une ligne par presta dans la base, comme « Pour tous ») */
+const taChoix = new Set();
 /* Une seule ligne pour ajouter (quoi · pour qui · pour quand) ; client, commentaire et dossier se règlent dans la fiche de la tâche */
 async function vueTaches() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante" && p.actif);
   if (taQui !== "moi" && taQui !== "tous" && !gens.some(p => p.id === taQui)) taQui = "moi";
+  [...taChoix].forEach(id => { if (!gens.some(p => p.id === id)) taChoix.delete(id); });
   const r = sb.from("taches").select("*").or("fait_le.is.null,fait_le.gte." + plusJours(new Date(), 0).toISOString()).order("echeance", { nullsFirst: false }).order("cree_le");
   const [taches, docs] = await Promise.all([q(r), q(sb.from("tache_documents").select("tache_id"))]);
   const nb = taComptes(docs), idDe = k => k === "moi" ? moi.id : k;
@@ -2823,8 +2942,8 @@ async function vueTaches() {
   const groupes = (l, avecQui) => Object.keys(TA_GROUPES).map(g => [g, l.filter(t => taGroupe(t) === g)]).filter(([, x]) => x.length).map(([g, x]) =>
     `<details class="tk-grp tk-${g}" data-grp="${g}" ${taOuverts.has(g) ? "open" : ""}><summary>${TA_GROUPES[g]} <span>${x.length}</span></summary><ul class="tasks">${x.map(t => taLigne(t, nb[t.id], avecQui)).join("")}</ul></details>`).join("");
   // Pour qui : suit l'onglet ; dans « Tout », le dernier choix (moi par défaut)
-  const pour = taQui === "tous" ? (taPour || "moi") : taQui;
-  const choixPour = [["moi", "Pour moi"], ...gens.map(p => [p.id, "Pour " + nomPers(p)]), ...(gens.length > 1 ? [["tous", "Pour tous les presta"]] : [])];
+  const choixPour = [["moi", "Pour moi"], ...gens.map(p => [p.id, "Pour " + nomPers(p)]), ...(gens.length > 1 ? [["choix", "Pour quelques presta…"], ["tous", "Pour tous les presta"]] : [])];
+  const pour = taQui === "tous" ? (choixPour.some(([k]) => k === taPour) ? taPour : "moi") : taQui;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>À faire</h1><button class="btn flat" id="archive" title="Ce qui a été fait les jours précédents">${ico("archive")} Archive</button></div>
     <div class="chips ta-onglets" id="ta-qui">${onglets.map(([k, l]) => { const n = reste(k); return `<button type="button" class="chip" data-qui="${esc(k)}" aria-pressed="${k === taQui}">${esc(l)}${n ? ` <span class="ta-nb">${n}</span>` : ""}</button>`; }).join("")}</div>
     <form class="card ta-ajout" id="fa">
@@ -2832,7 +2951,8 @@ async function vueTaches() {
       ${gens.length ? `<select name="qui" class="ta-pill" aria-label="Pour qui">${choixPour.map(([k, l]) => `<option value="${esc(k)}" ${k === pour ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` : `<input type="hidden" name="qui" value="moi">`}
       <select name="quand" class="ta-pill" aria-label="Pour quand">${TA_QUAND.map(([k, l]) => `<option value="${k}" ${k === taQuand ? "selected" : ""}>${l}</option>`).join("")}</select>
       <input type="date" name="date" class="ta-pill" value="${esc(taDate)}" ${taQuand === "pick" ? "" : "hidden"} aria-label="Date">
-      <button class="btn primary" type="submit" title="Ajouter" aria-label="Ajouter">${ico("plus")}</button>
+      <button class="btn primary" type="submit">${ico("plus")} Ajouter la tâche</button>
+      ${gens.length > 1 ? `<div class="chips ta-choix" id="ta-choix" ${pour === "choix" ? "" : "hidden"}><span class="muted small">Choisis les presta :</span>${gens.map(p => `<button type="button" class="chip" data-choix="${esc(p.id)}" aria-pressed="${taChoix.has(p.id)}">${esc(nomPers(p))}</button>`).join("")}</div>` : ""}
     </form>
     <section class="card tkc" style="margin-top:12px">
       ${groupes(deQui(taQui), taQui === "tous") || `<p class="muted small" style="padding:14px 16px">${taQui === "moi" ? "Rien à faire pour toi. Écris une tâche ci-dessus." : "Aucune tâche en cours."}</p>`}</section>
@@ -2840,7 +2960,10 @@ async function vueTaches() {
   const form = el.querySelector("#fa"), champQuand = form.querySelector("[name=quand]"), champDate = form.querySelector("[name=date]"), champQui = form.querySelector("select[name=qui]");
   champQuand.onchange = () => { taQuand = champQuand.value; champDate.hidden = taQuand !== "pick"; if (!champDate.hidden && !champDate.value) { try { champDate.showPicker(); } catch (_) { champDate.focus(); } } };
   champDate.onchange = () => { taDate = champDate.value; };
-  if (champQui) champQui.onchange = () => { if (taQui === "tous") taPour = champQui.value; };
+  const zoneChoix = form.querySelector("#ta-choix");
+  if (champQui) champQui.onchange = () => { if (taQui === "tous") taPour = champQui.value; if (zoneChoix) zoneChoix.hidden = champQui.value !== "choix"; };
+  if (zoneChoix) zoneChoix.onclick = e => { const b = e.target.closest("[data-choix]"); if (!b) return; const id = b.dataset.choix;
+    if (taChoix.has(id)) taChoix.delete(id); else taChoix.add(id); b.setAttribute("aria-pressed", taChoix.has(id)); };
   el.querySelector("#ta-qui").onclick = e => { const b = e.target.closest("[data-qui]"); if (b) { taQui = b.dataset.qui; afficher("taches"); } };
   el.querySelector("#archive").onclick = () => archiveTaches();
   form.onsubmit = async e => {
@@ -2848,7 +2971,8 @@ async function vueTaches() {
     if (!texte) return toast("Écris ce qu'il y a à faire");
     const w = taQuand, date = champDate.value;
     if (w === "pick" && !date) return toast("Choisis la date");
-    const k = f.get("qui") || "moi", ids = k === "tous" ? gens.map(p => p.id) : [idDe(k)];
+    const k = f.get("qui") || "moi", ids = k === "tous" ? gens.map(p => p.id) : k === "choix" ? gens.filter(p => taChoix.has(p.id)).map(p => p.id) : [idDe(k)];
+    if (!ids.length) return toast("Choisis au moins une presta");
     await q(sb.from("taches").insert(ids.map(id => ({ intervenante_id: id, texte, echeance: taEcheanceDe(w, date) }))).select());
     const presta = ids.filter(id => id !== moi.id);
     if (presta.length) await avisTache(presta, texte, taEcheanceDe(w, date));
