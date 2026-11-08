@@ -845,6 +845,9 @@ function ligneDeMission(a) {
   return /^(Mission|Photos pour le devis) :/.test(a.note || "");
 }
 const motsPresta = n => norm(n).split(" ").sort().join(" ");
+/* Un client n'est suivi qu'une fois par presta : déjà en cours pour la même activité, ou sans activité précisée d'un côté ou de l'autre. Une mission reste à part. Sans compte ou avec compte : c'est le nom qui compte. */
+const memeActivite = (x, y) => !x || !y || x === y;
+const dejaSuivi = (clientId, nom, activite) => !!motsPresta(nom) && cacheAttrib.some(a => a.client_id === clientId && prestaEnCours(a) && !ligneDeMission(a) && motsPresta(nomPresta(a)) === motsPresta(nom) && memeActivite(a.activite, activite));
 const etiquettePresta = a => { const p = [a.activite, ligneDeMission(a) ? "mission" : ""].filter(Boolean).join(", "); return nomPresta(a) + (p ? " (" + p + ")" : ""); };
 const prestatairesActuels = c => [...new Set(cacheAttrib.filter(a => a.client_id === c.id && prestaEnCours(a)).map(etiquettePresta))].join(", ");
 /* Presta potentiels : sollicités ou notés sur une demande dont le client n'a pas encore dit oui. Ce n'est pas une attribution : aucun accès au client tant que l'ordre de mission n'est pas parti. */
@@ -3106,7 +3109,8 @@ function nouveauPresta(b = null) {
   });
 }
 /* Lignes écrites à son nom quand il n'avait pas de compte (SQL 24 ou saisie). Suivi régulier en cours seulement : une mission garde sa ligne. */
-const lignesASonNom = p => p.actif ? cacheAttrib.filter(a => !a.intervenante_id && a.nom_libre && prestaEnCours(a) && !ligneDeMission(a) && motsPresta(a.nom_libre) === motsPresta(nomPers(p)))
+const lignesASonNom = p => p.actif ? cacheAttrib.filter(a => !a.intervenante_id && a.nom_libre && prestaEnCours(a) && !ligneDeMission(a) && motsPresta(a.nom_libre) === motsPresta(nomPers(p))
+    && !cacheAttrib.some(x => x.client_id === a.client_id && x.intervenante_id === p.id && prestaEnCours(x) && !ligneDeMission(x) && memeActivite(x.activite, a.activite)))
   .filter(a => { const c = cacheClients.find(k => k.id === a.client_id); return c && c.etat !== "termine" && ENTREPRISES.some(([k]) => dansEntreprise(c, k)); }) : [];
 async function ouvrirClientsNotes(p, lignes, apres) {
   if (!confirm(`${nomPers(p)} verra ${lignes.length} client(s) de plus dans son appli. Continuer ?`)) return;
@@ -3185,7 +3189,7 @@ async function ficheIntervenante(id) {
     <section class="card"><h3 style="margin-top:0">Clients confiés</h3>
       ${aSonNom.length ? `<div class="ligne"><span style="min-width:0"><b>Notés à son nom, sans accès (${aSonNom.length})</b> ${aide("Son nom était seulement écrit sur ces clients, avant son compte. Tant que tu ne les ouvres pas, il ne les voit pas dans son appli.")}<br>${ENTREPRISES.map(([k, t]) => { const l = [...new Set(aSonNom.map(a => cacheClients.find(c => c.id === a.client_id)))].filter(c => dansEntreprise(c, k)); return l.length ? `<span class="muted small">${t} : ${l.map(c => esc(c.nom)).join(", ")}</span><br>` : ""; }).join("")}</span><button class="btn primary" data-ouvrir-clients>${ico("ouvert")} Lui ouvrir ces clients</button></div>` : ""}
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
-      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id)))}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
+      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
     const recharger = () => { fermer(); ficheIntervenante(id); };
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
@@ -4304,7 +4308,7 @@ const lignesRegulieres = c => cacheAttrib.filter(a => a.client_id === c.id && pr
 /* Ceux qu'on peut choisir : avec un compte en service, ou seulement connus par leur nom (déjà notés sur un client, ou fiche préparée).
    Pas ceux qui suivent déjà ce client pour la même activité ; une personne en mission ici reste proposée, sa mission est à part. */
 function choixIntervenante(c, a, prepares) {
-  const occupes = new Set(lignesRegulieres(c).filter(x => (x.activite || "") === (a.activite || "")).map(x => motsPresta(nomPresta(x))));
+  const occupes = new Set(lignesRegulieres(c).filter(x => memeActivite(x.activite, a.activite)).map(x => motsPresta(nomPresta(x))));
   const presta = cacheProfils.filter(p => p.role !== "gerant"), libre = n => n && !occupes.has(motsPresta(n));
   const comptes = presta.filter(p => p.actif && !p.gele && libre(nomPers(p))).sort((x, y) => nomPers(x).localeCompare(nomPers(y), "fr"));
   const vus = new Set(presta.map(p => motsPresta(nomPers(p)))), sans = [];
@@ -4353,7 +4357,7 @@ async function changerIntervenante(c, a, apres) {
     form.onsubmit = async e => {
       e.preventDefault(); err.textContent = ""; const qui = choisi(), date = form.date.value, bouton = form.querySelector("[type=submit]");
       if (!qui) { err.textContent = "Écris le nom de la personne qui prend la suite."; return; }
-      if (lignesRegulieres(c).some(x => (x.activite || "") === (a.activite || "") && motsPresta(nomPresta(x)) === motsPresta(qui))) { err.textContent = qui + " suit déjà ce client pour cette activité."; return; }
+      if (dejaSuivi(c.id, qui, a.activite)) { err.textContent = qui + " suit déjà ce client pour cette activité."; return; }
       bouton.disabled = true;
       try { const nom = await remplacerPresta(c, a, qui, date, form.pourquoi.value.trim()); fermer(); toast(nom + " prend la suite chez " + c.nom); await apres(); }
       catch (x) { bouton.disabled = false; err.textContent = x.code === "23505" ? qui + " a déjà une ligne qui commence ce jour-là chez ce client : choisis une autre date." : (x.message || String(x)); }
@@ -4388,7 +4392,8 @@ async function dosPresta(c, corps, re) {
   corps.querySelector("#pr-aj").onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), qui = String(f.get("qui")).trim(); if (!qui) return;
-    const p = avecCompte.find(x => norm(nomPers(x)) === norm(qui));
+    const p = avecCompte.find(x => motsPresta(nomPers(x)) === motsPresta(qui));
+    if (dejaSuivi(c.id, qui, f.get("activite"))) return toast(qui + " suit déjà ce client" + (f.get("activite") ? " pour cette activité" : "") + " : rien n'a été ajouté");
     await maj(sb.from("attributions").insert({ client_id: c.id, intervenante_id: p ? p.id : null, nom_libre: p ? null : qui,
       activite: f.get("activite") || null, debut: f.get("debut"), note: String(f.get("note")).trim() || null }));
     toast("Prestataire ajouté"); recharger();
