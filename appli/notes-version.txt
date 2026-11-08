@@ -1,1 +1,1 @@
-Emploi du temps du pilote : activité de chaque client envoyée, bouton Annuler ce RDV (reste en rouge dans le pilote).
+Ne plus répéter une séance régulière depuis le pilote.

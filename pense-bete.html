@@ -1139,7 +1139,7 @@ async function agendaPourPilote(){
   const a=addDays(weekStart(Date.now()),-7),b=addDays(a,(PILOTE_AGENDA_SEMAINES+1)*7);
   let evenements=[];
   if(NATIVE&&agendaState==="granted"){try{evenements=await Promise.race([NATIVE.listEvents(a,b),new Promise((_,non)=>setTimeout(()=>non({lent:1}),10000))])}catch(e){if(e&&e.lent)throw new Error("agenda du téléphone trop lent");evenements=[]}}   // trop lent : on n'envoie rien plutôt qu'un emploi du temps incomplet
-  const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}});
+  const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:it.ref.startsWith("occ:")?it.ref.slice(4):null}});
   // Séances annulées cette fois (« Annulée cette fois ») : à part, le pilote les montre en rouge « rdv annulé » à leur jour
   const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}})
     .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}}));
@@ -1163,6 +1163,18 @@ async function recurrentsDuPilote(jeton,s){
     if(!c){etats[d.id]="introuvable";continue}
     const slots=slotsOf(c).concat({id:sid,wd,time:d.heure,dur,every:1,from:d.depuis,until:""});
     try{await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots;faits.add(d.id);etats[d.id]="fait";ajoutes++}catch(e){etats[d.id]="echec"}
+  }
+  // « Ne plus répéter » demandé dans le pilote : le créneau s'arrête la veille du jour choisi (les séances d'avant restent)
+  const arrets=c0&&Array.isArray(c0.arrets)?c0.arrets.slice(-200):[];
+  for(const x of arrets){
+    if(!x||typeof x.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(x.id)||typeof x.cust!=="string"||typeof x.slot!=="string")continue;
+    if(!/^\d{4}-\d\d-\d\d$/.test(x.jusqu||"")){etats[x.id]="illisible";continue}
+    if(faits.has("arret:"+x.id)){etats[x.id]="fait";continue}
+    const c=customers.find(y=>y.id===x.cust);if(!c){etats[x.id]="introuvable";continue}
+    const sl=slotsOf(c).find(y=>y.id===x.slot);
+    if(!sl||(sl.until&&sl.until<=x.jusqu)){faits.add("arret:"+x.id);etats[x.id]="fait";continue}
+    const slots=slotsOf(c).map(y=>y.id===x.slot?{...y,until:x.jusqu}:y).filter(y=>!(y.from&&y.until&&y.until<y.from));
+    try{await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots;faits.add("arret:"+x.id);etats[x.id]="fait";ajoutes++}catch(e){etats[x.id]="echec"}
   }
   s.recFaits=[...faits].slice(-300);piloteNote(s);
   return {etats,ajoutes};

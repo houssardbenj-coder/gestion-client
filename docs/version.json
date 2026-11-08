@@ -1,4 +1,4 @@
 {
- "version": 26,
- "notes": "Emploi du temps du pilote : activité de chaque client envoyée, bouton Annuler ce RDV (reste en rouge dans le pilote)."
+ "version": 27,
+ "notes": "Ne plus répéter une séance régulière depuis le pilote."
 }

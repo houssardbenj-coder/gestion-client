@@ -1966,8 +1966,8 @@ function htmlLigne(l, i, principal, zone) {
     <button class="btn ${principal ? "primary" : ""}" data-j-agir>${esc(l.action)}</button>${autres.length ? `<button class="btn flat" data-j-plus aria-expanded="false">Autres actions</button><div class="jour-autres" hidden>${autres.map((a, n) => `<button data-j-autre="${n}">${esc(a[0])}</button>`).join("")}</div>` : ""}</div>`;
 }
 async function vueJour() {
-  const [{ faire, attente, info }, docAg] = await Promise.all([lignesDuJour(), lireCopie("agenda").catch(() => null)]);
-  let emHtml = ""; try { emHtml = emAujourdhuiHtml(emRecu(docAg)); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
+  const [{ faire, attente, info }, docAg, docRec] = await Promise.all([lignesDuJour(), lireCopie("agenda").catch(() => null), lireCopie(EM_REC).catch(() => null)]);
+  let emHtml = ""; try { const ag = emRecu(docAg); if (ag) { const arr = emArrets(docRec); ag.elements = ag.elements.filter(x => !emArretee(x, arr)); } emHtml = emAujourdhuiHtml(ag); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
   nbAFaire = faire.length;
   const bulleJour = document.getElementById("b-avoir"); if (bulleJour) bulleJour.innerHTML = nbAFaire ? `<span class="bulle">${nbAFaire}</span>` : "";
   const n = faire.length, auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
@@ -2408,7 +2408,18 @@ const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROS
 const EM_NOM = Object.fromEntries(EM_SECTIONS);
 const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine", rec: "Chaque semaine" };
 let emSemaine = lundi(new Date()), emVue = "semaine", emJour = ymd(new Date());
-const emClientDe = x => (x.cle && cacheClients.find(c => c.source_pense === x.cle)) || (x.nom && cacheClients.find(c => motsNom(c.nom) === motsNom(x.nom))) || null;
+const emClientDe = x => (x.cle && cacheClients.find(c => c.source_pense === x.cle)) || (x.nom && cacheClients.find(c => motsNom(c.nom) === motsNom(x.nom))) || (x.cle && emParEleve(x)) || null;
+/* Fiche du téléphone pas reliée à l'Excel (faite à la main, au nom de l'élève) : on cherche le client dont un élève porte ce prénom.
+   Plusieurs possibles : celui dont le nom de famille est aussi là, sinon celui en cours ; toujours pas départagé = pas de client. */
+function emParEleve(x) {
+  const mots = new Set(norm((x.nom || "") + " " + (x.titre || "")).split(" ").filter(m => m.length > 1));
+  if (!mots.size) return null;
+  const cands = cacheClients.filter(c => (c.eleves || []).some(e => { const p = norm(e).split(" ")[0]; return p && p.length > 1 && mots.has(p); }));
+  if (cands.length <= 1) return cands[0] || null;
+  const note = c => (norm(c.nom).split(" ").some(m => m.length > 1 && mots.has(m)) ? 2 : 0) + (c.etat !== "termine" ? 1 : 0);
+  const max = Math.max(...cands.map(note)), top = cands.filter(c => note(c) === max);
+  return top.length === 1 ? top[0] : null;
+}
 /* Un client du pilote : ses activités. Sinon ce que dit le téléphone (activité du client, prospect), sinon hors presta (coiffeur, agenda Google…) */
 const emSectionsDe = (c, x = {}) => { if (c) { if (c.etat === "prospect") return ["PROSPECT"]; const l = entreprisesDe(c); if (l.length) return l; }
   const ent = String(x.ent || ""), l = [];
@@ -2440,9 +2451,26 @@ const emEligible = x => x.sorte === "rdv" && !x.jour_entier && typeof x.cle === 
 const emMemeRec = (d, x) => d.cle === x.cle && Number(d.wd) === new Date(x.t).getDay() && d.heure === emHeureTxt(x.t);
 const emDemandes = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.demandes) ? doc.contenu.demandes : [];
   return l.filter(d => d && typeof d.id === "string" && typeof d.cle === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(d.heure || "") && /^\d{4}-\d\d-\d\d$/.test(d.depuis || "")); };
-async function emEcrireRec(changer) {
-  const demandes = changer(emDemandes(await lireCopie(EM_REC)));   // relu juste avant : l'autre PC a pu en ajouter
-  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+const emArrets = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.arrets) ? doc.contenu.arrets : [];
+  return l.filter(a => a && typeof a.id === "string" && typeof a.cust === "string" && typeof a.slot === "string" && /^\d{4}-\d\d-\d\d$/.test(a.jusqu || "")); };
+// une séance d'un créneau arrêté, après la date d'arrêt : on ne la montre plus, même si le téléphone ne l'a pas encore pris
+const emArretee = (x, arrets) => { if (typeof x.occ !== "string") return false; const [cust, slot, jour] = x.occ.split("_");
+  return arrets.some(a => a.cust === cust && a.slot === slot && jour > a.jusqu); };
+async function emEcrireRec(changer, changerArrets = l => l) {
+  const doc = await lireCopie(EM_REC);   // relu juste avant : l'autre PC a pu en ajouter
+  const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200);
+  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+}
+/* Arrêter une séance régulière à partir de ce jour : le téléphone met fin au créneau la veille (les séances d'avant restent).
+   Une séance née d'un « Répéter chaque semaine » du pilote perd aussi sa demande. */
+async function emArreter(x) {
+  const [cust, slot, jour] = x.occ.split("_"), d0 = new Date(jour + "T12:00"), titre = sansEmoji(x.titre).slice(0, 120);
+  if (!confirm(`Ne plus répéter : ${titre}, à partir du ${d0.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} ?\n\nCette séance et les suivantes disparaissent, celles d'avant restent. Pense intelligent l'enregistre à sa prochaine ouverture.`)) return;
+  const a = { id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cust, slot, jusqu: ymd(plusJours(d0, -1)), titre, le: Date.now() };
+  const ok = await emEcrireRec(l => slot.startsWith("pil") ? l.filter(d => "pil" + d.id !== slot) : l,
+    l => l.some(y => y.cust === cust && y.slot === slot && y.jusqu <= a.jusqu) ? l : l.filter(y => !(y.cust === cust && y.slot === slot)).concat(a));
+  toast(ok ? "Plus répété à partir du " + d0.toLocaleDateString("fr-FR") + ". Pense intelligent l'enregistre à sa prochaine ouverture." : "Pas enregistré : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
+  if (ok) afficher("emploi");
 }
 async function emRepeter(x) {
   const d0 = new Date(x.t), depuis = plusJours(d0, 7), titre = sansEmoji(x.titre).slice(0, 120);
@@ -2464,7 +2492,8 @@ async function vueEmploi() {
   const [docAg, docRec] = await Promise.all([lireCopie("agenda"), lireCopie(EM_REC)]);
   const ag = emRecu(docAg);
   if (!ag) return emPasRecu();
-  const recDem = emDemandes(docRec), recEtat = d => ag.recurrents[d.id] || "";
+  const recDem = emDemandes(docRec), recEtat = d => ag.recurrents[d.id] || "", arrets = emArrets(docRec);
+  ag.elements = ag.elements.filter(x => !emArretee(x, arrets));
   const recPb = recDem.filter(d => recEtat(d) === "introuvable" || recEtat(d) === "illisible");
   const aujourdhui = ymd(new Date()), vieux = Date.now() - new Date(ag.recu).getTime() > 864e5;
   const enSemaine = emVue === "semaine", jourD = new Date(emJour + "T12:00"), debutS = enSemaine ? emSemaine : lundi(jourD);
@@ -2491,6 +2520,7 @@ async function vueEmploi() {
   const dejaRegulier = x => recDem.some(d => emMemeRec(d, x)) || ag.elements.some(y => y.sorte === "occ" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
   const action = (x, i, petit) => { const c = "btn" + (petit ? " flat" : "");
     if (x.rec) return `<button class="${c}" data-em-stop="${esc(x.rec.id)}">${ico("croix")} Ne plus répéter</button>`;
+    if (x.sorte === "occ" && typeof x.occ === "string" && x.occ.split("_").length === 3) return `<button class="${c}" data-em-arret="${i}">${ico("croix")} Ne plus répéter</button>`;
     if (!emEligible(x)) return "";
     return dejaRegulier(x) ? `<span class="tag">${ico("repeter")} Chaque semaine</span>` : `<button class="${c}" data-em-rec="${i}">${ico("repeter")} Répéter chaque semaine</button>`; };
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
@@ -2504,7 +2534,7 @@ async function vueEmploi() {
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone. Un rendez-vous client peut être répété chaque semaine depuis sa ligne. Une presta annulée est remplacée par une ligne rouge.</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone. Un rendez-vous client peut être répété chaque semaine depuis sa ligne, et une séance régulière arrêtée avec « Ne plus répéter ». Une presta annulée est remplacée par une ligne rouge.</p>
     ${emLegende()}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
@@ -2520,6 +2550,7 @@ async function vueEmploi() {
     if (b.dataset.emFiche !== undefined) { const x = ag.elements[Number(b.dataset.emFiche)]; if (x && x.client) return ficheClient(x.client.id); }
     if (b.dataset.emRec !== undefined) { const x = ag.elements[Number(b.dataset.emRec)]; if (x && emEligible(x)) return emRepeter(x); }
     if (b.dataset.emStop) return emNePlusRepeter(b.dataset.emStop);
+    if (b.dataset.emArret !== undefined) { const x = ag.elements[Number(b.dataset.emArret)]; if (x && x.occ) return emArreter(x); }
   };
 }
 /* Mis en avant sur Aujourd'hui : l'emploi du temps du jour, tout le monde dans une seule liste, une couleur par activité, « Presta annulée » en rouge */
