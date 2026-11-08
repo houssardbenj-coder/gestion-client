@@ -142,6 +142,7 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-jour{margin-bottom:14px;border-left:4px solid var(--accent)}.em-jour h2{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:17px}
 .em-jour .em-l{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:14px}.em-jour .em-l:first-of-type{border-top:0}
 .em-jour .em-l b{min-width:96px;font-variant-numeric:tabular-nums}.em-jour .em-l.em-annule{padding:5px 7px;border-top:0;border-left:1px solid var(--stop);margin:3px 0}
+.em-act .chip.em-rep{font-size:12px;padding:3px 9px;font-weight:600}.em-act .chip.em-rep .ico{width:13px;height:13px}
 .em-jour h3{margin:8px 0 2px;font-size:13px;color:var(--muted);font-weight:600}.em-act{display:flex;flex-wrap:wrap;gap:2px;margin:-2px 0 6px}.em-act .btn{font-size:12px;padding:2px 6px;min-height:0}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -2369,10 +2370,12 @@ async function vuePlanning() {
   await chargerBase();
   const gens = cacheProfils.filter(p => p.role === "intervenante" && p.actif && (!plQui || p.id === plQui));
   const s1 = plusJours(plSemaine, 7), jours = [0, 1, 2, 3, 4, 5, 6].map(i => plusJours(plSemaine, i)), auj = ymd(new Date());
-  const [cr, pt] = await Promise.all([
+  const [cr, pt, crSuite] = await Promise.all([
     q(sb.from("creneaux").select("*").eq("annule", false).gte("debut", plSemaine.toISOString()).lt("debut", s1.toISOString()).order("debut")),
-    q(sb.from("pointages").select("*").gte("arrivee", plSemaine.toISOString()).lt("arrivee", s1.toISOString()).order("arrivee"))]);
+    q(sb.from("pointages").select("*").gte("arrivee", plSemaine.toISOString()).lt("arrivee", s1.toISOString()).order("arrivee")),
+    q(sb.from("creneaux").select("id,intervenante_id,client_id,titre,debut,fin").eq("annule", false).gte("debut", s1.toISOString()).lt("debut", plusJours(s1, 7).toISOString()))]);
   const memeJour = (a, b) => ymd(new Date(a)) === ymd(new Date(b));
+  const repete = x => crSuite.some(y => plMemeSerie(x, y) && ymd(new Date(y.debut)) === ymd(plusJours(new Date(x.debut), 7)));
   const minutes = p => p.depart ? (new Date(p.depart) - new Date(p.arrivee)) / 6e4 : 0;
   const titre = `${plSemaine.getDate()} ${plSemaine.toLocaleDateString("fr-FR", { month: "short" })} – ${plusJours(plSemaine, 6).getDate()} ${plusJours(plSemaine, 6).toLocaleDateString("fr-FR", { month: "short" })}`;
   const cellule = (p, j) => {
@@ -2380,7 +2383,8 @@ async function vuePlanning() {
     const faits = pt.filter(x => x.intervenante_id === p.id && memeJour(x.arrivee, j));
     return prevus.map(x => { const ok = x.client_id && faits.some(f => f.client_id === x.client_id);
         return `<button class="btn" data-cr="${x.id}" style="display:block;width:100%;text-align:left;margin-bottom:4px;padding:5px 7px;font-weight:400;${ok ? "border-color:var(--go)" : x.client_id ? "" : "border-style:dashed"}">
-          <b>${hm(x.debut)}–${hm(x.fin)}</b><br>${esc(nomCreneau(x))}${ok ? " <span class='tag'>✓ déclaré</span>" : ""}</button>`; }).join("")
+          <b>${hm(x.debut)}–${hm(x.fin)}</b><br>${esc(nomCreneau(x))}${ok ? " <span class='tag'>✓ déclaré</span>" : ""}</button>
+          <div class="em-act"><button class="chip em-rep" data-pl-rep="${x.id}" aria-pressed="${repete(x)}" title="${repete(x) ? "Répété chaque semaine : clique pour ne plus répéter" : "Clique pour répéter chaque semaine"}">${ico("repeter")} Chaque semaine</button></div>`; }).join("")
       + faits.filter(f => !prevus.some(x => x.client_id === f.client_id)).map(f => `<div class="small" style="padding:4px 6px;border-left:3px solid var(--go);margin-bottom:4px">
           ✓ ${esc(nomClient(f.client_id))} · ${heures(minutes(f))}<br><span class="muted">déclaré, pas prévu</span></div>`).join("")
       + `<button class="btn flat small" data-ajout="${p.id}|${ymd(j)}" title="Ajouter un passage ou un rendez-vous">＋</button>`;
@@ -2395,11 +2399,41 @@ async function vuePlanning() {
         <td><b>${heures(pt.filter(x => x.intervenante_id === p.id).reduce((s, x) => s + minutes(x), 0))}</b></td></tr>`).join("") || `<tr><td colspan="9" class="muted">Aucun intervenant actif.</td></tr>`}</table></div>`);
   el.querySelector("#qui").onchange = e => { plQui = e.target.value; afficher("planning"); };
   el.onclick = e => {
+    const r = e.target.closest("[data-pl-rep]"); if (r) { const x = cr.find(y => y.id === r.dataset.plRep); if (x) plBasculer(x, r.getAttribute("aria-pressed") === "true"); return; }
     const s = e.target.closest("[data-sem]"), c = e.target.closest("[data-cr]"), a = e.target.closest("[data-ajout]");
     if (s) { plSemaine = s.dataset.sem === "0" ? lundi(new Date()) : plusJours(plSemaine, Number(s.dataset.sem)); return afficher("planning"); }
     if (c) return fichePassagePrevu(cr.find(x => x.id === c.dataset.cr));
     if (a) { const [id, j] = a.dataset.ajout.split("|"); return fichePassagePrevu(null, id, j); }
   };
+}
+/* Répéter un passage chaque semaine (Planning) : copies réelles dans creneaux pour les 12 semaines suivantes, que l'appli
+   du presta et son agenda Google voient comme les autres. Même série = même presta, même client (ou même objet), même jour,
+   même heure, même durée. Un 2e clic annule les copies à venir ; le passage cliqué reste. Rouvrir le Planning ne prolonge pas. */
+const PL_SEMAINES = 12;
+const plMemeSerie = (x, y) => y.id !== x.id && y.intervenante_id === x.intervenante_id && (y.client_id || null) === (x.client_id || null)
+  && (x.client_id || (y.titre || "") === (x.titre || "")) && new Date(y.debut).getDay() === new Date(x.debut).getDay()
+  && hm(y.debut) === hm(x.debut) && (new Date(y.fin) - new Date(y.debut)) === (new Date(x.fin) - new Date(x.debut));
+async function plBasculer(x, enlever) {
+  try {
+    const d0 = new Date(x.debut), dur = new Date(x.fin) - d0;
+    const fin = plusJours(d0, 7 * PL_SEMAINES + 1);
+    const deja = await q(sb.from("creneaux").select("id,intervenante_id,client_id,titre,debut,fin").eq("intervenante_id", x.intervenante_id).eq("annule", false).gt("debut", d0.toISOString()).lt("debut", fin.toISOString()));
+    const suite = deja.filter(y => plMemeSerie(x, y));
+    if (enlever) {
+      if (suite.length) await maj(sb.from("creneaux").update({ annule: true }).in("id", suite.map(y => y.id)));
+      toast(`Plus répété : ${suite.length} passage(s) à venir retiré(s). Celui-ci reste.`);
+    } else {
+      const lignes = [];
+      for (let n = 1; n <= PL_SEMAINES; n++) {
+        const j = plusJours(d0, 7 * n), debut = new Date(j.getFullYear(), j.getMonth(), j.getDate(), d0.getHours(), d0.getMinutes());
+        if (suite.some(y => ymd(new Date(y.debut)) === ymd(debut))) continue;
+        lignes.push({ intervenante_id: x.intervenante_id, client_id: x.client_id || null, titre: x.titre || null, lieu: x.lieu || null, note: x.note || null, debut: debut.toISOString(), fin: new Date(debut.getTime() + dur).toISOString() });
+      }
+      if (lignes.length) await maj(sb.from("creneaux").insert(lignes));
+      toast(`Répété chaque semaine jusqu'au ${plusJours(d0, 7 * PL_SEMAINES).toLocaleDateString("fr-FR")}.`);
+    }
+    afficher("planning");
+  } catch (e) { souci(e); }
 }
 /* ===================== Emploi du temps : celui de Pense intelligent, vu depuis le pilotage (SQL 43) =====================
    Pense intelligent vit sur le téléphone : relié avec le compte gérant, il dépose son emploi du temps dans pilote_documents (clé « agenda ») à chaque changement et à chaque ouverture.
@@ -2465,7 +2499,6 @@ async function emEcrireRec(changer, changerArrets = l => l) {
    Une séance née d'un « Répéter chaque semaine » du pilote perd aussi sa demande. */
 async function emArreter(x) {
   const [cust, slot, jour] = x.occ.split("_"), d0 = new Date(jour + "T12:00"), titre = sansEmoji(x.titre).slice(0, 120);
-  if (!confirm(`Ne plus répéter : ${titre}, à partir du ${d0.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} ?\n\nCette séance et les suivantes disparaissent, celles d'avant restent. Pense intelligent l'enregistre à sa prochaine ouverture.`)) return;
   const a = { id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cust, slot, jusqu: ymd(plusJours(d0, -1)), titre, le: Date.now() };
   const ok = await emEcrireRec(l => slot.startsWith("pil") ? l.filter(d => "pil" + d.id !== slot) : l,
     l => l.some(y => y.cust === cust && y.slot === slot && y.jusqu <= a.jusqu) ? l : l.filter(y => !(y.cust === cust && y.slot === slot)).concat(a));
@@ -2474,7 +2507,6 @@ async function emArreter(x) {
 }
 async function emRepeter(x) {
   const d0 = new Date(x.t), depuis = plusJours(d0, 7), titre = sansEmoji(x.titre).slice(0, 120);
-  if (!confirm(`Répéter chaque semaine : ${titre}, le ${d0.toLocaleDateString("fr-FR", { weekday: "long" })} à ${hm(x.t)} ?\n\nIl reviendra tout seul chaque semaine à partir du ${depuis.toLocaleDateString("fr-FR")}. Pense intelligent en fera une séance régulière du client à sa prochaine ouverture.`)) return;
   const dur = Math.min(600, Math.max(15, Math.round(((x.fin > x.t ? x.fin : x.t + 36e5) - x.t) / 6e4)));
   const d = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cle: x.cle, nom: x.nom || "", titre, wd: d0.getDay(), heure: emHeureTxt(x.t), dur, depuis: ymd(depuis), le: Date.now() };
   const ok = await emEcrireRec(l => l.some(y => emMemeRec(y, x)) ? l : l.concat(d).slice(-200));
@@ -2482,7 +2514,6 @@ async function emRepeter(x) {
   if (ok) afficher("emploi");
 }
 async function emNePlusRepeter(id) {
-  if (!confirm("Ne plus répéter ce rendez-vous chaque semaine ?\n\nLe rendez-vous d'origine reste, les semaines suivantes disparaissent.")) return;
   const d = emDemandes(await lireCopie(EM_REC)).find(y => y.id === id);
   const jusqu = d ? ymd(plusJours(new Date(d.depuis + "T12:00"), -1)) : "2000-01-01";
   const a = { id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cust: "", slot: "pil" + id, jusqu, titre: d ? String(d.titre || d.nom || "") : "", le: Date.now() };
@@ -2521,13 +2552,18 @@ async function vueEmploi() {
   // rendez-vous et annulés d'une case, dans l'ordre des heures
   const caseDe = (filtre, rdv, annule) => vus.filter(([x]) => filtre(x)).map(([x, i]) => [x.t, rdv(x, i)]).concat(annVus.filter(filtre).map(a => [a.t, annule(a)])).sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
   const dejaRegulier = x => recDem.some(d => emMemeRec(d, x)) || ag.elements.some(y => y.sorte === "occ" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
-  const action = (x, i, petit) => { const c = "btn" + (petit ? " flat" : "");
-    if (x.rec) return `<button class="${c}" data-em-stop="${esc(x.rec.id)}">${ico("croix")} Ne plus répéter</button>`;
-    if (x.sorte === "occ" && typeof x.occ === "string" && x.occ.split("_").length === 3) return `<button class="${c}" data-em-arret="${i}">${ico("croix")} Ne plus répéter</button>`;
+  /* Un seul bouton « Chaque semaine » : enfoncé = répété chaque semaine, un clic l'enlève ; relâché = un clic le met */
+  const bascule = (on, attr) => `<button class="chip em-rep" ${attr} aria-pressed="${on}" title="${on ? "Répété chaque semaine : clique pour ne plus répéter" : "Clique pour répéter chaque semaine"}">${ico("repeter")} Chaque semaine</button>`;
+  const occSuivante = x => ag.elements.find(y => y.sorte === "occ" && typeof y.occ === "string" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
+  const action = (x, i) => {
+    if (x.rec) return bascule(true, `data-em-stop="${esc(x.rec.id)}"`);
+    if (x.sorte === "occ" && typeof x.occ === "string" && x.occ.split("_").length === 3) return bascule(true, `data-em-arret="${i}"`);
     if (!emEligible(x)) return "";
     const dem = recDem.find(d => emMemeRec(d, x));
-    if (dem) return `<span class="tag">${ico("repeter")} Chaque semaine</span><button class="${c}" data-em-stop="${esc(dem.id)}">${ico("croix")} Ne plus répéter</button>`;
-    return dejaRegulier(x) ? `<span class="tag">${ico("repeter")} Chaque semaine</span>` : `<button class="${c}" data-em-rec="${i}">${ico("repeter")} Répéter chaque semaine</button>`; };
+    if (dem) return bascule(true, `data-em-stop="${esc(dem.id)}"`);
+    const y = occSuivante(x);
+    if (y) return bascule(true, `data-em-arret="${ag.elements.indexOf(y)}"`);
+    return bascule(false, `data-em-rec="${i}"`); };
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
     const a = action(x, i, true), tuile = x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`;
     return tuile + (a ? `<div class="em-act">${a}</div>` : ""); };
