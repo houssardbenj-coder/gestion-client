@@ -1139,10 +1139,18 @@ async function agendaPourPilote(){
   const a=addDays(weekStart(Date.now()),-7),b=addDays(a,(PILOTE_AGENDA_SEMAINES+1)*7);
   let evenements=[];
   if(NATIVE&&agendaState==="granted"){try{evenements=await Promise.race([NATIVE.listEvents(a,b),new Promise((_,non)=>setTimeout(()=>non({lent:1}),10000))])}catch(e){if(e&&e.lent)throw new Error("agenda du téléphone trop lent");evenements=[]}}   // trop lent : on n'envoie rien plutôt qu'un emploi du temps incomplet
-  const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:it.ref.startsWith("occ:")?it.ref.slice(4):null}});
+  // Événement Google « RDV – Nom » laissé par un RDV de l'appli supprimé depuis : ce n'est pas un RDV hors presta, c'est une presta annulée
+  const nomsAppli=new Set(),orphelins=[];
+  const items=agItems(a,b,evenements).filter(it=>it.t>=a);
+  items.forEach(it=>{if(it.kind!=="cal")nomsAppli.add(it.t+"|"+fold(String(it.title).replace(/^🔁\s*/,"")))});
+  const restants=items.filter(it=>{const m=it.kind==="cal"&&!it.allDay&&/^RDV – (.+)$/.exec(it.title||"");if(!m)return true;
+    if(!nomsAppli.has(it.t+"|"+fold(m[1])))orphelins.push({t:it.t,fin:it.end,titre:m[1],cle:null,nom:m[1].replace(/\s*\(.*\)\s*$/,""),ent:""});
+    return false});   // même RDV encore dans l'appli : simple doublon de l'agenda, on ne l'envoie pas deux fois
+  const elements=restants.map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:it.ref.startsWith("occ:")?it.ref.slice(4):null}});
   // Séances annulées cette fois (« Annulée cette fois ») : à part, le pilote les montre en rouge « rdv annulé » à leur jour
   const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}})
-    .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}}));
+    .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}}))
+    .concat(orphelins);
   return {debut:a,fin:b,elements,annules};
 }
 /* « Répéter chaque semaine » demandé dans le pilote (clé « recurrents », SQL 47) : le RDV devient une séance régulière
@@ -1633,6 +1641,7 @@ function drawApptSheet(){
     catch(e){$("#ap-save").disabled=false;$("#ap-msg").textContent="Enregistrement impossible ("+(e&&e.code||"erreur")+").";}
   });
   const del=$("#ap-del");if(del)del.addEventListener("click",async()=>{if(!apConfirm){apConfirm=true;drawApptSheet();return}
+    const x0=appts.find(o=>o.id===d.id)||d;if(x0.calId&&NATIVE&&NATIVE.deleteEvent){try{await NATIVE.deleteEvent(x0.calId)}catch(e){}}   // sinon il reste dans Google Agenda et revient comme un RDV hors presta
     try{await db.doc("appts/"+d.id).delete();closeAppt()}catch(e){$("#ap-msg").textContent="Suppression impossible."}});
   const an=$("#ap-annul");if(an)an.addEventListener("click",async()=>{   // annulé : sort de l'agenda mais garde une trace, le pilote le montre en rouge « presta annulée »
     const x=appts.find(o=>o.id===d.id)||d,rev=!!x.cancelled,y={...x,cancelled:!rev,done:!rev,doneAt:rev?null:Date.now()};

@@ -1,1 +1,1 @@
-Ne plus répéter une séance régulière depuis le pilote.
+RDV supprimé : retiré aussi de Google Agenda ; vu en rouge dans le pilote.

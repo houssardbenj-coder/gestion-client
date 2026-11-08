@@ -1,4 +1,4 @@
 {
- "version": 27,
- "notes": "Ne plus répéter une séance régulière depuis le pilote."
+ "version": 28,
+ "notes": "RDV supprimé : retiré aussi de Google Agenda ; vu en rouge dans le pilote."
 }
