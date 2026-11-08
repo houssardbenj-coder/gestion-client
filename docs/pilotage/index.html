@@ -2455,7 +2455,7 @@ const emArrets = doc => { const l = doc && doc.contenu && Array.isArray(doc.cont
   return l.filter(a => a && typeof a.id === "string" && typeof a.cust === "string" && typeof a.slot === "string" && /^\d{4}-\d\d-\d\d$/.test(a.jusqu || "")); };
 // une séance d'un créneau arrêté, après la date d'arrêt : on ne la montre plus, même si le téléphone ne l'a pas encore pris
 const emArretee = (x, arrets) => { if (typeof x.occ !== "string") return false; const [cust, slot, jour] = x.occ.split("_");
-  return arrets.some(a => a.cust === cust && a.slot === slot && jour > a.jusqu); };
+  return arrets.some(a => (!a.cust || a.cust === cust) && a.slot === slot && jour > a.jusqu); };
 async function emEcrireRec(changer, changerArrets = l => l) {
   const doc = await lireCopie(EM_REC);   // relu juste avant : l'autre PC a pu en ajouter
   const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200);
@@ -2482,9 +2482,12 @@ async function emRepeter(x) {
   if (ok) afficher("emploi");
 }
 async function emNePlusRepeter(id) {
-  if (!confirm("Ne plus répéter ce rendez-vous chaque semaine ?")) return;
-  const ok = await emEcrireRec(l => l.filter(y => y.id !== id));
-  toast(ok ? "Plus répété. Si Pense intelligent l'avait déjà pris, retire la séance régulière dans la fiche du client sur le téléphone." : "Pas enregistré : la base ne répond pas, réessaie.");
+  if (!confirm("Ne plus répéter ce rendez-vous chaque semaine ?\n\nLe rendez-vous d'origine reste, les semaines suivantes disparaissent.")) return;
+  const d = emDemandes(await lireCopie(EM_REC)).find(y => y.id === id);
+  const jusqu = d ? ymd(plusJours(new Date(d.depuis + "T12:00"), -1)) : "2000-01-01";
+  const a = { id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cust: "", slot: "pil" + id, jusqu, titre: d ? String(d.titre || d.nom || "") : "", le: Date.now() };
+  const ok = await emEcrireRec(l => l.filter(y => y.id !== id), l => l.filter(y => y.slot !== a.slot).concat(a));
+  toast(ok ? "Plus répété. Pense intelligent retire la séance à sa prochaine ouverture." : "Pas enregistré : la base ne répond pas, réessaie.");
   if (ok) afficher("emploi");
 }
 async function vueEmploi() {
@@ -2522,6 +2525,8 @@ async function vueEmploi() {
     if (x.rec) return `<button class="${c}" data-em-stop="${esc(x.rec.id)}">${ico("croix")} Ne plus répéter</button>`;
     if (x.sorte === "occ" && typeof x.occ === "string" && x.occ.split("_").length === 3) return `<button class="${c}" data-em-arret="${i}">${ico("croix")} Ne plus répéter</button>`;
     if (!emEligible(x)) return "";
+    const dem = recDem.find(d => emMemeRec(d, x));
+    if (dem) return `<span class="tag">${ico("repeter")} Chaque semaine</span><button class="${c}" data-em-stop="${esc(dem.id)}">${ico("croix")} Ne plus répéter</button>`;
     return dejaRegulier(x) ? `<span class="tag">${ico("repeter")} Chaque semaine</span>` : `<button class="${c}" data-em-rec="${i}">${ico("repeter")} Répéter chaque semaine</button>`; };
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
     const a = action(x, i, true), tuile = x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`;

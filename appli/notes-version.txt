@@ -1,1 +1,1 @@
-RDV supprimé : retiré aussi de Google Agenda ; vu en rouge dans le pilote.
+Ne plus répéter un RDV répété depuis le pilote, même déjà pris par le téléphone.

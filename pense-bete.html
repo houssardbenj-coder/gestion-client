@@ -1178,7 +1178,8 @@ async function recurrentsDuPilote(jeton,s){
     if(!x||typeof x.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(x.id)||typeof x.cust!=="string"||typeof x.slot!=="string")continue;
     if(!/^\d{4}-\d\d-\d\d$/.test(x.jusqu||"")){etats[x.id]="illisible";continue}
     if(faits.has("arret:"+x.id)){etats[x.id]="fait";continue}
-    const c=customers.find(y=>y.id===x.cust);if(!c){etats[x.id]="introuvable";continue}
+    const c=x.cust?customers.find(y=>y.id===x.cust):customers.find(y=>slotsOf(y).some(z=>z.id===x.slot));   // sans client : le créneau né d'une demande du pilote (« pil » + id)
+    if(!c){if(x.cust)etats[x.id]="introuvable";else{faits.add("arret:"+x.id);etats[x.id]="fait"}continue}
     const sl=slotsOf(c).find(y=>y.id===x.slot);
     if(!sl||(sl.until&&sl.until<=x.jusqu)){faits.add("arret:"+x.id);etats[x.id]="fait";continue}
     const slots=slotsOf(c).map(y=>y.id===x.slot?{...y,until:x.jusqu}:y).filter(y=>!(y.from&&y.until&&y.until<y.from));

@@ -1,4 +1,4 @@
 {
- "version": 28,
- "notes": "RDV supprimé : retiré aussi de Google Agenda ; vu en rouge dans le pilote."
+ "version": 29,
+ "notes": "Ne plus répéter un RDV répété depuis le pilote, même déjà pris par le téléphone."
 }
