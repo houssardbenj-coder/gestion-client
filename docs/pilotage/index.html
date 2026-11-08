@@ -18,7 +18,7 @@
 :root{
   --bg:#F2EEE1; --surface:#FFFFFF; --sunk:#E9E4D3; --ink:#1F2119; --muted:#55574B; --line:#CFCAB5;
   --accent:#46572B; --accent-fort:#34421E; --accent-ink:#FFFFFF; --accent-soft:#E2E8CC;
-  --go:#2F7D32; --go-ink:#FFFFFF; --go-soft:#DCF0D8; --stop:#B3411F; --stop-ink:#FFFFFF; --stop-soft:#F9E2D8; --warn:#8A5700; --warn-vif:#C98A16; --warn-soft:#FBE8BC; --info:#2B6170; --info-soft:#D9EAEC;
+  --go:#2F7D32; --go-ink:#FFFFFF; --go-soft:#DCF0D8; --stop:#B3411F; --stop-ink:#FFFFFF; --stop-soft:#F9E2D8; --warn:#8A5700; --warn-vif:#C98A16; --warn-soft:#FBE8BC; --info:#2B6170; --info-soft:#D9EAEC; --roi:#3B3FC9; --roi-soft:#E4E4FA;
   --tete:#2E3622; --carte:#FFFFFF; --carte-bord:#DED9C6; --ombre:0 1px 2px rgb(35 36 31 / .08),0 10px 24px rgb(35 36 31 / .09); --ombre-btn:0 4px 12px rgb(52 66 30 / .35); --flou:none;
   --bouton:#FFFFFF; --mono:#C9D4AA; --tri:#EEEADB; --trait:rgb(70 87 43 / .09); --paie:#DCF0D8; --paie-ink:#256B28; --delai:#F9E2D8; --delai-ink:#8E2F1C;
   --titre:Fraunces,"Cormorant Garamond",Georgia,serif;
@@ -26,13 +26,13 @@
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#1B1D15; --surface:#2A2E21; --sunk:#14160F; --ink:#F6F4EA; --muted:#C4C5B5; --line:#4F5441;
   --accent:#C8DE85; --accent-fort:#DCEBA9; --accent-ink:#1B1D15; --accent-soft:#3B4326;
-  --go:#86D178; --go-ink:#14160F; --go-soft:#26381F; --stop:#F2805F; --stop-ink:#1B1D15; --stop-soft:#4A2519; --warn:#F0C35C; --warn-vif:#F0C35C; --warn-soft:#42360F; --info:#85C9D6; --info-soft:#1F3A40;
+  --go:#86D178; --go-ink:#14160F; --go-soft:#26381F; --stop:#F2805F; --stop-ink:#1B1D15; --stop-soft:#4A2519; --warn:#F0C35C; --warn-vif:#F0C35C; --warn-soft:#42360F; --info:#85C9D6; --info-soft:#1F3A40; --roi:#A9ACFF; --roi-soft:#2A2B5C;
   --tete:#2F3722; --carte:rgb(243 241 231 / .09); --carte-bord:rgb(243 241 231 / .2); --ombre:0 18px 40px rgb(0 0 0 / .28); --ombre-btn:0 4px 14px rgb(0 0 0 / .4); --flou:blur(18px);
   --bouton:rgb(243 241 231 / .06); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --paie:#26361F; --paie-ink:#A6DC9B; --delai:#43231A; --delai-ink:#F4B5A5; color-scheme:dark }}
 :root[data-theme="dark"]{
   --bg:#1B1D15; --surface:#2A2E21; --sunk:#14160F; --ink:#F6F4EA; --muted:#C4C5B5; --line:#4F5441;
   --accent:#C8DE85; --accent-fort:#DCEBA9; --accent-ink:#1B1D15; --accent-soft:#3B4326;
-  --go:#86D178; --go-ink:#14160F; --go-soft:#26381F; --stop:#F2805F; --stop-ink:#1B1D15; --stop-soft:#4A2519; --warn:#F0C35C; --warn-vif:#F0C35C; --warn-soft:#42360F; --info:#85C9D6; --info-soft:#1F3A40;
+  --go:#86D178; --go-ink:#14160F; --go-soft:#26381F; --stop:#F2805F; --stop-ink:#1B1D15; --stop-soft:#4A2519; --warn:#F0C35C; --warn-vif:#F0C35C; --warn-soft:#42360F; --info:#85C9D6; --info-soft:#1F3A40; --roi:#A9ACFF; --roi-soft:#2A2B5C;
   --tete:#2F3722; --carte:rgb(243 241 231 / .09); --carte-bord:rgb(243 241 231 / .2); --ombre:0 18px 40px rgb(0 0 0 / .28); --ombre-btn:0 4px 14px rgb(0 0 0 / .4); --flou:blur(18px);
   --bouton:rgb(243 241 231 / .06); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --paie:#26361F; --paie-ink:#A6DC9B; --delai:#43231A; --delai-ink:#F4B5A5; color-scheme:dark }
 *{box-sizing:border-box}
@@ -127,17 +127,21 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .plante-photo img{display:block;width:100%;height:100%;object-fit:cover}
 .photo figcaption{padding:8px 10px;font-size:13px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.em-table{min-width:900px;table-layout:fixed}.em-table th:first-child{width:120px}.em-table td{vertical-align:top}
+.em-table{min-width:900px;table-layout:fixed}.em-table td{vertical-align:top}.em-table th{background:transparent;color:var(--ink);border-bottom:1px solid var(--line);border-radius:0}.em-table th.em-auj .em-aujm{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .em-ev{display:block;width:100%;text-align:left;margin-bottom:4px;padding:5px 7px;font-size:13px;font-weight:400;background:var(--surface);color:inherit;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;overflow-wrap:anywhere}
 button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
-.em-ev.em-call,.em-ev.em-task,.em-ev.em-todo{border-left-color:var(--warn)}.em-ev.em-cal{border-left-color:var(--muted)}
+/* une couleur par activité : OIKOS olive, Benjamin enseignement bleu-vert, prospect ocre, hors presta bleu roi, tâche gris */
+.em-s-OIKOS{--em:var(--accent)}.em-s-BE{--em:var(--info)}.em-s-PROSPECT{--em:var(--warn)}.em-s-CLIENT{--em:var(--muted)}.em-s-TACHE{--em:var(--line)}.em-s-AUTRE{--em:var(--roi)}
+.em-ev{border-left-color:var(--em,var(--accent))}.em-ev.em-s-AUTRE{background:var(--roi-soft);border-color:var(--roi);color:var(--roi)}
+.em-l.em-s-AUTRE{color:var(--roi)}.em-jour .em-l{border-left:4px solid var(--em,transparent);padding-left:8px}
+.em-leg{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px;font-size:12.5px;color:var(--muted)}.em-leg span{display:inline-flex;align-items:center;gap:5px}
+.em-leg i{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--em)}.em-leg .em-ann i{background:var(--stop)}
 .em-ev.em-rec{border-style:dashed;border-left-style:solid}
 .em-annule{display:block;margin-bottom:4px;padding:4px 7px;font-size:12.5px;color:var(--stop);background:var(--stop-soft);border:1px solid var(--stop);border-radius:6px;overflow-wrap:anywhere}
 .em-annule b{font-weight:600}.em-annule s{color:inherit;opacity:.85}
-.em-table th.em-auj,.em-table td.em-auj{background:var(--accent-soft)}
 .em-jour{margin-bottom:14px;border-left:4px solid var(--accent)}.em-jour h2{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:17px}
 .em-jour .em-l{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:14px}.em-jour .em-l:first-of-type{border-top:0}
-.em-jour .em-l b{min-width:96px;font-variant-numeric:tabular-nums}.em-jour .em-l.em-annule{padding:5px 7px;border-top:0;margin:3px 0}
+.em-jour .em-l b{min-width:96px;font-variant-numeric:tabular-nums}.em-jour .em-l.em-annule{padding:5px 7px;border-top:0;border-left:1px solid var(--stop);margin:3px 0}
 .em-jour h3{margin:8px 0 2px;font-size:13px;color:var(--muted);font-weight:600}.em-act{display:flex;flex-wrap:wrap;gap:2px;margin:-2px 0 6px}.em-act .btn{font-size:12px;padding:2px 6px;min-height:0}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -2400,22 +2404,33 @@ async function vuePlanning() {
 /* ===================== Emploi du temps : celui de Pense intelligent, vu depuis le pilotage (SQL 43) =====================
    Pense intelligent vit sur le téléphone : relié avec le compte gérant, il dépose son emploi du temps dans pilote_documents (clé « agenda ») à chaque changement et à chaque ouverture.
    Sens unique : on lit ici, on change sur le téléphone. OIKOS et Benjamin enseignement restent sur des lignes séparées, un client des deux est sur les deux. */
-const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospects"], ["AUTRE", "Hors client"]];
+const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospect"], ["CLIENT", "Client"], ["AUTRE", "Hors presta"], ["TACHE", "Tâche"]];
+const EM_NOM = Object.fromEntries(EM_SECTIONS);
 const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine", rec: "Chaque semaine" };
 let emSemaine = lundi(new Date()), emVue = "semaine", emJour = ymd(new Date());
 const emClientDe = x => (x.cle && cacheClients.find(c => c.source_pense === x.cle)) || (x.nom && cacheClients.find(c => motsNom(c.nom) === motsNom(x.nom))) || null;
-const emSectionsDe = c => { if (!c) return ["AUTRE"]; if (c.etat === "prospect") return ["PROSPECT"]; const l = entreprisesDe(c); return l.length ? l : ["AUTRE"]; };
+/* Un client du pilote : ses activités. Sinon ce que dit le téléphone (activité du client, prospect), sinon hors presta (coiffeur, agenda Google…) */
+const emSectionsDe = (c, x = {}) => { if (c) { if (c.etat === "prospect") return ["PROSPECT"]; const l = entreprisesDe(c); if (l.length) return l; }
+  const ent = String(x.ent || ""), l = [];
+  if (/oikos/i.test(ent)) l.push("OIKOS"); if (/\bBE\b|enseign|cours/i.test(ent)) l.push("BE");
+  if (l.length) return l;
+  if (typeof x.cle === "string" && /^pi:[lp]:/.test(x.cle)) return ["PROSPECT"];
+  if (c || x.cle) return ["CLIENT"];
+  return x.sorte === "task" || x.sorte === "todo" ? ["TACHE"] : ["AUTRE"]; };
+const emSection = x => x.sections[0];
+const emClasse = x => "em-s-" + emSection(x);
 const emHeure = x => x.jour_entier ? "Journée" : x.fin > x.t ? `${hm(x.t)}–${hm(x.fin)}` : hm(x.t);
 function emRecu(doc) {
   if (!doc) return null;
   const c = doc.contenu || {};
-  const elements = (Array.isArray(c.elements) ? c.elements : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { ...x, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client) }; }).sort((a, b) => a.t - b.t);
-  // Séances annulées sur le téléphone (« Annulée cette fois ») : plus des rendez-vous, une ligne rouge « rdv annulé » à leur jour
-  const annules = (Array.isArray(c.annules) ? c.annules : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Rendez-vous"), cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, annule: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client) }; })
+  const elements = (Array.isArray(c.elements) ? c.elements : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { ...x, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; }).sort((a, b) => a.t - b.t);
+  // Séances annulées sur le téléphone (« Annulée cette fois ») : plus des rendez-vous, une ligne rouge « Presta annulée » à leur jour
+  const annules = (Array.isArray(c.annules) ? c.annules : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Rendez-vous"), cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, annule: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
     .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);   // s'il est rétabli entre-temps, c'est le rendez-vous qui compte
   return { elements, annules, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {} };
 }
-const emAnnuleHtml = (a, avecHeure = true) => `<div class="em-annule" title="Annulé sur le téléphone">${ico("croix")} <b>rdv annulé</b>${avecHeure ? ` · ${esc(hm(a.t))}` : ""} · <s>${esc(sansEmoji(a.titre))}</s></div>`;
+const emAnnuleHtml = (a, avecHeure = true) => `<div class="em-annule" title="Annulé sur le téléphone">${ico("croix")} <b>Presta annulée</b>${avecHeure ? ` · ${esc(hm(a.t))}` : ""} · <s>${esc(sansEmoji(a.titre))}</s></div>`;
+const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "AUTRE"].map(k => `<span class="em-s-${k}"><i></i>${EM_NOM[k]}</span>`).join("")}<span class="em-ann"><i></i>Presta annulée</span></div>`;
 /* Répéter chaque semaine (SQL 47) : la demande va dans pilote_documents, clé « recurrents ». Tant que le téléphone ne l'a pas prise,
    le pilote montre lui-même le RDV les semaines suivantes (pointillés). Pense intelligent en fait une séance régulière du client
    à partir de la semaine d'après, puis le renvoie comme Séance. Seulement un RDV d'un client du téléphone (pas un prospect, pas l'agenda Google). */
@@ -2464,7 +2479,7 @@ async function vueEmploi() {
       if (j.getDay() !== Number(d.wd) || ymd(j) < d.depuis) continue;
       const t = new Date(j.getFullYear(), j.getMonth(), j.getDate(), h, m).getTime();
       if (ag.elements.some(x => x.cle === d.cle && x.t === t) || ag.annules.some(x => x.cle === d.cle && x.t === t)) continue;
-      ag.elements.push({ t, fin: t + dur * 6e4, titre: d.titre || d.nom || "Rendez-vous", detail: "", sorte: "rec", jour_entier: false, cle: d.cle, nom: d.nom, rec: d, jour: ymd(j), client, sections: emSectionsDe(client) });
+      ag.elements.push({ t, fin: t + dur * 6e4, titre: d.titre || d.nom || "Rendez-vous", detail: "", sorte: "rec", jour_entier: false, cle: d.cle, nom: d.nom, rec: d, jour: ymd(j), client, sections: emSectionsDe(client, { cle: d.cle }) });
     }
   });
   ag.elements.sort((a, b) => a.t - b.t);
@@ -2478,20 +2493,19 @@ async function vueEmploi() {
     if (x.rec) return `<button class="${c}" data-em-stop="${esc(x.rec.id)}">${ico("croix")} Ne plus répéter</button>`;
     if (!emEligible(x)) return "";
     return dejaRegulier(x) ? `<span class="tag">${ico("repeter")} Chaque semaine</span>` : `<button class="${c}" data-em-rec="${i}">${ico("repeter")} Répéter chaque semaine</button>`; };
-  const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)}`, bulle = esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
+  const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
     const a = action(x, i, true), tuile = x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`;
     return tuile + (a ? `<div class="em-act">${a}</div>` : ""); };
-  const presentes = EM_SECTIONS.filter(([k]) => k === "OIKOS" || k === "BE" || vus.some(([x]) => x.sections.includes(k)) || annVus.some(a => a.sections.includes(k)));
-  const semaine = () => `<div class="card" style="overflow-x:auto;padding:8px"><table class="em-table"><tr><th></th>${jours.map(j => `<th${ymd(j) === aujourdhui ? ` class="em-auj"` : ""}><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour" style="${ymd(j) === aujourdhui ? "color:var(--accent);font-weight:700" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button></th>`).join("")}</tr>
-      ${presentes.map(([k, t]) => `<tr><td><b>${t}</b></td>${jours.map(j => `<td${ymd(j) === aujourdhui ? ` class="em-auj"` : ""}>${caseDe(x => x.jour === ymd(j) && x.sections.includes(k), ev, a => emAnnuleHtml(a))}</td>`).join("")}</tr>`).join("")}</table></div>`;
-  const jour = () => presentes.map(([k, t]) => {
-      return `<section class="card" style="margin-bottom:12px"><h2 style="margin:0">${t}</h2>${caseDe(x => x.sections.includes(k), (x, i) => `<div class="ligne"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(EM_SORTES[x.sorte] || "Agenda")}</span>${x.rec ? ` <span class="muted small">pas encore pris par le téléphone</span>` : ""}${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span><span class="row">${action(x, i, false)}${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</span></div>`, a => `<div style="margin-top:8px">${emAnnuleHtml(a)}</div>`) || `<p class="muted small" style="margin:8px 0 0">Rien ce jour-là.</p>`}</section>`; }).join("");
+  const semaine = () => `<div class="card" style="overflow-x:auto;padding:8px"><table class="em-table"><tr>${jours.map(j => `<th${ymd(j) === aujourdhui ? ` class="em-auj"` : ""}><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour" style="${ymd(j) === aujourdhui ? "font-weight:700" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button>${ymd(j) === aujourdhui ? `<span class="em-aujm">aujourd'hui</span>` : ""}</th>`).join("")}</tr>
+      <tr>${jours.map(j => `<td>${caseDe(x => x.jour === ymd(j), ev, a => emAnnuleHtml(a))}</td>`).join("")}</tr></table></div>`;
+  const jour = () => `<section class="card" style="margin-bottom:12px">${caseDe(() => true, (x, i) => `<div class="ligne em-l ${emClasse(x)}" style="border-left:4px solid var(--em);padding-left:8px"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}</span>${x.rec ? ` <span class="muted small">pas encore pris par le téléphone</span>` : ""}${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span><span class="row">${action(x, i, false)}${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</span></div>`, a => `<div style="margin-top:8px">${emAnnuleHtml(a)}</div>`) || `<p class="muted small" style="margin:0">Rien ce jour-là.</p>`}</section>`;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1>
       <span class="row"><button class="btn" data-em-pas="-1" aria-label="${enSemaine ? "Semaine précédente" : "Jour précédent"}">‹</button><b>${esc(titre)}</b><button class="btn" data-em-pas="1" aria-label="${enSemaine ? "Semaine suivante" : "Jour suivant"}">›</button>
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone. Un rendez-vous client peut être répété chaque semaine depuis sa ligne. Un rendez-vous annulé est remplacé par une ligne rouge « rdv annulé ».</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone. Un rendez-vous client peut être répété chaque semaine depuis sa ligne. Une presta annulée est remplacée par une ligne rouge.</p>
+    ${emLegende()}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
@@ -2508,15 +2522,13 @@ async function vueEmploi() {
     if (b.dataset.emStop) return emNePlusRepeter(b.dataset.emStop);
   };
 }
-/* Mis en avant sur Aujourd'hui : l'emploi du temps du jour, rendez-vous et « rdv annulé » en rouge, OIKOS et Benjamin enseignement séparés */
+/* Mis en avant sur Aujourd'hui : l'emploi du temps du jour, tout le monde dans une seule liste, une couleur par activité, « Presta annulée » en rouge */
 function emAujourdhuiHtml(ag) {
   if (!ag) return "";
   const auj = ymd(new Date()), el = ag.elements.filter(x => x.jour === auj), an = ag.annules.filter(a => a.jour === auj);
-  const blocs = EM_SECTIONS.map(([k, t]) => {
-    const l = el.filter(x => x.sections.includes(k)).map(x => [x.t, `<div class="em-l"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" ? ` <span class="muted small">· ${esc(EM_SORTES[x.sorte])}</span>` : ""}</span></div>`])
-      .concat(an.filter(a => a.sections.includes(k)).map(a => [a.t, `<div class="em-l em-annule"><b>${esc(hm(a.t))}</b><span>${ico("croix")} rdv annulé · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
-      .sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
-    return l ? `<h3>${t}</h3>${l}` : ""; }).join("");
+  const blocs = el.map(x => [x.t, `<div class="em-l ${emClasse(x)}"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))} <span class="muted small">· ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" && emSection(x) !== "TACHE" ? " · " + esc(EM_SORTES[x.sorte]) : ""}</span></span></div>`])
+    .concat(an.map(a => [a.t, `<div class="em-l em-annule"><b>${esc(hm(a.t))}</b><span>${ico("croix")} Presta annulée · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
+    .sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
   return `<section class="card em-jour" aria-label="Emploi du temps d'aujourd'hui"><h2>${ico("agenda")} Emploi du temps d'aujourd'hui</h2>
     ${blocs || `<p class="muted small" style="margin:0">Aucun rendez-vous aujourd'hui.</p>`}
     <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="btn" data-em-semaine="1">Voir la semaine</button></div></section>`;

@@ -1,1 +1,1 @@
-Rendez-vous répétés chaque semaine depuis le pilote. Rendez-vous annulés visibles dans le pilote.
+Emploi du temps du pilote : activité de chaque client envoyée, bouton Annuler ce RDV (reste en rouge dans le pilote).

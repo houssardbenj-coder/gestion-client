@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=25;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=26;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1399,7 +1399,7 @@ async function envoyerProspects(manuel){
 const PILOTE_AGENDA_SEMAINES=8,PILOTE_AGENDA_RAFRAICHIR=15*6e4;   // même sans changement, renvoyé à l'ouverture s'il date de plus de 15 min : le pilote voit qu'il est à jour
 function agendaPersonne(it){
   const i=it.ref.indexOf(":"),k=it.ref.slice(0,i),id=it.ref.slice(i+1);
-  const duClient=c=>c?{cle:c.extKey||"pi:c:"+c.id,nom:fullName(c)}:null;
+  const duClient=c=>c?{cle:c.extKey||"pi:c:"+c.id,nom:fullName(c),ent:c.entity||""}:null;
   if(k==="occ")return duClient(customers.find(c=>c.id===id.split("_")[0]));
   if(k==="appt"){const x=appts.find(y=>y.id===id);return x&&x.customerId?duClient(customers.find(c=>c.id===x.customerId)):null}
   if(k==="proj"){const x=projects.find(y=>y.id===id);if(!x)return null;const c=x.customerId&&customers.find(y=>y.id===x.customerId);return c?duClient(c):{cle:"pi:p:"+x.id,nom:fullName(x)}}
@@ -1411,9 +1411,10 @@ async function agendaPourPilote(){
   const a=addDays(weekStart(Date.now()),-7),b=addDays(a,(PILOTE_AGENDA_SEMAINES+1)*7);
   let evenements=[];
   if(NATIVE&&agendaState==="granted"){try{evenements=await Promise.race([NATIVE.listEvents(a,b),new Promise((_,non)=>setTimeout(()=>non({lent:1}),10000))])}catch(e){if(e&&e.lent)throw new Error("agenda du téléphone trop lent");evenements=[]}}   // trop lent : on n'envoie rien plutôt qu'un emploi du temps incomplet
-  const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null}});
+  const elements=agItems(a,b,evenements).filter(it=>it.t>=a).map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}});
   // Séances annulées cette fois (« Annulée cette fois ») : à part, le pilote les montre en rouge « rdv annulé » à leur jour
-  const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null}});
+  const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}})
+    .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}}));
   return {debut:a,fin:b,elements,annules};
 }
 /* « Répéter chaque semaine » demandé dans le pilote (clé « recurrents », SQL 47) : le RDV devient une séance régulière
@@ -1812,7 +1813,7 @@ function openActSheet(){
 }
 
 // ===== RDV simples (agenda, clients actifs) : hors Suivi =====
-const apptBody=a=>({firstName:a.firstName||"",lastName:a.lastName||"",title:a.title||"",phone:a.phone||"",address:a.address||"",when:a.when||null,dur:durOf("appts",a),note:a.note||"",customerId:a.customerId||"",done:!!a.done,doneAt:a.doneAt||null,createdAt:a.createdAt||Date.now(),calId:a.calId||"",calAt:a.calAt||null,calDur:a.calDur||null});
+const apptBody=a=>({firstName:a.firstName||"",lastName:a.lastName||"",title:a.title||"",phone:a.phone||"",address:a.address||"",when:a.when||null,dur:durOf("appts",a),note:a.note||"",customerId:a.customerId||"",done:!!a.done,doneAt:a.doneAt||null,cancelled:!!a.cancelled,createdAt:a.createdAt||Date.now(),calId:a.calId||"",calAt:a.calAt||null,calDur:a.calDur||null});
 const custBody=c=>({firstName:c.firstName||"",lastName:c.lastName||"",phone:c.phone||"",phone2:c.phone2||"",address:c.address||"",email:c.email||"",students:studentsOf(c),entity:c.entity||"",extKey:c.extKey||"",lastBilled:c.lastBilled||null,touchedAt:c.touchedAt||null,services:svcOf(c),activities:svcOf(c).map(s=>s.act),status:c.status||"actif",schedule:c.schedule||"",start:c.start||null,note:c.note||"",projectId:c.projectId||"",createdAt:c.createdAt||Date.now(),pauseUntil:c.status==="pause"?(c.pauseUntil||null):null,
   slots:slotsOf(c).map(s=>({id:s.id,wd:Number(s.wd),time:s.time,dur:Number(s.dur)||60,every:Number(s.every)===2?2:1,from:s.from||"",until:s.until||""})),
   skipHol:!!c.skipHol,skipFer:c.skipFer!==false,slotCal:c.slotCal!==false,absences:(c.absences||[]).filter(a=>a&&a.from).map(a=>({from:a.from,to:a.to&&a.to>=a.from?a.to:a.from}))});
@@ -1854,6 +1855,7 @@ function drawApptSheet(){
    ${agendaToggle("ap-cal",true)}
    <div class="btns"><button class="btn primary" id="ap-save">Enregistrer</button><button class="btn" id="ap-cancel">Annuler</button>
    ${d.isNew?"":`<button class="btn danger" id="ap-del">${apConfirm?"Confirmer la suppression":"Supprimer"}</button>`}</div>
+   ${d.isNew?"":d.cancelled?`<button class="btn" id="ap-annul">↺ Rétablir ce RDV</button>`:`<button class="btn" id="ap-annul">✕ Annuler ce RDV (il reste en rouge dans OIKOS Pilotage)</button>`}
    ${!d.isNew&&d.when?`<button class="btn" data-apmove="${esc(d.id)}">↔ Déplacer en touchant l'agenda</button>`:""}
    ${!d.isNew&&!d.customerId?`<button class="iconbtn" id="ap-lead">→ Suivre comme prospect (dans Suivi)</button>`:""}
    <div class="status" id="ap-msg"></div></div></div>`;
@@ -1892,6 +1894,11 @@ function drawApptSheet(){
   });
   const del=$("#ap-del");if(del)del.addEventListener("click",async()=>{if(!apConfirm){apConfirm=true;drawApptSheet();return}
     try{await db.doc("appts/"+d.id).delete();closeAppt()}catch(e){$("#ap-msg").textContent="Suppression impossible."}});
+  const an=$("#ap-annul");if(an)an.addEventListener("click",async()=>{   // annulé : sort de l'agenda mais garde une trace, le pilote le montre en rouge « presta annulée »
+    const x=appts.find(o=>o.id===d.id)||d,rev=!!x.cancelled,y={...x,cancelled:!rev,done:!rev,doneAt:rev?null:Date.now()};
+    if(!rev&&y.calId&&NATIVE&&NATIVE.deleteEvent){try{await NATIVE.deleteEvent(y.calId)}catch(e){}y.calId="";y.calAt=null;y.calDur=null}
+    try{await db.doc("appts/"+y.id).set(apptBody(y));Object.assign(x,y);closeAppt();render();$("#status").textContent=rev?"↺ RDV rétabli.":"✕ RDV annulé : il reste en rouge dans OIKOS Pilotage.";piloteBientot()}
+    catch(e){$("#ap-msg").textContent="Annulation impossible ("+(e&&e.code||"erreur")+")."}});
   const tl=$("#ap-lead");if(tl)tl.addEventListener("click",async()=>{
     const l={id:"l"+uid(),type:"rdv",firstName:d.firstName||"",lastName:d.lastName||"",phone:d.phone||"",address:d.address||"",when:d.when,dur:durOf("appts",d),reason:"",note:d.note||"",status:"open",createdAt:Date.now(),calId:d.calId||"",calAt:d.calAt||null,calDur:d.calDur||null};
     await db.doc("leads/"+l.id).set(leadBody(l));await db.doc("appts/"+d.id).delete();closeAppt();projFilter="leads";tab="proj";render();$("#status").textContent="→ Ajouté au Suivi.";});
