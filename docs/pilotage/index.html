@@ -143,6 +143,22 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-jour .em-l{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:14px}.em-jour .em-l:first-of-type{border-top:0}
 .em-jour .em-l b{min-width:96px;font-variant-numeric:tabular-nums}.em-jour .em-l.em-annule{padding:5px 7px;border-top:0;border-left:1px solid var(--stop);margin:3px 0}
 .em-act .chip.em-rep{font-size:12px;padding:3px 9px;font-weight:600}.em-act .chip.em-rep .ico{width:13px;height:13px}
+/* Grille des heures (comme l'Agenda de Pense intelligent) : une colonne par jour, une ligne par heure, clic sur un vide = nouveau RDV */
+.em-grille{display:grid;grid-template-columns:46px repeat(var(--n),minmax(118px,1fr));min-width:calc(46px + var(--n) * 118px)}
+.em-gh{padding:4px 4px 6px;text-align:center;border-bottom:1px solid var(--line);font-size:13px}.em-gh .em-aujm{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase}
+.em-gh.auj .btn{font-weight:700}
+.em-gad{padding:3px;border-bottom:1px solid var(--line);min-height:6px}.em-gad .em-gev{position:static;display:block;margin-bottom:3px;height:auto}
+.em-gh0{position:relative;border-right:1px solid var(--line)}.em-gh0 span{position:absolute;right:6px;transform:translateY(-50%);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.em-gcol{position:relative;border-left:1px solid var(--line);cursor:copy;background-image:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px var(--px)),repeating-linear-gradient(to bottom,transparent 0 calc(var(--px) / 2),var(--trait) calc(var(--px) / 2) calc(var(--px) / 2 + 1px),transparent calc(var(--px) / 2 + 1px) var(--px))}
+.em-gev{position:absolute;overflow:hidden;font-size:12px;line-height:1.25;padding:3px 26px 3px 6px;border-radius:6px;border:1px solid var(--line);border-left:3px solid var(--em,var(--accent));background:var(--surface);color:var(--ink);cursor:pointer;box-shadow:0 1px 2px rgb(0 0 0 / .08);text-align:left}
+.em-gev b{font-weight:700;font-variant-numeric:tabular-nums}.em-gev:hover{z-index:3;box-shadow:0 2px 8px rgb(0 0 0 / .18)}
+.em-gev.em-s-AUTRE{background:var(--roi-soft);border-color:var(--roi);color:var(--roi)}
+.em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:default}.em-gev.ann s{opacity:.85}
+.em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
+.em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.em-tg .ico{width:13px;height:13px}.em-tg[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.em-maint{position:absolute;left:0;right:0;height:2px;background:var(--stop);z-index:2;pointer-events:none}
+.em-nv .seg{display:flex;gap:6px;margin:0 0 10px}.em-nv .f{margin-bottom:10px}
 .em-jour h3{margin:8px 0 2px;font-size:13px;color:var(--muted);font-weight:600}.em-act{display:flex;flex-wrap:wrap;gap:2px;margin:-2px 0 6px}.em-act .btn{font-size:12px;padding:2px 6px;min-height:0}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -2490,10 +2506,57 @@ const emArrets = doc => { const l = doc && doc.contenu && Array.isArray(doc.cont
 // une séance d'un créneau arrêté, après la date d'arrêt : on ne la montre plus, même si le téléphone ne l'a pas encore pris
 const emArretee = (x, arrets) => { if (typeof x.occ !== "string") return false; const [cust, slot, jour] = x.occ.split("_");
   return arrets.some(a => (!a.cust || a.cust === cust) && a.slot === slot && jour > a.jusqu); };
-async function emEcrireRec(changer, changerArrets = l => l) {
+async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l) {
   const doc = await lireCopie(EM_REC);   // relu juste avant : l'autre PC a pu en ajouter
-  const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200);
-  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+  const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200), nouveaux = changerNouveaux(emNouveaux(doc)).slice(-200);
+  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+}
+/* RDV créés dans le pilote : liste « nouveaux » du document recurrents ; Pense intelligent en fait un vrai RDV (ou une séance
+   régulière si « Chaque semaine ») à sa prochaine ouverture, puis le renvoie dans l'emploi du temps comme les autres. */
+const emNouveaux = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.nouveaux) ? doc.contenu.nouveaux : [];
+  return l.filter(n => n && typeof n.id === "string" && Number.isFinite(n.quand) && Number(n.dur) >= 15 && Number(n.dur) <= 600); };
+const emLibelleClient = c => c.nom + (c.eleves && c.eleves.length ? " (" + c.eleves.join(", ") + ")" : "");
+function emNouveau(jourTxt, minutes) {
+  const actifs = cacheClients.filter(c => c.etat !== "termine").sort((a, b) => String(a.nom).localeCompare(String(b.nom), "fr"));
+  let hors = false, chaque = false;
+  const h = Math.floor(minutes / 60), m = minutes % 60;
+  fenetre(`<form class="em-nv" id="em-nv"><h2 style="margin-top:0">${ico("agenda")} Nouveau RDV</h2>
+      <div class="seg"><button type="button" class="chip" data-nv-mode="client" aria-pressed="true">Avec un client</button><button type="button" class="chip" data-nv-mode="hors" aria-pressed="false">Hors presta</button></div>
+      <label class="f" id="nv-cl-l">Client (nom du parent ou de l'élève)<input id="nv-cl" list="nv-liste" autocomplete="off" placeholder="Tape un nom…"><datalist id="nv-liste">${actifs.map(c => `<option value="${esc(emLibelleClient(c))}">`).join("")}</datalist></label>
+      <label class="f" id="nv-obj-l" hidden>Objet<input id="nv-obj" autocomplete="off" placeholder="Ex. coiffeur, comptable, réunion…"></label>
+      <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Jour<input type="date" id="nv-j" value="${jourTxt}"></label>
+        <label class="f">Heure<input type="time" id="nv-h" step="900" value="${pad2(h)}:${pad2(m)}"></label>
+        <label class="f">Durée<select id="nv-d">${[30, 45, 60, 90, 120, 150, 180, 240].map(d => `<option value="${d}" ${d === 60 ? "selected" : ""}>${d < 60 ? d + " min" : (d / 60 + " h").replace(".", ",")}</option>`).join("")}</select></label></div>
+      <p class="f"><button type="button" class="chip em-rep" id="nv-rep" aria-pressed="false">${ico("repeter")} Chaque semaine</button></p>
+      <p class="muted small">Il part dans Pense intelligent à sa prochaine ouverture ; en attendant il est en pointillés ici.</p>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (f, fermer) => {
+    const $ = s => f.querySelector(s);
+    f.addEventListener("click", e => { const b = e.target.closest("[data-nv-mode]");
+      if (b) { hors = b.dataset.nvMode === "hors"; f.querySelectorAll("[data-nv-mode]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); $("#nv-cl-l").hidden = hors; $("#nv-obj-l").hidden = !hors; $("#nv-rep").hidden = hors; (hors ? $("#nv-obj") : $("#nv-cl")).focus(); }
+      if (e.target.closest("#nv-rep")) { chaque = !chaque; $("#nv-rep").setAttribute("aria-pressed", String(chaque)); } });
+    setTimeout(() => $("#nv-cl").focus(), 30);
+    $("#em-nv").onsubmit = async e => {
+      e.preventDefault();
+      let client = null, titre = "";
+      if (hors) { titre = $("#nv-obj").value.trim(); if (!titre) return toast("Indique l'objet du RDV"); }
+      else { const v = $("#nv-cl").value.trim(), n = norm(v);
+        client = actifs.find(c => emLibelleClient(c) === v) || actifs.find(c => norm(c.nom) === n) || (n ? (l => l.length === 1 ? l[0] : null)(actifs.filter(c => norm(emLibelleClient(c)).includes(n))) : null);
+        if (!client) return toast("Choisis le client dans la liste (ou « Hors presta »)");
+        titre = emLibelleClient(client); }
+      const [hh, mm] = ($("#nv-h").value || "").split(":").map(Number), j = $("#nv-j").value;
+      if (!j || !Number.isFinite(hh)) return toast("Indique le jour et l'heure");
+      const quand = new Date(j + "T" + pad2(hh) + ":" + pad2(mm || 0)).getTime();
+      const nv = { id: "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), quand, dur: Number($("#nv-d").value) || 60, titre: titre.slice(0, 120),
+        cle: client && client.source_pense || null, nom: client ? client.nom : null, client_id: client ? client.id : null, chaque_semaine: !hors && chaque, le: Date.now() };
+      const ok = await emEcrireRec(l => l, l => l, l => l.concat(nv));
+      if (!ok) return toast("Pas enregistré : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
+      fermer(); toast("RDV enregistré : il arrive dans Pense intelligent à sa prochaine ouverture."); afficher("emploi");
+    };
+  });
+}
+async function emRetirerNouveau(id) {
+  const ok = await emEcrireRec(l => l, l => l, l => l.filter(n => n.id !== id));
+  toast(ok ? "RDV retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi");
 }
 /* Arrêter une séance régulière à partir de ce jour : le téléphone met fin au créneau la veille (les séances d'avant restent).
    Une séance née d'un « Répéter chaque semaine » du pilote perd aussi sa demande. */
@@ -2545,6 +2608,15 @@ async function vueEmploi() {
       ag.elements.push({ t, fin: t + dur * 6e4, titre: d.titre || d.nom || "Rendez-vous", detail: "", sorte: "rec", jour_entier: false, cle: d.cle, nom: d.nom, rec: d, jour: ymd(j), client, sections: emSectionsDe(client, { cle: d.cle }) });
     }
   });
+  // RDV créés dans le pilote que le téléphone n'a pas encore pris : en pointillés (chaque semaine si demandé)
+  emNouveaux(docRec).filter(n => ag.recurrents[n.id] !== "fait").forEach(n => {
+    const c = (n.client_id && cacheClients.find(k => k.id === n.client_id)) || emClientDe(n), d0 = new Date(n.quand);
+    for (let k = 0; k < (n.chaque_semaine ? 60 : 1); k++) {
+      const j = plusJours(d0, 7 * k), t = new Date(j.getFullYear(), j.getMonth(), j.getDate(), d0.getHours(), d0.getMinutes()).getTime();
+      if (t >= borneB) break; if (t < borneA) continue;
+      ag.elements.push({ t, fin: t + Number(n.dur) * 6e4, titre: n.titre || n.nom || "Rendez-vous", detail: "", sorte: "nouveau", jour_entier: false, cle: n.cle, nom: n.nom, nv: n, jour: ymd(new Date(t)), client: c, sections: emSectionsDe(c, { cle: n.cle }) });
+    }
+  });
   ag.elements.sort((a, b) => a.t - b.t);
   const horsFenetre = (ag.fin && borneA >= ag.fin) || (ag.debut && borneB <= ag.debut);
   const vus = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.t >= borneA && x.t < borneB);
@@ -2567,22 +2639,63 @@ async function vueEmploi() {
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
     const a = action(x, i, true), tuile = x.client ? `<button class="${cl}" data-em-fiche="${i}" title="${bulle}">${dedans}</button>` : `<div class="${cl}" title="${bulle}">${dedans}</div>`;
     return tuile + (a ? `<div class="em-act">${a}</div>` : ""); };
-  const semaine = () => `<div class="card" style="overflow-x:auto;padding:8px"><table class="em-table"><tr>${jours.map(j => `<th${ymd(j) === aujourdhui ? ` class="em-auj"` : ""}><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour" style="${ymd(j) === aujourdhui ? "font-weight:700" : ""}">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button>${ymd(j) === aujourdhui ? `<span class="em-aujm">aujourd'hui</span>` : ""}</th>`).join("")}</tr>
-      <tr>${jours.map(j => `<td>${caseDe(x => x.jour === ymd(j), ev, a => emAnnuleHtml(a))}</td>`).join("")}</tr></table></div>`;
-  const jour = () => `<section class="card" style="margin-bottom:12px">${caseDe(() => true, (x, i) => `<div class="ligne em-l ${emClasse(x)}" style="border-left:4px solid var(--em);padding-left:8px"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}</span>${x.rec ? ` <span class="muted small">pas encore pris par le téléphone</span>` : ""}${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span><span class="row">${action(x, i, false)}${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</span></div>`, a => `<div style="margin-top:8px">${emAnnuleHtml(a)}</div>`) || `<p class="muted small" style="margin:0">Rien ce jour-là.</p>`}</section>`;
+  /* La bascule « Chaque semaine » d'un RDV, en petit rond dans sa case (même logique que action) */
+  const rond = (x, i) => { const a = action(x, i); if (!a) return x.nv ? `<button class="em-tg" data-em-nvret="${esc(x.nv.id)}" title="Retirer ce RDV pas encore pris par le téléphone">${ico("croix")}</button>` : "";
+    return a.replace('class="chip em-rep"', 'class="em-tg"').replace(/<\/svg> Chaque semaine/, "</svg>"); };
+  const PX = 48;
+  const grille = jl => {
+    const ids = new Set(jl.map(ymd)), tim = vus.filter(([x]) => ids.has(x.jour) && !x.jour_entier && x.sorte !== "todo"), jent = vus.filter(([x]) => ids.has(x.jour) && (x.jour_entier || x.sorte === "todo"));
+    const an = annVus.filter(a => ids.has(a.jour));
+    let h0 = 8, h1 = 20;
+    tim.map(([x]) => x).concat(an).forEach(x => { const d = new Date(x.t), f = new Date(Math.max(x.t + 18e5, x.fin || x.t) - 1); h0 = Math.min(h0, d.getHours()); h1 = Math.max(h1, Math.min(24, f.getHours() + 1)); });
+    const H = (h1 - h0) * PX, minDe = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
+    const colonne = j => {
+      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => ({ t: x.t, f: Math.max(x.fin || x.t, x.t + 18e5), x, i })).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
+      // couloirs : deux RDV qui se chevauchent se partagent la largeur
+      let groupe = [], finG = 0; const groupes = [];
+      l.forEach(o => { if (groupe.length && o.t >= finG) { groupes.push(groupe); groupe = []; finG = 0; } const fins = []; groupe.forEach(g => fins[g.c] = Math.max(fins[g.c] || 0, g.f)); let c = 0; while (fins[c] > o.t) c++; o.c = c; groupe.push(o); finG = Math.max(finG, o.f); });
+      if (groupe.length) groupes.push(groupe);
+      groupes.forEach(g => { const n = Math.max(...g.map(o => o.c)) + 1; g.forEach(o => o.n = n); });
+      const tuiles = l.map(o => { const top = (minDe(o.t) - h0 * 60) / 60 * PX, haut = Math.max(22, (o.f - o.t) / 36e5 * PX - 2), pos = `top:${top}px;height:${haut}px;left:calc(${o.c * 100 / o.n}% + 2px);width:calc(${100 / o.n}% - 4px)`;
+        if (o.a) return `<div class="em-gev ann" style="${pos}" title="Annulé sur le téléphone"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`;
+        const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv ? " att" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}</div>`; }).join("");
+      const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
+      return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
+    return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
+      <div></div>${jl.map(j => `<div class="em-gh${ymd(j) === aujourdhui ? " auj" : ""}"><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button>${ymd(j) === aujourdhui ? `<span class="em-aujm">aujourd'hui</span>` : ""}</div>`).join("")}
+      ${jent.length ? `<div class="em-gh0" style="font-size:11px;color:var(--muted);padding:4px">Journée</div>${jl.map(j => `<div class="em-gad">${jent.filter(([x]) => x.jour === ymd(j)).map(([x, i]) => `<div class="em-gev ${emClasse(x)}" data-em-ouvrir="${i}">${esc(sansEmoji(x.titre))}</div>`).join("")}</div>`).join("")}` : ""}
+      <div class="em-gh0" style="height:${H}px">${Array.from({ length: h1 - h0 }, (_, k) => `<span style="top:${k * PX + (k ? 0 : 7)}px">${h0 + k}h</span>`).join("")}</div>
+      ${jl.map(colonne).join("")}</div></div>`; };
+  const semaine = () => grille(jours);
+  const jourAncien = () => `<section class="card" style="margin-bottom:12px">${caseDe(() => true, (x, i) => `<div class="ligne em-l ${emClasse(x)}" style="border-left:4px solid var(--em);padding-left:8px"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}</span>${x.rec ? ` <span class="muted small">pas encore pris par le téléphone</span>` : ""}${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span><span class="row">${action(x, i, false)}${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</span></div>`, a => `<div style="margin-top:8px">${emAnnuleHtml(a)}</div>`) || `<p class="muted small" style="margin:0">Rien ce jour-là.</p>`}</section>`;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1>
       <span class="row"><button class="btn" data-em-pas="-1" aria-label="${enSemaine ? "Semaine précédente" : "Jour précédent"}">‹</button><b>${esc(titre)}</b><button class="btn" data-em-pas="1" aria-label="${enSemaine ? "Semaine suivante" : "Jour suivant"}">›</button>
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
-      <button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Repris de Pense intelligent, reçu le ${heureFr(ag.recu)}. Pour changer un rendez-vous, c'est sur le téléphone. Un rendez-vous client peut être répété chaque semaine depuis sa ligne, et une séance régulière arrêtée avec « Ne plus répéter ». Une presta annulée est remplacée par une ligne rouge.</p>
+      <button class="btn primary" data-em-plus="1">${ico("plus")} RDV</button><button class="btn" id="em-maj">Actualiser</button></span></div>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture.</p>
     ${emLegende()}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
-    ${enSemaine ? semaine() : jour()}`);
+    ${enSemaine ? semaine() : grille([jourD])}`);
   el.onclick = e => {
-    const b = e.target.closest("button"); if (!b) return;
+    const b = e.target.closest("button");
+    if (!b) {
+      const o = e.target.closest("[data-em-ouvrir]");
+      if (o) { const x = ag.elements[Number(o.dataset.emOuvrir)]; if (!x) return;
+        if (x.nv) return fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre))}</h2><p>${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)}${x.nv.chaque_semaine ? ", chaque semaine" : ""}</p><p class="muted small">Pas encore pris par Pense intelligent : il arrive à sa prochaine ouverture.</p><div class="row"><button class="btn" data-nv-ret="1">${ico("croix")} Retirer ce RDV</button><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => { f.querySelector("[data-nv-ret]").onclick = () => { fermer(); emRetirerNouveau(x.nv.id); }; });
+        if (x.client) return ficheClient(x.client.id);
+        return toast(sansEmoji(x.titre) + " · " + emHeure(x) + (x.detail ? " · " + sansEmoji(x.detail) : "") + " — à changer sur le téléphone");
+      }
+      const v = e.target.closest("[data-em-vide]");
+      if (v) { const g = v.closest(".em-grille"), h0 = Number(g.dataset.h0), y = e.clientY - v.getBoundingClientRect().top;
+        return emNouveau(v.dataset.emVide, Math.min(23 * 60 + 45, h0 * 60 + Math.max(0, Math.floor(y / PX * 4)) * 15)); }
+      return;
+    }
+    if (b.dataset.emPlus) { const d = new Date(); return emNouveau(enSemaine ? (cestMaintenant ? aujourdhui : ymd(emSemaine)) : emJour, Math.min(23 * 60, (d.getHours() + 1) * 60)); }
+    if (b.dataset.emNvret) return emRetirerNouveau(b.dataset.emNvret);
     if (b.id === "em-maj") return afficher("emploi");
     if (b.dataset.emVue) { emVue = b.dataset.emVue; if (emVue === "semaine") emSemaine = lundi(jourD); else if (ymd(lundi(jourD)) !== ymd(emSemaine)) emJour = ymd(emSemaine) === ymd(lundi(new Date())) ? aujourdhui : ymd(emSemaine); return afficher("emploi"); }
     if (b.dataset.emAuj) { emSemaine = lundi(new Date()); emJour = aujourdhui; return afficher("emploi"); }

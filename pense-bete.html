@@ -1185,6 +1185,27 @@ async function recurrentsDuPilote(jeton,s){
     const slots=slotsOf(c).map(y=>y.id===x.slot?{...y,until:x.jusqu}:y).filter(y=>!(y.from&&y.until&&y.until<y.from));
     try{await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots;faits.add("arret:"+x.id);etats[x.id]="fait";ajoutes++}catch(e){etats[x.id]="echec"}
   }
+  // RDV créés dans le pilote : un vrai RDV ici (ou une séance régulière du client si « Chaque semaine »)
+  const nouveaux=c0&&Array.isArray(c0.nouveaux)?c0.nouveaux.slice(-200):[];
+  const motsTries=t=>fold(t).split(/\s+/).filter(Boolean).sort().join(" ");
+  for(const n of nouveaux){
+    if(!n||typeof n.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(n.id))continue;
+    if(faits.has("rdv:"+n.id)){etats[n.id]="fait";continue}
+    const quand=Number(n.quand),dur0=Number(n.dur);
+    if(!Number.isFinite(quand)||!(dur0>=15&&dur0<=600)){etats[n.id]="illisible";continue}
+    const cle=typeof n.cle==="string"?n.cle:"";
+    const c=(cle&&(customers.find(x=>x.extKey&&x.extKey===cle)||(cle.startsWith("pi:c:")?customers.find(x=>x.id===cle.slice(5)):null)))
+      ||(n.nom?(l=>l.length===1?l[0]:null)(customers.filter(x=>motsTries(fullName(x))===motsTries(n.nom))):null)
+      ||(l=>l.length===1?l[0]:null)(customers.filter(x=>{const w=motsTries(fullName(x)).split(" ").filter(Boolean),t=" "+fold(n.titre||"").replace(/[^a-z0-9]+/g," ")+" ";return w.length&&w.every(m=>m.length>2&&t.includes(" "+m+" "))}));   // fiche faite au nom de l'élève (ex. Bryan)
+    try{
+      if(n.chaque_semaine&&c){const d=new Date(quand),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);
+        const slots=slotsOf(c).concat({id:"pil"+n.id,wd:d.getDay(),time:pad(d.getHours())+":"+pad(d.getMinutes()),dur,every:1,from:ymd(d),until:""});
+        await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots}
+      else{const a={id:"pil"+n.id,firstName:c?"":String(n.titre||n.nom||"RDV").slice(0,120),lastName:"",title:"",phone:"",address:"",when:quand,dur:dur0,note:"Ajouté depuis OIKOS Pilotage",customerId:c?c.id:"",done:false,createdAt:Date.now()};
+        await db.doc("appts/"+a.id).set(apptBody(a));if(!appts.some(x=>x.id===a.id))appts.push(a)}
+      faits.add("rdv:"+n.id);etats[n.id]="fait";ajoutes++;
+    }catch(e){etats[n.id]="echec"}
+  }
   s.recFaits=[...faits].slice(-300);piloteNote(s);
   return {etats,ajoutes};
 }

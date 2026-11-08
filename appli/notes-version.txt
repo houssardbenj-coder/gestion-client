@@ -1,1 +1,1 @@
-Ne plus répéter un RDV répété depuis le pilote, même déjà pris par le téléphone.
+RDV ajoutés depuis OIKOS Pilotage repris dans l agenda.
