@@ -1,1 +1,1 @@
-Jamais deux répétitions du même client à la même heure.
+Modifier l'heure d'un RDV depuis le pilote OIKOS (ce jour-là ou toutes les semaines).

@@ -157,10 +157,11 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 /* Mettre dans reporting / Mettre dans IK : sur la case du RDV, grisé une fois parti */
 .em-gev.a-env{padding-bottom:20px}
 .em-env{display:inline-flex;align-items:center;gap:3px;max-width:calc(100% - 8px);padding:1px 7px;font-size:11px;font-weight:600;line-height:1.4;border-radius:999px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.em-gev .em-env{position:absolute;left:5px;bottom:3px}.em-env .ico{width:12px;height:12px;flex:none}
+.em-gev .em-bas{position:absolute;left:5px;right:5px;bottom:3px;display:flex;flex-wrap:wrap;gap:2px}.em-gev.a-env2{padding-bottom:38px}.em-env .ico{width:12px;height:12px;flex:none}
 .em-env:hover:not(:disabled){background:var(--accent);color:var(--accent-ink)}.em-env:disabled{cursor:default}
 .em-env.fait{border-color:var(--line);color:var(--muted);background:var(--surface)}
-.em-jour .em-l .em-env{margin-left:auto;flex:none;font-size:12px}
+.em-jour .em-l .em-env{margin-left:auto;flex:none;font-size:12px}.em-jour .em-l .em-hr+.em-env{margin-left:4px}
+.em-env.em-hr{border-color:var(--line);color:var(--ink)}.em-env.em-hr:hover{background:var(--sunk);color:var(--ink)}
 .em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:default}.em-gev.ann s{opacity:.85}
 .em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
@@ -2073,7 +2074,7 @@ function htmlLigne(l, i, principal, zone) {
 }
 async function vueJour() {
   const [{ faire, attente, info }, docAg, docRec] = await Promise.all([lignesDuJour(), lireCopie("agenda").catch(() => null), lireCopie(EM_REC).catch(() => null)]);
-  let emHtml = "", emAg = null; try { const ag = emRecu(docAg); if (ag) { const arr = emArrets(docRec); ag.elements = ag.elements.filter(x => !emArretee(x, arr)); emMarquerHp(ag, docRec); emAg = ag; } emHtml = emAujourdhuiHtml(ag, emEnvois(docRec)); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
+  let emHtml = "", emAg = null; try { const ag = emRecu(docAg); if (ag) { const arr = emArrets(docRec); ag.elements = ag.elements.filter(x => !emArretee(x, arr)); emAppliquerHeures(ag, docRec); emMarquerHp(ag, docRec); emAg = ag; } emHtml = emAujourdhuiHtml(ag, emEnvois(docRec)); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
   nbAFaire = faire.length;
   const bulleJour = document.getElementById("b-avoir"); if (bulleJour) bulleJour.innerHTML = nbAFaire ? `<span class="bulle">${nbAFaire}</span>` : "";
   const n = faire.length, auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
@@ -2094,6 +2095,7 @@ async function vueJour() {
     if (b.dataset.page) return afficher(b.dataset.page);
     if (b.dataset.emSemaine) { emVue = "semaine"; emSemaine = lundi(new Date()); return afficher("emploi"); }
     if (b.dataset.emEnvoi !== undefined) { const x = emAg && emAg.elements[Number(b.dataset.emEnvoi)]; if (x) { b.disabled = true; return emEnvoyer(x, () => { if (onglet === "jour") afficher("jour"); }); } return; }
+    if (b.dataset.emHeure !== undefined) { const x = emAg && emAg.elements[Number(b.dataset.emHeure)]; if (x && emHeureModifiable(x)) return emModifierHeure(x, () => { if (onglet === "jour") afficher("jour"); }); return; }
     if (b.id === "j-annuler") { await maj(dernier.defaire()); jourDernier = null; return afficher("jour"); }
     if (b.id === "j-tout-vu") { for (const l of info) if (l.table) await marquer(l); return afficher("jour"); }
     const l = ligneDe(b); if (!l) return;
@@ -2603,11 +2605,12 @@ const emArrets = doc => { const l = doc && doc.contenu && Array.isArray(doc.cont
 // une séance d'un créneau arrêté, après la date d'arrêt : on ne la montre plus, même si le téléphone ne l'a pas encore pris
 const emArretee = (x, arrets) => { if (typeof x.occ !== "string") return false; const [cust, slot, jour] = x.occ.split("_");
   return arrets.some(a => (!a.cust || a.cust === cust) && a.slot === slot && jour > a.jusqu); };
-async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l, changerEnvois = l => l) {
+async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l, changerEnvois = l => l, changerHeures = l => l) {
   const doc = await lireCopie(EM_REC);   // relu juste avant : l'autre PC a pu en ajouter
   const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200), nouveaux = changerNouveaux(emNouveaux(doc)).slice(-200);
   const envois = changerEnvois(emEnvois(doc)).slice(-1000);   // gardés à chaque écriture : le téléphone ne les lit pas
-  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux, envois }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+  const heures = changerHeures(emHeures(doc)).slice(-200);   // « Modifier l'heure » : gardés à chaque écriture, le téléphone les applique une fois
+  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux, envois, heures }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
 }
 /* ===== Envoyer un RDV vers le reporting ou les IK, une seule fois (09/11/2026) =====
    - RDV d'un client (OIKOS ou Benjamin enseignement) : « Mettre dans reporting » le range dans Chiffres › Déclarer mes heures,
@@ -2769,6 +2772,97 @@ async function emRetirerNouveau(id) {
   const ok = await emEcrireRec(l => l, l => l, l => l.filter(n => n.id !== id));
   toast(ok ? "RDV retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi");
 }
+/* ===== Modifier l'heure d'un RDV (09/11/2026) =====
+   Bouton « Modifier l'heure » sur la ligne du RDV (Emploi du temps et bloc du jour), même pour un RDV passé : même jour, nouvelles heures de début et de fin.
+   La demande va dans la liste « heures » du document recurrents (pas de nouveau SQL), écrite par emEcrireRec. Le pilote montre tout de suite la nouvelle
+   heure (pointillés) ; Pense intelligent (v32) fait le même changement à sa prochaine ouverture puis renvoie son emploi du temps.
+   - Séance régulière : « Seulement ce jour-là » ou « Toutes les semaines » (à partir de ce jour).
+   - RDV pas encore pris par le téléphone (liste nouveaux) : sa demande est changée directement.
+   - Déjà mis dans reporting : la ligne envoyée ne change pas, on prévient ; le RDV garde « Mis dans reporting » à sa nouvelle heure (jamais envoyé 2 fois).
+   - Changé sur le téléphone entre-temps : le téléphone a raison, rien n'est touché et le pilote le dit. */
+const emHeures = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.heures) ? doc.contenu.heures : [];
+  return l.filter(h => h && typeof h.id === "string" && Number.isFinite(h.de) && Number.isFinite(h.quand) && Number(h.dur) >= 15 && Number(h.dur) <= 720 && (typeof h.occ === "string" || typeof h.ref === "string")); };
+const EM_HEURE_PB = { introuvable: "plus trouvé sur le téléphone (changé ou annulé là-bas)", deja: "déjà changé sur le téléphone entre-temps", illisible: "demande illisible" };
+const emHeureModifiable = x => !x.annule && !x.jour_entier && (x.sorte === "nouveau" ? !!x.nv
+  : x.sorte === "occ" ? typeof x.occ === "string" && x.occ.split("_").length === 3
+  : x.sorte === "rdv" && typeof x.ref === "string" && /^(appt|lead|proj):/.test(x.ref));   // ref : envoyé par Pense intelligent v32
+const emHeureBouton = (x, i) => emHeureModifiable(x) ? `<button type="button" class="em-env em-hr" data-em-heure="${i}" title="Changer l'heure de début et de fin de ce RDV">${ico("chrono")} Modifier l'heure</button>` : "";
+/* La nouvelle heure demandée, montrée tant que le téléphone ne l'a pas prise (« toutes les semaines » : aussi les séances suivantes) */
+function emAppliquerHeures(ag, doc) {
+  const rec = ag.recurrents || {};
+  emHeures(doc).filter(h => !rec[h.id] || rec[h.id] === "echec").forEach(h => {
+    const hq = new Date(h.quand), [c0, s0, j0] = (h.occ || "").split("_");
+    ag.elements.forEach(x => {
+      let vise = false;
+      if (h.occ) { if (typeof x.occ === "string") { const [c, s, j] = x.occ.split("_"); vise = x.occ === h.occ || (h.portee === "tous" && c === c0 && s === s0 && j > j0); } }
+      else vise = x.ref === h.ref && (x.avant ? x.avant.t : x.t) === h.de;
+      if (!vise) return;
+      const d = new Date(x.t), t = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hq.getHours(), hq.getMinutes()).getTime();
+      x.avant = x.avant || { t: x.t, fin: x.fin }; x.t = t; x.fin = t + Number(h.dur) * 6e4; x.hmod = h;
+    });
+  });
+  ag.elements.sort((a, b) => a.t - b.t);
+}
+const emHeuresPb = (ag, doc) => emHeures(doc).filter(h => EM_HEURE_PB[(ag.recurrents || {})[h.id]]).map(h => ({ h, pb: EM_HEURE_PB[ag.recurrents[h.id]] }));
+async function emRetirerHeure(id, apres) {
+  const ok = await emEcrireRec(l => l, l => l, l => l, l => l, l => l.filter(h => h.id !== id));
+  toast(ok ? "Retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok && apres) apres();
+}
+async function emModifierHeure(x, apres) {
+  if (x.hmod && x.hmod.portee === "tous" && x.hmod.occ !== x.occ) return toast("L'heure de toutes les semaines vient d'être changée : ouvre Pense intelligent sur le téléphone pour qu'il la prenne, puis recommence.");
+  const doc = await lireCopie(EM_REC), cleAvant = emCleEnvoi(x);
+  const envoi = x.hp ? null : emEnvois(doc).find(v => v.k === cleAvant && v.ou === "reporting");
+  const occ = x.sorte === "occ", serieNv = !!(x.nv && x.nv.chaque_semaine), f0 = x.fin > x.t ? x.fin : x.t + 36e5;
+  let portee = "un";
+  fenetre(`<form id="em-hr"><h2 style="margin-top:0">${ico("chrono")} Modifier l'heure</h2>
+      <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>
+      <p style="margin:0 0 8px">Maintenant : <b>${esc(hm(x.t))}–${esc(hm(f0))}</b>${x.avant ? ` <span class="muted small">(au départ ${esc(hm(x.avant.t))}–${esc(hm(x.avant.fin > x.avant.t ? x.avant.fin : x.avant.t + 36e5))})</span>` : ""}</p>
+      <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(x.t)}"></label>
+        <label class="f">Fin<input type="time" id="hr-f" step="300" required value="${emHeureTxt(f0)}"></label></div>
+      ${occ ? `<p class="muted small" style="margin:4px 0">Ce RDV revient chaque semaine :</p><div class="seg" style="margin-bottom:8px"><button type="button" class="chip" data-hr-portee="un" aria-pressed="true">Seulement ce jour-là</button><button type="button" class="chip" data-hr-portee="tous" aria-pressed="false">Toutes les semaines</button></div>` : ""}
+      ${serieNv ? `<p class="muted small">Ce RDV n'est pas encore arrivé sur le téléphone : l'heure change pour toutes les semaines. Pour un seul jour, attends qu'il soit dans Pense intelligent.</p>` : ""}
+      ${envoi ? `<p class="tag warn" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} Déjà mis dans reporting le ${esc(new Date(envoi.le).toLocaleDateString("fr-FR"))} : la ligne envoyée ne change pas. Corrige la durée dans Chiffres › Déclarer mes heures (ou dans SAISIE COURS si elle est déjà enregistrée).</p>` : ""}
+      <p class="muted small">Le pilote affiche la nouvelle heure tout de suite ; Pense intelligent fait le même changement à sa prochaine ouverture.</p>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (f, fermer) => {
+    f.addEventListener("click", e => { const b = e.target.closest("[data-hr-portee]"); if (!b) return; portee = b.dataset.hrPortee; f.querySelectorAll("[data-hr-portee]").forEach(y => y.setAttribute("aria-pressed", String(y === b))); });
+    setTimeout(() => f.querySelector("#hr-f").focus(), 30);
+    let envoiEnCours = false;
+    f.querySelector("#em-hr").onsubmit = async e => {
+      e.preventDefault(); if (envoiEnCours) return;
+      const lire = id => (f.querySelector(id).value || "").split(":").map(Number), [dh, dm] = lire("#hr-d"), [fh, fm] = lire("#hr-f");
+      if (!Number.isFinite(dh) || !Number.isFinite(fh)) return toast("Indique l'heure de début et de fin");
+      const dur = (fh * 60 + (fm || 0)) - (dh * 60 + (dm || 0));
+      if (dur < 15) return toast("La fin doit venir au moins 15 min après le début, le même jour");
+      if (dur > (x.nv ? 600 : 720)) return toast(x.nv ? "10 h au plus" : "12 h au plus");
+      const j = new Date(x.t), quand = new Date(j.getFullYear(), j.getMonth(), j.getDate(), dh, dm || 0).getTime(), fin = quand + dur * 6e4;
+      if (quand === x.t && fin === f0 && portee === "un") { fermer(); return toast("Rien n'a changé."); }
+      // Déjà mis dans reporting : la marque suit le RDV à sa nouvelle heure (il ne repart pas une 2e fois)
+      const cleApres = emCleEnvoi({ ...x, t: quand });
+      const envChange = l => envoi && cleApres !== cleAvant && !l.some(v => v.k === cleApres) ? l.concat({ ...envoi, k: cleApres, suite: cleAvant }) : l;
+      let ok;
+      envoiEnCours = true;
+      if (x.nv) {   // pas encore sur le téléphone : on change sa demande
+        const d0 = new Date(x.nv.quand), nq = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), dh, dm || 0).getTime();
+        ok = await emEcrireRec(l => l, l => l, l => l.map(n => n.id === x.nv.id ? { ...n, quand: nq, dur } : n), envChange);
+      } else {
+        const remplace = x.hmod && (x.hmod.occ ? x.hmod.occ === x.occ : x.hmod.ref === x.ref) ? x.hmod.id : null;   // 2e changement avant que le téléphone ait pris le 1er
+        const retour = !!(remplace && portee === "un" && x.hmod.portee !== "tous" && quand === x.avant.t && fin === x.avant.fin);   // remis comme au départ : la demande est simplement retirée
+        const h = { id: "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), occ: occ ? x.occ : null, ref: occ ? null : x.ref, portee: occ ? portee : "un",
+          de: x.avant ? x.avant.t : x.t, quand, dur, titre: sansEmoji(x.titre || "").slice(0, 120), cle: x.cle || null, le: Date.now() };
+        // RDV né d'un « RDV » du pilote (appt « pil » + id) : sa demande suit, pour que le téléphone ne la rejoue jamais à l'ancienne heure (et que « Hors prestation » le retrouve)
+        const nvLie = typeof x.ref === "string" && x.ref.startsWith("appt:pil") ? x.ref.slice(8) : null;
+        ok = await emEcrireRec(l => l, l => l, l => nvLie ? l.map(n => n.id === nvLie && !n.chaque_semaine ? { ...n, quand, dur: Math.min(600, dur) } : n) : l, envChange,
+          l => l.filter(y => y.id !== remplace).concat(retour ? [] : [h]));
+      }
+      envoiEnCours = false;
+      if (!ok) return toast("Pas enregistré : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
+      fermer();
+      toast(`Heure changée : ${hm(quand)}–${hm(fin)}${occ ? (portee === "tous" ? ", toutes les semaines" : ", ce jour-là seulement") : ""}.`
+        + (envoi ? " Déjà mis dans reporting : corrige la durée dans Chiffres › Déclarer mes heures." : " Pense intelligent fait le même changement à sa prochaine ouverture."));
+      if (apres) apres();
+    };
+  });
+}
 /* Arrêter une séance régulière à partir de ce jour : le téléphone met fin au créneau la veille (les séances d'avant restent).
    Une séance née d'un « Répéter chaque semaine » du pilote perd aussi sa demande. */
 async function emArreter(x) {
@@ -2828,6 +2922,7 @@ async function vueEmploi() {
       ag.elements.push({ t, fin: t + Number(n.dur) * 6e4, titre: n.titre || n.nom || "Rendez-vous", detail: "", sorte: "nouveau", jour_entier: false, cle: n.cle, nom: n.nom, nv: n, jour: ymd(new Date(t)), client: c, sections: emSectionsDe(c, { cle: n.cle }) });
     }
   });
+  emAppliquerHeures(ag, docRec);   // « Modifier l'heure » pas encore pris par le téléphone : la nouvelle heure tout de suite
   ag.elements.sort((a, b) => a.t - b.t);
   const ident = x => (x.client && x.client.id) || x.cle || norm(sansEmoji(x.titre || ""));
   const avantTri = ag.elements.slice();   // doublons compris : pour couper toutes les séances en double
@@ -2886,7 +2981,7 @@ async function vueEmploi() {
     tim.map(([x]) => x).concat(an).forEach(x => { const d = new Date(x.t), f = new Date(Math.max(x.t + 18e5, x.fin || x.t) - 1); h0 = Math.min(h0, d.getHours()); h1 = Math.max(h1, Math.min(24, f.getHours() + 1)); });
     const H = (h1 - h0) * PX, minDe = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
     const colonne = j => {
-      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => { const env = emEnvoiBouton(x, i, envois); return { t: x.t, f: Math.max(x.fin || x.t, x.t + (env ? 42e5 : 18e5)), x, i, env }; }).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
+      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => { const bas = [emHeureBouton(x, i), emEnvoiBouton(x, i, envois)].filter(Boolean); return { t: x.t, f: Math.max(x.fin || x.t, x.t + (bas.length > 1 ? 57e5 : bas.length ? 42e5 : 18e5)), x, i, env: bas.length ? `<span class="em-bas">${bas.join("")}</span>` : "", nb: bas.length }; }).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
       // couloirs : deux RDV qui se chevauchent se partagent la largeur
       let groupe = [], finG = 0; const groupes = [];
       l.forEach(o => { if (groupe.length && o.t >= finG) { groupes.push(groupe); groupe = []; finG = 0; } const fins = []; groupe.forEach(g => fins[g.c] = Math.max(fins[g.c] || 0, g.f)); let c = 0; while (fins[c] > o.t) c++; o.c = c; groupe.push(o); finG = Math.max(finG, o.f); });
@@ -2894,8 +2989,8 @@ async function vueEmploi() {
       groupes.forEach(g => { const n = Math.max(...g.map(o => o.c)) + 1; g.forEach(o => o.n = n); });
       const tuiles = l.map(o => { const top = (minDe(o.t) - h0 * 60) / 60 * PX, haut = Math.max(22, (o.f - o.t) / 36e5 * PX - 2), pos = `top:${top}px;height:${haut}px;left:calc(${o.c * 100 / o.n}% + 2px);width:calc(${100 / o.n}% - 4px)`;
         if (o.a) return `<div class="em-gev ann" style="${pos}" title="Annulé sur le téléphone"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`;
-        const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
-        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv ? " att" : ""}${o.env ? " a-env" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}</div>`; }).join("");
+        const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : x.hmod ? "nouvelle heure, en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
     return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
@@ -2910,8 +3005,9 @@ async function vueEmploi() {
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn primary" data-em-plus="1">${ico("plus")} RDV</button><button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. « Modifier l'heure » change le début et la fin d'un RDV, même passé, ici et sur le téléphone. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
     ${emLegende()}
+    ${emHeuresPb(ag, docRec).map(({ h, pb }) => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Heure pas changée sur le téléphone : ${esc(h.titre || "")}, ${esc(new Date(h.de).toLocaleDateString("fr-FR"))} à ${esc(hm(h.quand))}, ${esc(pb)}</span><button class="btn flat" data-em-hret="${esc(h.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
@@ -2931,6 +3027,8 @@ async function vueEmploi() {
       return;
     }
     if (b.dataset.emEnvoi !== undefined) { const x = ag.elements[Number(b.dataset.emEnvoi)]; if (x) { b.disabled = true; return emEnvoyer(x, () => { if (onglet === "emploi") afficher("emploi"); }); } return; }
+    if (b.dataset.emHeure !== undefined) { const x = ag.elements[Number(b.dataset.emHeure)]; if (x && emHeureModifiable(x)) return emModifierHeure(x, () => { if (onglet === "emploi") afficher("emploi"); }); return; }
+    if (b.dataset.emHret) return emRetirerHeure(b.dataset.emHret, () => afficher("emploi"));
     if (b.dataset.emPlus) { const d = new Date(); return emNouveau(enSemaine ? (cestMaintenant ? aujourdhui : ymd(emSemaine)) : emJour, Math.min(23 * 60, (d.getHours() + 1) * 60)); }
     if (b.dataset.emNvret) return emRetirerNouveau(b.dataset.emNvret);
     if (b.dataset.emCouper !== undefined) { const x = ag.elements[Number(b.dataset.emCouper)]; if (x) return emCouper(x); }
@@ -2950,7 +3048,7 @@ async function vueEmploi() {
 function emAujourdhuiHtml(ag, envois = []) {
   if (!ag) return "";
   const auj = ymd(new Date()), el = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.jour === auj), an = ag.annules.filter(a => a.jour === auj);
-  const blocs = el.map(([x, i]) => [x.t, `<div class="em-l ${emClasse(x)}"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))} <span class="muted small">· ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" && emSection(x) !== "TACHE" ? " · " + esc(EM_SORTES[x.sorte]) : ""}</span></span>${emEnvoiBouton(x, i, envois)}</div>`])
+  const blocs = el.map(([x, i]) => [x.t, `<div class="em-l ${emClasse(x)}"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))} <span class="muted small">· ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" && emSection(x) !== "TACHE" ? " · " + esc(EM_SORTES[x.sorte]) : ""}${x.hmod ? " · nouvelle heure, en attente du téléphone" : ""}</span></span>${emHeureBouton(x, i)}${emEnvoiBouton(x, i, envois)}</div>`])
     .concat(an.map(a => [a.t, `<div class="em-l em-annule"><b>${esc(hm(a.t))}</b><span>${ico("croix")} Presta annulée · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
     .sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
   return `<section class="card em-jour" aria-label="Emploi du temps d'aujourd'hui"><h2>${ico("agenda")} Emploi du temps d'aujourd'hui</h2>
@@ -3099,7 +3197,8 @@ async function vueReporting() {
       <div class="row" style="gap:14px;margin-top:6px">${ACTIVITES_PASSAGE.map(a => `<label class="row" style="gap:5px;cursor:pointer"><input type="radio" name="act-${l.cle}" data-rp-choix value="${a}" ${(l.activite || "Ménage") === a ? "checked" : ""}>${a}</label>`).join("")}</div>
       <label class="f">Remarque (facultatif)<input name="note" type="text" value="${esc(l.note || "")}"></label></div>`;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Reporting</h1>
-      <select id="rp-qui" aria-label="Intervenant" style="max-width:260px">${gens.map(p => `<option value="${p.id}" ${p.id === rpQui ? "selected" : ""}>${esc(nomPers(p))}${p.actif ? "" : " (accès coupé)"}</option>`).join("")}</select></div>
+      <span class="row"><select id="rp-qui" aria-label="Intervenant" style="max-width:260px">${gens.map(p => `<option value="${p.id}" ${p.id === rpQui ? "selected" : ""}>${esc(nomPers(p))}${p.actif ? "" : " (accès coupé)"}</option>`).join("")}</select>
+        <button class="btn" id="rp-fiche" title="Ouvre sa fiche avec son bénéfice du mois affiché ci-dessous">${ico("personne")} Intervenant</button></span></div>
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Saisir à sa place</h2>
       ${clients.length ? `<label class="f" for="rp-texte">Ce qu'il a fait</label>
       <textarea id="rp-texte" rows="3" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier"></textarea>
@@ -3122,6 +3221,7 @@ async function vueReporting() {
         <span class="row" style="gap:4px;margin-top:3px"><select data-rp-act="${p.id}" aria-label="Service" title="Service écrit dans son rapport (Type de service)" style="width:auto;padding:2px 6px;font-size:13px">${ACTIVITES_PASSAGE.map(a => `<option ${a === (p.activite || "Ménage") ? "selected" : ""}>${a}</option>`).join("")}</select>${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans son rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></span>
         <b style="flex:none">${p.depart ? heures(minutes(p)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</section>`);
   el.querySelector("#rp-qui").onchange = e => { rpQui = e.target.value; afficher("reporting"); };
+  el.querySelector("#rp-fiche").onclick = () => { bnMois[rpQui] = rpMois; pliOuvert.benefice = true; ficheIntervenante(rpQui); };   // bénéfice du mois affiché ici
   el.querySelector("#rp-prec").onclick = () => { rpMois = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); afficher("reporting"); };
   el.querySelector("#rp-suiv").onclick = () => { rpMois = m1; afficher("reporting"); };
   if (el.querySelector("#rp-verifier")) el.querySelector("#rp-verifier").onclick = () => {
@@ -3590,10 +3690,11 @@ async function archiveTaches() {
 /* ===================== Intervenantes ===================== */
 async function vueIntervenantes() {
   await chargerBase();
-  const gens = cacheProfils.filter(p => p.role === "intervenante");
-  const [docs, pieces, comptes, codes] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true)),
+  const tous = cacheProfils.filter(p => p.role === "intervenante"), gens = tous.filter(p => !p.archive_le), archives = tous.filter(p => p.archive_le).sort((a, b) => nomPers(a).localeCompare(nomPers(b), "fr"));
+  const [docs, pieces, comptes, codes, retraits] = await Promise.all([q(sb.from("documents").select("intervenante_id,piece_id,etat")), q(sb.from("pieces_demandees").select("*").eq("actif", true)),
     sb.from("comptes_a_creer").select("*").in("etat", ["a_faire", "erreur", "prepare"]).order("cree_le").then(r => r.data || []),
-    sb.from("codes_provisoires").select("*").then(r => r.data || [])]);
+    sb.from("codes_provisoires").select("*").then(r => r.data || []),
+    sb.from("comptes_a_retirer").select("*").neq("etat", "fait").then(r => r.data || [])]);   // SQL 51 pas encore lancé : liste vide
   const enAttente = gens.filter(p => p.actif && p.mdp_provisoire && codes.some(c => c.profil_id === p.id));
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Presta</h1>
       <span class="row"><button class="btn primary" id="nv-presta">${ico("plus")} Nouveau presta</button>
@@ -3611,9 +3712,12 @@ async function vueIntervenantes() {
       ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
       <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>
-      ${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}</div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>`);
+      ${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : `<button class="btn flat" data-archiver-presta="${p.id}" title="Il quitte la liste de l'équipe et son compte est bloqué. Tu peux le sortir des archives.">${ico("archive")} Archiver</button>`}</div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>
+    ${archives.length ? archivesPrestaHtml(archives, retraits) : ""}`);
+  el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
   el.onclick = async e => {
     const g = e.target.closest("[data-gel]"); if (g) return basculerGel(cacheProfils.find(x => x.id === g.dataset.gel), afficher);
+    const ra = e.target.closest("[data-archiver-presta],[data-sortir-presta],[data-supprimer-presta],[data-retrait-reessai]"); if (ra) return actionArchivePresta(ra, tous, retraits);
     const b = e.target.closest("[data-p]"); if (b) return ficheIntervenante(b.dataset.p);
     if (e.target.closest("#nv-presta")) return nouveauPresta();
     const s = e.target.closest("[data-sms]");
@@ -3626,6 +3730,52 @@ async function vueIntervenantes() {
     if (x && x.hasAttribute("data-demander") && !confirm("Retirer cette fiche préparée ? Rien n'a été envoyé à cette personne.")) return;
     if (x) { await maj(sb.from("comptes_a_creer").delete().eq("id", x.dataset.abandon)); afficher(); }
   };
+}
+/* Archivés (SQL 51) : seul le gérant peut archiver, sortir des archives ou supprimer, et seulement un compte de presta.
+   Archiver : accès déjà coupé ; il quitte l'équipe tout de suite, le Pont photos bloque son compte de connexion dans les 5 minutes.
+   Supprimer définitivement : seulement un archivé ; le pont efface son compte, sa fiche, ses passages, ses papiers et ses messages de la base.
+   Son dossier Drive, sa feuille d'heures et les lignes Excel ne bougent pas. */
+const RETRAIT_EN_COURS = { archiver: "compte bloqué dans 5 min", sortir: "sortie dans 5 min", supprimer: "suppression dans 5 min" };
+function archivesPrestaHtml(archives, retraits) {
+  const ouvert = pliOuvert.archives || retraits.some(r => r.etat === "erreur");
+  return `<details class="card pli" data-pli="archives" style="margin-top:14px" ${ouvert ? "open" : ""}><summary>${ico("archive")} Archivés <span class="tag">${archives.length}</span></summary>
+    ${archives.map(p => { const r = retraits.find(x => x.profil_id === p.id), att = r && r.etat === "a_faire", err = r && r.etat === "erreur";
+      return `<div class="ligne"><span style="min-width:0"><b>${esc(nomPers(p))}</b> <span class="muted small">archivé le ${jour(p.archive_le)}</span>
+        ${att ? `<span class="tag">${RETRAIT_EN_COURS[r.action] || "en cours"}</span>` : ""}${err ? `<br><span class="err small">${esc(r.message || "Le pont n'a pas pu le faire")}</span>` : ""}</span>
+      <span class="row">${err ? `<button class="btn" data-retrait-reessai="${r.id}">Réessayer</button>` : ""}
+        <button class="btn flat" data-p="${p.id}">Voir sa fiche</button>
+        ${att && r.action !== "archiver" ? "" : `<button class="btn flat" data-sortir-presta="${p.id}" title="Il revient dans l'équipe, accès toujours coupé">${ico("retour")} Sortir des archives</button>
+        <button class="btn stop" data-supprimer-presta="${p.id}">${ico("corbeille")} Supprimer définitivement</button>`}</span></div>`; }).join("")}
+    <p class="muted small" style="margin:8px 0 0">Toi seul peux archiver ou supprimer un compte. Supprimer efface son compte et ce qu'il a dans l'appli ; son dossier Drive, sa feuille d'heures et l'Excel restent.</p></details>`;
+}
+async function demandeRetrait(p, action, ok) {
+  const { error } = await sb.from("comptes_a_retirer").insert({ profil_id: p.id, action });
+  if (error) return toast(error.code === "42P01" || error.code === "PGRST205" ? "La base n'est pas encore prête (SQL 51 à lancer)" : error.code === "23505" ? "Une demande est déjà en cours pour ce compte" : error.message);
+  toast(ok); await chargerBase(); afficher();
+}
+async function actionArchivePresta(b, tous, retraits) {
+  const qui = id => tous.find(x => x.id === id);
+  const leverErreur = async p => { const r = retraits.find(x => x.profil_id === p.id && x.etat === "erreur"); if (r) await maj(sb.from("comptes_a_retirer").delete().eq("id", r.id)); };   // la demande ratée laisse la place
+  if (b.dataset.retraitReessai) { await maj(sb.from("comptes_a_retirer").update({ etat: "a_faire" }).eq("id", b.dataset.retraitReessai)); toast("Redemandé : le pont réessaie dans 5 minutes"); return afficher(); }
+  if (b.dataset.archiverPresta) {
+    const p = qui(b.dataset.archiverPresta); if (!p || p.actif) return toast("Coupe d'abord son accès à l'appli, dans sa fiche");
+    if (!confirm(`Archiver ${nomPers(p)} ?\n\nIl quitte la liste de l'équipe et son compte est bloqué : il ne peut plus se connecter.\nRien n'est effacé : tu peux le sortir des archives.`)) return;
+    return demandeRetrait(p, "archiver", "Archivé : son compte est bloqué dans 5 minutes");
+  }
+  if (b.dataset.sortirPresta) {
+    const p = qui(b.dataset.sortirPresta); if (!p) return;
+    if (!confirm(`Sortir ${nomPers(p)} des archives ?\n\nSon compte est débloqué et il revient dans l'équipe, avec l'accès à l'appli toujours coupé. Tu le rouvres dans sa fiche si besoin.`)) return;
+    await leverErreur(p);
+    return demandeRetrait(p, "sortir", "Sortie demandée : il revient dans l'équipe dans 5 minutes");
+  }
+  if (b.dataset.supprimerPresta) {
+    const p = qui(b.dataset.supprimerPresta); if (!p) return;
+    if (!confirm(`Supprimer définitivement le compte de ${nomPers(p)} ?\n\nSont effacés pour toujours : son compte, sa fiche, ses passages, ses papiers envoyés, ses messages et ses tarifs dans l'appli.\nRestent : son dossier Drive, sa feuille d'heures et les lignes de l'Excel.\n\nCela ne peut pas être annulé.`)) return;
+    const attendu = p.nom || nomPers(p), tape = prompt(`Pour confirmer, écris son nom de famille : ${attendu}`); if (tape === null) return;
+    if (norm(tape) !== norm(attendu)) return toast("Nom différent : rien n'est supprimé");
+    await leverErreur(p);
+    return demandeRetrait(p, "supprimer", "Suppression demandée : faite par le pont dans 5 minutes");
+  }
 }
 /* Vert dès qu'il a remplacé le code d'accès par son mot de passe */
 const pastilleCompte = p => p.actif && !p.mdp_provisoire ? `<span class="pastille" role="img" aria-label="Compte créé" title="Compte créé"></span>` : "";
@@ -3742,8 +3892,8 @@ async function ficheIntervenante(id) {
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
         ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
-        <label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
-        <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici.</p>
+        ${p.archive_le ? `<p style="margin-top:6px"><span class="tag off">${ico("archive")} archivé le ${jour(p.archive_le)}</span></p><p class="muted small" style="margin-top:4px">Accès coupé et compte bloqué. Pour le rouvrir : Presta › Archivés › Sortir des archives.</p>` : `<label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
+        <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici. Ensuite, Archiver sur sa ligne le range dans les archivés.</p>`}
         <div class="row" style="margin-top:10px"><button class="btn primary" id="enr">Enregistrer</button>
           <button class="btn flat" id="nv-code" title="Lui envoie par mail un nouveau code : il devra rechoisir son mot de passe">${ico("mail")} Nouveau code d'accès</button></div>
         <h3>Liens</h3>
@@ -3755,6 +3905,7 @@ async function ficheIntervenante(id) {
         ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
         ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par lui.</p>`}</section>
     </div>
+    <details class="card pli" data-pli="benefice" ${pliOuvert.benefice !== false ? "open" : ""}><summary>${ico("euro")} Bénéfice du mois <span class="tag">toi seul</span></summary><div id="bnp"></div></details>
     <section class="card"><h3 style="margin-top:0">Ses passages ${aide("Comme sa feuille d'heures, mais relié à son appli : ce que tu modifies ici change tout de suite dans son appli (marqué « corrigé par OIKOS »), et le pont réécrit la même ligne de sa feuille d'heures dans les 5 minutes.")}</h3>
       <div id="pp"></div></section>
     <details class="card pli" data-pli="papiers" ${pliOuvert.papiers ? "open" : ""}><summary>${etatPap.manque ? `<span class="pli-alerte">${ico("alerte")}</span>` : `<span class="pli-ok">${ico("ok")}</span>`}Papiers
@@ -3784,6 +3935,7 @@ async function ficheIntervenante(id) {
     el.style.maxWidth = "1120px";   // place pour le tableau des passages
     passagesPresta(el.querySelector("#pp"), p);
     tarifsDuPresta(el.querySelector("#tfp"), p).catch(x => { el.querySelector("#tfp").innerHTML = `<p class="err">${esc(x.message || x)}</p>`; });
+    beneficePresta(el.querySelector("#bnp"), p, attrib).catch(x => { el.querySelector("#bnp").innerHTML = `<p class="err">${esc(x.message || x)}</p>`; });
     el.addEventListener("change", async e => {
       const s = e.target.closest("[data-zone-ligne]"); if (!s) return;
       const a = attrib.find(x => x.id === s.dataset.zoneLigne); if (!a) return;
@@ -3792,7 +3944,7 @@ async function ficheIntervenante(id) {
     if (el.querySelector("#fm")) facturesDuPresta(el.querySelector("#fm"), p, factures, docs, recharger);
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
-      await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked,
+      await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, ...(el.querySelector("#ac") ? { actif: el.querySelector("#ac").checked } : {}),
         ...(el.querySelector("#fpo") ? { facture_par_oikos: el.querySelector("#fpo").checked } : {}) }).eq("id", id));
       toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
     el.querySelector("#nv-code").onclick = async () => {
@@ -3827,6 +3979,52 @@ async function ficheIntervenante(id) {
         await maj(sb.from("attributions").update({ fin: hier }).eq("id", b.dataset.retire)); toast("Client retiré"); recharger(); }
     };
   });
+}
+
+/* Bénéfice du mois d'un presta (gérant seul) : chaque passage fini du mois choisi, au prix de l'heure facturé au client
+   (Clients › Prestataires › « Ce que rapporte ce client », clients.prevision) moins son tarif à l'heure du jour du passage
+   (tarifs_presta, zone de la ligne client-presta ce jour-là, comme « Déjà fait »). Rien n'est écrit ; l'appli des presta ne lit rien de cela.
+   OIKOS et Benjamin enseignement sont comptés à part (Cours = Benjamin enseignement), sans total commun. */
+const bnMois = {};   // mois affiché, par presta
+async function beneficePresta(boite, p, attrib) {
+  const id = p.id, auj = new Date();
+  const m0 = bnMois[id] || new Date(auj.getFullYear(), auj.getMonth(), 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
+  const nav = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="btn" data-bn="-1" aria-label="Mois précédent">‹</button>
+      <b style="text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
+      <button class="btn" data-bn="1" aria-label="Mois suivant" ${m1 > auj ? "disabled" : ""}>›</button></div>`;
+  boite.onclick = e => { const b = e.target.closest("[data-bn]"); if (!b) return; e.stopPropagation();
+    bnMois[id] = new Date(m0.getFullYear(), m0.getMonth() + +b.dataset.bn, 1); beneficePresta(boite, p, attrib).catch(x => { boite.innerHTML = `<p class="err">${esc(x.message || x)}</p>`; }); };
+  boite.innerHTML = nav + `<p class="muted small">Calcul…</p>`;
+  const tarifs = await chargerTarifs();
+  if (tarifs === false) { boite.innerHTML = nav + `<p class="muted small" style="margin:0">Il faut d'abord lancer le SQL 50 dans Supabase (tarifs à l'heure des presta).</p>`; return; }
+  const pts = await q(sb.from("pointages").select("id,client_id,arrivee,depart,activite").eq("intervenante_id", id).gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).not("depart", "is", null).order("arrivee"));
+  const enCours = (a, date) => (!a.debut || a.debut <= date) && (!a.fin || a.fin >= date);
+  const ligneDu = (cid, date) => { const l = (attrib || []).filter(a => a.client_id === cid); return l.find(a => enCours(a, date) && !ligneDeMission(a)) || l.find(a => enCours(a, date)) || null; };
+  const groupes = { OIKOS: {}, BE: {} };
+  pts.forEach(x => {
+    const date = ymd(new Date(x.arrivee)), c = cacheClients.find(k => k.id === x.client_id) || {}, a = ligneDu(x.client_id, date);
+    const act = x.activite || (a && a.activite) || activitePrincipale(activitesClient(c));
+    const t = tarifAu(tarifs, id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
+    const h = (new Date(x.depart) - new Date(x.arrivee)) / 36e5; if (!(h > 0)) return;
+    const g = groupes[act === "Cours" ? "BE" : "OIKOS"], cle = x.client_id + "|" + act;
+    const r = g[cle] || (g[cle] = { client: x.client_id, act, h: 0, hc: 0, fact: 0, paye: 0, sansTarif: 0, sansPrix: 0, pourquoi: "" });
+    r.h += h;
+    if (!(t.taux > 0)) { r.sansTarif += h; r.pourquoi = t.pourquoi || "pas de tarif"; }
+    if (!prix) r.sansPrix += h;
+    if (t.taux > 0 && prix) { r.hc += h; r.fact += h * prix; r.paye += h * t.taux; }
+  });
+  const ligneHtml = r => `<tr><td>${esc(nomClient(r.client))} <span class="muted small">· ${esc(r.act)}</span>
+      ${r.sansTarif ? `<br><span class="tag warn">${heures(r.sansTarif * 60)} sans tarif : ${esc(r.pourquoi)}</span>` : ""}${r.sansPrix ? `<br><span class="tag warn">${heures(r.sansPrix * 60)} sans prix client</span>` : ""}</td>
+      <td class="n">${heures(r.h * 60)}</td><td class="n">${r.hc ? suEuros(r.fact) : "—"}</td><td class="n">${r.hc ? suEuros(r.paye) : "—"}</td><td class="n"><b>${r.hc ? suEuros(r.fact - r.paye) : "—"}</b></td></tr>`;
+  const bloc = (k, titre) => {
+    const rs = Object.values(groupes[k]).sort((x, y) => norm(nomClient(x.client)) < norm(nomClient(y.client)) ? -1 : 1); if (!rs.length) return "";
+    const s = f => rs.reduce((t, r) => t + r[f], 0), manque = rs.some(r => r.sansTarif || r.sansPrix);
+    return `<h3 style="margin:10px 0 4px">${titre}</h3><div class="su-table"><table><thead><tr><th>Client</th><th class="n">Heures</th><th class="n">Facturé</th><th class="n">Payé au presta</th><th class="n">Bénéfice</th></tr></thead>
+      <tbody>${rs.map(ligneHtml).join("")}<tr class="total"><td>Total ${titre}${manque ? ` <span class="tag warn">${ico("alerte")} incomplet</span>` : ""}</td><td class="n">${heures(s("h") * 60)}</td><td class="n">${suEuros(s("fact"))}</td><td class="n">${suEuros(s("paye"))}</td><td class="n"><b>${suEuros(s("fact") - s("paye"))}</b></td></tr></tbody></table></div>`;
+  };
+  const corps = bloc("OIKOS", "OIKOS") + bloc("BE", "Benjamin enseignement");
+  boite.innerHTML = nav + (corps || `<p class="muted small" style="margin:0">Aucun passage terminé ce mois-ci.</p>`)
+    + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`;
 }
 
 /* Factures du mois (SQL 49) : ce que le presta envoie depuis son appli, comparé à ses heures déclarées dans l'appli

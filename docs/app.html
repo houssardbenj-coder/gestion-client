@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=31;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=32;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1419,7 +1419,7 @@ async function agendaPourPilote(){
   const restants=items.filter(it=>{const m=it.kind==="cal"&&!it.allDay&&/^RDV – (.+)$/.exec(it.title||"");if(!m)return true;
     if(!nomsAppli.has(it.t+"|"+fold(m[1])))orphelins.push({t:it.t,fin:it.end,titre:m[1],cle:null,nom:m[1].replace(/\s*\(.*\)\s*$/,""),ent:""});
     return false});   // même RDV encore dans l'appli : simple doublon de l'agenda, on ne l'envoie pas deux fois
-  const elements=restants.map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:it.ref.startsWith("occ:")?it.ref.slice(4):null}});
+  const elements=restants.map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:it.ref.startsWith("occ:")?it.ref.slice(4):null,ref:/^(appt|lead|proj):/.test(it.ref)?it.ref:null}});   // ref : le pilote peut demander « Modifier l'heure » de ce RDV précis
   // Séances annulées cette fois (« Annulée cette fois ») : à part, le pilote les montre en rouge « rdv annulé » à leur jour
   const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}})
     .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}}))
@@ -1481,7 +1481,47 @@ async function recurrentsDuPilote(jeton,s){
       faits.add("rdv:"+n.id);etats[n.id]="fait";ajoutes++;
     }catch(e){etats[n.id]="echec"}
   }
-  s.recFaits=[...faits].slice(-300);piloteNote(s);
+  // « Modifier l'heure » demandé dans le pilote : même RDV, même jour, nouvelles heures de début et de fin (même passé).
+  // Séance régulière : « un » = ce jour-là seulement (un RDV ponctuel la remplace, comme « Déplacer cette fois ») ;
+  // « tous » = toutes les semaines à partir de ce jour (l'ancien créneau s'arrête la veille, comme « Changer l'horaire »).
+  // Changé ici entre-temps : le téléphone a raison, rien n'est touché (deja / introuvable, le pilote le dit).
+  const heures=c0&&Array.isArray(c0.heures)?c0.heures.slice(-200):[];
+  for(const h of heures){
+    if(!h||typeof h.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(h.id))continue;
+    if(faits.has("heure:"+h.id)){etats[h.id]="fait";continue}
+    const de=Number(h.de),quand=Number(h.quand),dur=Math.round(Number(h.dur));
+    if(!Number.isFinite(de)||!Number.isFinite(quand)||!(dur>=15&&dur<=720)||ymd(new Date(de))!==ymd(new Date(quand))){etats[h.id]="illisible";continue}
+    const sid="pil"+h.id,dq=new Date(quand),time=pad(dq.getHours())+":"+pad(dq.getMinutes());
+    try{
+      if(typeof h.occ==="string"&&h.occ.split("_").length===3){
+        const c=customers.find(x=>x.id===h.occ.split("_")[0]);
+        if(c&&(h.portee==="tous"?slotsOf(c).some(x=>x.id===sid):appts.some(x=>x.id===sid))){faits.add("heure:"+h.id);etats[h.id]="fait";continue}   // déjà fait (noté trop tard)
+        const o=occByKey(h.occ);
+        if(!o||o.why){etats[h.id]="introuvable";continue}   // séance changée, déplacée ou annulée ici entre-temps
+        if(h.portee==="tous"){
+          const until=ymd(new Date(addDays(dayTs(o.day),-1)));
+          const slots=slotsOf(o.c).map(x=>x.id===o.s.id?{...x,until}:x).filter(x=>!(x.from&&x.until&&x.until<x.from)).concat({...o.s,id:sid,time,dur,from:o.day,until:o.s.until||""});
+          await db.doc("customers/"+o.c.id).set(custBody({...o.c,slots}));o.c.slots=slots;
+        }else{
+          const a={id:sid,customerId:o.c.id,when:quand,dur,note:"Heure changée depuis OIKOS Pilotage (au lieu du "+fmtDT(o.t)+")",createdAt:Date.now()};
+          await db.doc("appts/"+a.id).set(apptBody(a));if(!appts.some(x=>x.id===a.id))appts.push(a);
+          const sk={custId:o.c.id,slotId:o.s.id,day:o.day,reason:"deplace",apptId:a.id,createdAt:Date.now()};
+          await db.doc("skips/"+o.key).set(sk);skips[o.key]=sk;
+          if(NATIVE&&agendaState==="granted"&&o.c.slotCal!==false&&quand>Date.now())setTimeout(()=>{const x=appts.find(y=>y.id===a.id);if(x)pushToAgenda("appts",x)},300);
+        }
+      }else if(typeof h.ref==="string"&&/^(appt|lead|proj):/.test(h.ref)){
+        const it=refItem(h.ref);
+        if(!it){etats[h.id]="introuvable";continue}
+        if(it.t===quand&&it.dur===dur){faits.add("heure:"+h.id);etats[h.id]="fait";continue}
+        if(it.t!==de){etats[h.id]="deja";continue}
+        const x=it.x;if(it.kind==="projects"){x.rdv=quand;x.rdvDur=dur}else{x.when=quand;x.dur=dur}
+        await db.doc(it.kind+"/"+x.id).set(it.kind==="appts"?apptBody(x):it.kind==="leads"?leadBody(x):projBody(x));
+        if(NATIVE&&x.calId)pushToAgenda(it.kind,x);   // l'événement Google suit
+      }else{etats[h.id]="illisible";continue}
+      faits.add("heure:"+h.id);etats[h.id]="fait";ajoutes++;
+    }catch(e){etats[h.id]="echec"}
+  }
+  s.recFaits=[...faits].slice(-600);piloteNote(s);   // 600 : les changements d'heure s'ajoutent aux autres demandes, aucune ne doit être rejouée
   return {etats,ajoutes};
 }
 let agendaAttente=null;
