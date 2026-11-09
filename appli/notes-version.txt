@@ -1,1 +1,1 @@
-Modifier l'heure d'un RDV depuis le pilote OIKOS (ce jour-là ou toutes les semaines).
+Rétablir depuis le pilote OIKOS un RDV annulé.

@@ -1149,8 +1149,8 @@ async function agendaPourPilote(){
     return false});   // même RDV encore dans l'appli : simple doublon de l'agenda, on ne l'envoie pas deux fois
   const elements=restants.map(it=>{const p=agendaPersonne(it)||{};return {t:it.t,fin:it.end,titre:it.title,detail:it.sub||"",sorte:it.kind,jour_entier:!!it.allDay,cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:it.ref.startsWith("occ:")?it.ref.slice(4):null,ref:/^(appt|lead|proj):/.test(it.ref)?it.ref:null}});   // ref : le pilote peut demander « Modifier l'heure » de ce RDV précis
   // Séances annulées cette fois (« Annulée cette fois ») : à part, le pilote les montre en rouge « rdv annulé » à leur jour
-  const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}})
-    .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||""}}))
+  const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",ref:skips[o.key]&&skips[o.key].reason!=="deplace"?"occ:"+o.key:null}})
+    .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",ref:"appt:"+x.id}}))
     .concat(orphelins);
   return {debut:a,fin:b,elements,annules};
 }
@@ -1248,6 +1248,28 @@ async function recurrentsDuPilote(jeton,s){
       }else{etats[h.id]="illisible";continue}
       faits.add("heure:"+h.id);etats[h.id]="fait";ajoutes++;
     }catch(e){etats[h.id]="echec"}
+  }
+  // « Rétablir ce RDV » demandé dans le pilote : comme « Rétablir cette séance » / « Rétablir ce RDV » ici.
+  // Déjà rétabli (ou plus annulé) : fait. Plus trouvé : introuvable, le pilote le dit.
+  const retablir=c0&&Array.isArray(c0.retablir)?c0.retablir.slice(-200):[];
+  for(const r of retablir){
+    if(!r||typeof r.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(r.id))continue;
+    if(faits.has("retablir:"+r.id)){etats[r.id]="fait";continue}
+    const ref=typeof r.ref==="string"?r.ref:"";
+    try{
+      if(ref.startsWith("occ:")){const key=ref.slice(4);
+        if(key.split("_").length!==3){etats[r.id]="illisible";continue}
+        const k=skips[key];
+        if(k&&k.reason!=="deplace"){await unskip(key);delete skips[key];ajoutes++}
+        else if(!customers.some(c=>c.id===key.split("_")[0])){etats[r.id]="introuvable";continue}}
+      else if(ref.startsWith("appt:")){const x=appts.find(a=>a.id===ref.slice(5));
+        if(!x){etats[r.id]="introuvable";continue}
+        if(x.cancelled){const y={...x,cancelled:false,done:false,doneAt:null};
+          await db.doc("appts/"+y.id).set(apptBody(y));Object.assign(x,y);ajoutes++;
+          if(NATIVE&&agendaState==="granted"&&x.when>Date.now())setTimeout(()=>pushToAgenda("appts",x),300)}}
+      else{etats[r.id]="illisible";continue}
+      faits.add("retablir:"+r.id);etats[r.id]="fait";
+    }catch(e){etats[r.id]="echec"}
   }
   s.recFaits=[...faits].slice(-600);piloteNote(s);   // 600 : les changements d'heure s'ajoutent aux autres demandes, aucune ne doit être rejouée
   return {etats,ajoutes};
