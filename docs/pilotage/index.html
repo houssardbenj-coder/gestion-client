@@ -165,7 +165,8 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:default}.em-gev.ann s{opacity:.85}
 .em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
 .em-gev.em-mod{cursor:grab;user-select:none}.em-gev.glisse{cursor:grabbing;z-index:5;opacity:.85;box-shadow:0 4px 14px rgb(0 0 0 / .25);outline:2px solid var(--em,var(--accent))}
-.em-poignee{position:absolute;left:0;right:0;height:9px;cursor:ns-resize;touch-action:none}.em-poignee::after{content:"";position:absolute;left:50%;top:3px;width:22px;margin-left:-11px;height:3px;border-radius:2px;background:currentColor;opacity:.35}.em-gev:hover .em-poignee::after{opacity:.7}
+.em-gev.em-mod{padding-bottom:12px}.em-gev.em-mod.a-env{padding-bottom:28px}.em-gev.em-mod.a-env2{padding-bottom:46px}.em-gev.em-mod .em-bas{bottom:10px}
+.em-poignee{position:absolute;left:0;right:0;bottom:0;height:10px;cursor:ns-resize;touch-action:none;z-index:2}.em-poignee::after{content:"";position:absolute;left:50%;top:4px;width:22px;margin-left:-11px;height:3px;border-radius:2px;background:currentColor;opacity:.35}.em-gev:hover .em-poignee::after{opacity:.7}
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .em-tg .ico{width:13px;height:13px}.em-tg[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .em-maint{position:absolute;left:0;right:0;height:2px;background:var(--stop);z-index:2;pointer-events:none}
@@ -2822,6 +2823,7 @@ async function emModifierHeure(x, apres, choix) {
       <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>
       <p style="margin:0 0 8px">Maintenant : <b>${esc(hm(x.t))}–${esc(hm(f0))}</b>${x.avant ? ` <span class="muted small">(au départ ${esc(hm(x.avant.t))}–${esc(hm(x.avant.fin > x.avant.t ? x.avant.fin : x.avant.t + 36e5))})</span>` : ""}</p>
       <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(q1)}"></label>
+        <label class="f">Durée<select id="hr-dur">${(() => { const d0 = Math.round((f1 - q1) / 6e4), l = Array.from({ length: 48 }, (_, k) => (k + 1) * 15); if (!l.includes(d0)) l.push(d0); return l.sort((a, b) => a - b).map(m => `<option value="${m}"${m === d0 ? " selected" : ""}>${m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + pad2(m % 60) : "") : m + " min"}</option>`).join(""); })()}</select></label>
         <label class="f">Fin<input type="time" id="hr-f" step="300" required value="${emHeureTxt(f1)}"></label></div>
       ${choix ? `<p style="margin:0 0 8px"><b>Nouvelle heure : ${esc(hm(q1))}–${esc(hm(f1))}</b> <span class="muted small">(${Math.round((f1 - q1) / 6e4)} min)</span></p>` : ""}
       ${occ ? `<p class="muted small" style="margin:4px 0">Ce RDV revient chaque semaine :</p><div class="seg" style="margin-bottom:8px"><button type="button" class="chip" data-hr-portee="un" aria-pressed="true">Seulement ce jour-là</button><button type="button" class="chip" data-hr-portee="tous" aria-pressed="false">Toutes les semaines</button></div>` : ""}
@@ -2831,6 +2833,13 @@ async function emModifierHeure(x, apres, choix) {
       <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button>${x.client ? `<button class="btn flat" type="button" data-hr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}</div></form>`, (f, fermer) => {
     f.addEventListener("click", e => { if (e.target.closest("[data-hr-fiche]")) { fermer(); return ficheClient(x.client.id); } const b = e.target.closest("[data-hr-portee]"); if (!b) return; portee = b.dataset.hrPortee; f.querySelectorAll("[data-hr-portee]").forEach(y => y.setAttribute("aria-pressed", String(y === b))); });
     setTimeout(() => f.querySelector("#hr-f").focus(), 30);
+    // Début, durée et fin se suivent : changer le début ou la durée recalcule la fin, changer la fin recalcule la durée
+    const mins = id => { const [h, m] = (f.querySelector(id).value || "").split(":").map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : NaN; };
+    const hhmm = m => pad2(Math.floor(m / 60)) + ":" + pad2(m % 60), sel = f.querySelector("#hr-dur");
+    const mettreDuree = d => { if (![...sel.options].some(o => Number(o.value) === d)) sel.add(new Option(d >= 60 ? Math.floor(d / 60) + " h" + (d % 60 ? " " + pad2(d % 60) : "") : d + " min", d)); sel.value = String(d); };
+    const finDepuisDuree = () => { const d = mins("#hr-d"); if (Number.isFinite(d)) f.querySelector("#hr-f").value = hhmm(Math.min(23 * 60 + 59, d + Number(sel.value))); };
+    f.querySelector("#hr-d").addEventListener("change", finDepuisDuree); sel.addEventListener("change", finDepuisDuree);
+    f.querySelector("#hr-f").addEventListener("change", () => { const d = mins("#hr-f") - mins("#hr-d"); if (d >= 15) mettreDuree(d); });
     let envoiEnCours = false;
     f.querySelector("#em-hr").onsubmit = async e => {
       e.preventDefault(); if (envoiEnCours) return;
@@ -2872,6 +2881,21 @@ async function emModifierHeure(x, apres, choix) {
    maintenir le clic et glisser le déplace (par quarts d'heure, même jour), tirer sa poignée du bas change la fin.
    Au lâcher, la fenêtre s'ouvre déjà remplie : Enregistrer (et pour une séance : ce jour-là ou toutes les semaines). */
 let emGlisseLe = 0;
+/* RDV qu'on ne peut pas changer d'ici : on dit pourquoi au lieu de ne rien faire */
+function emPourquoiFixe(x) {
+  const pq = x.annule ? "Ce RDV est annulé."
+    : x.sorte === "cal" ? "Il vient de l'agenda Google du téléphone (pas de Pense intelligent) : change-le dans Google Agenda, puis ouvre Pense intelligent pour qu'il renvoie l'emploi du temps."
+    : x.sorte === "call" ? "C'est un « À rappeler » : son heure se change sur le téléphone."
+    : x.sorte === "task" ? "C'est une tâche : son heure se change sur le téléphone."
+    : x.sorte === "rdv" ? "Pense intelligent ne l'a pas encore envoyé avec son repère (il faut la version 32 du téléphone). Ouvre Pense intelligent sur le téléphone, vérifie qu'il est en version 32, attends quelques secondes puis clique sur Actualiser ici. Ensuite ce RDV se change même s'il est passé."
+    : x.sorte === "occ" ? "Cette séance n'a pas un repère lisible : ouvre Pense intelligent puis Actualiser."
+    : "Ce RDV se change sur le téléphone.";
+  fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre || ""))}</h2>
+    <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)} · ${esc(EM_SORTES[x.sorte] || "Agenda")}</p>
+    <p class="tag warn" style="display:block;white-space:normal;margin:0 0 10px">${ico("alerte")} L'heure ne peut pas être changée d'ici. ${esc(pq)}</p>
+    <div class="row">${x.client ? `<button class="btn primary" type="button" data-pq-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`,
+  (f, fermer) => { const b = f.querySelector("[data-pq-fiche]"); if (b) b.onclick = () => { fermer(); ficheClient(x.client.id); }; });
+}
 function emGlisser(el, ag, PX, apres) {
   el.onpointerdown = e => {   // #contenu sert à toutes les pages : une seule écoute, remplacée à chaque affichage
     if (e.button !== 0 || e.target.closest("button")) return;
@@ -2880,16 +2904,16 @@ function emGlisser(el, ag, PX, apres) {
     e.preventDefault();
     const etire = !!e.target.closest(".em-poignee"), f0 = x.fin > x.t ? x.fin : x.t + 36e5, Q = 9e5, y0 = e.clientY;
     const j = new Date(x.t), deb = new Date(j.getFullYear(), j.getMonth(), j.getDate()).getTime(), finJ = deb + 864e5 - Q;
-    const lab = tu.querySelector("b"), lab0 = lab ? lab.innerHTML : "", top0 = tu.style.top, haut0 = tu.style.height, po = tu.querySelector(".em-poignee"), poTop0 = po ? po.style.top : "";
+    const lab = tu.querySelector("b"), lab0 = lab ? lab.innerHTML : "", top0 = tu.style.top, haut0 = tu.style.height;
     let bouge = false, q = x.t, f = f0;
-    const remettre = () => { tu.style.top = top0; tu.style.height = haut0; if (po) po.style.top = poTop0; if (lab) lab.innerHTML = lab0; tu.classList.remove("glisse"); };
+    const remettre = () => { tu.style.top = top0; tu.style.height = haut0; if (lab) lab.innerHTML = lab0; tu.classList.remove("glisse"); };
     const bouger = ev => {
       const dy = ev.clientY - y0; if (!bouge && Math.abs(dy) < 5) return;
       if (!bouge) { bouge = true; tu.classList.add("glisse"); }
       const d = Math.round(dy / PX * 4) * Q;
       if (etire) { q = x.t; f = Math.min(finJ, Math.max(x.t + Q, f0 + d)); }
       else { q = x.t + d; f = f0 + d; if (q < deb) { f += deb - q; q = deb; } if (f > finJ) { q -= f - finJ; f = finJ; } }
-      if (etire) { const h = Math.max(22, (f - q) / 36e5 * PX - 2); tu.style.height = Math.max(h, parseFloat(haut0) || 0) + "px"; if (po) po.style.top = ((f - q) / 36e5 * PX - 7) + "px"; }
+      if (etire) tu.style.height = Math.max(22, (parseFloat(haut0) || 0) + (f - f0) / 36e5 * PX) + "px";   // la poignée reste en bas de la case
       else tu.style.top = (parseFloat(top0) + (q - x.t) / 36e5 * PX) + "px";
       if (lab) lab.textContent = `${hm(q)}–${hm(f)}`;
     };
@@ -3032,7 +3056,7 @@ async function vueEmploi() {
         if (o.a) return `<div class="em-gev ann" style="${pos}" title="Annulé sur le téléphone"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`;
         const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : x.hmod ? "nouvelle heure, en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
         const mod = emHeureModifiable(x), fv = x.fin > x.t ? x.fin : x.t + 36e5;
-        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" style="top:${Math.max(16, (fv - x.t) / 36e5 * PX - 7)}px" title="Tirer pour changer l'heure de fin"></span>` : ""}</div>`; }).join("");
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
     return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
@@ -3063,6 +3087,7 @@ async function vueEmploi() {
       if (o) { const x = ag.elements[Number(o.dataset.emOuvrir)]; if (!x) return;
         if (o.classList.contains("em-mod") && emHeureModifiable(x)) return emModifierHeure(x, () => { if (onglet === "emploi") afficher("emploi"); });
         if (x.nv) return fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre))}</h2><p>${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)}${x.nv.chaque_semaine ? ", chaque semaine" : ""}</p><p class="muted small">Pas encore pris par Pense intelligent : il arrive à sa prochaine ouverture.</p><div class="row"><button class="btn" data-nv-ret="1">${ico("croix")} Retirer ce RDV</button><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => { f.querySelector("[data-nv-ret]").onclick = () => { fermer(); emRetirerNouveau(x.nv.id); }; });
+        if (!x.jour_entier && x.sorte !== "todo") return emPourquoiFixe(x);
         if (x.client) return ficheClient(x.client.id);
         return toast(sansEmoji(x.titre) + " · " + emHeure(x) + (x.detail ? " · " + sansEmoji(x.detail) : "") + " — à changer sur le téléphone");
       }
