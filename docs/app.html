@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=33;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=34;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1527,7 +1527,8 @@ async function recurrentsDuPilote(jeton,s){
   for(const r of retablir){
     if(!r||typeof r.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(r.id))continue;
     if(faits.has("retablir:"+r.id)){etats[r.id]="fait";continue}
-    const ref=typeof r.ref==="string"?r.ref:"";
+    const ref=typeof r.ref==="string"&&r.ref?r.ref:piloteRefA(r,true);
+    if(!ref){if(piloteRefA(r,false)){faits.add("retablir:"+r.id);etats[r.id]="fait"}else etats[r.id]="introuvable";continue}   // plus annulé : déjà rétabli
     try{
       if(ref.startsWith("occ:")){const key=ref.slice(4);
         if(key.split("_").length!==3){etats[r.id]="illisible";continue}
@@ -1543,8 +1544,38 @@ async function recurrentsDuPilote(jeton,s){
       faits.add("retablir:"+r.id);etats[r.id]="fait";
     }catch(e){etats[r.id]="echec"}
   }
+  // « Annuler ce RDV » demandé dans le pilote : comme « Annulée cette fois » (séance) ou « Annuler ce RDV » (RDV ponctuel) ici.
+  // Le RDV reste en rouge « Presta annulée » dans le pilote. Déjà annulé : fait. Plus trouvé : introuvable.
+  const annuler=c0&&Array.isArray(c0.annuler)?c0.annuler.slice(-200):[];
+  for(const r of annuler){
+    if(!r||typeof r.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(r.id))continue;
+    if(faits.has("annuler:"+r.id)){etats[r.id]="fait";continue}
+    const ref=typeof r.ref==="string"&&/^(occ|appt):/.test(r.ref)?r.ref:piloteRefA(r,false);
+    try{
+      if(ref.startsWith("occ:")){const key=ref.slice(4),o=key.split("_").length===3?occByKey(key):null;
+        if(!o){etats[r.id]="introuvable";continue}
+        if(!skips[key]){const sk={custId:o.c.id,slotId:o.s.id,day:o.day,reason:"annule",createdAt:Date.now()};await db.doc("skips/"+key).set(sk);skips[key]=sk;ajoutes++}}
+      else if(ref.startsWith("appt:")){const x=appts.find(a=>a.id===ref.slice(5));
+        if(!x){etats[r.id]="introuvable";continue}
+        if(!x.cancelled){const y={...x,cancelled:true,done:true,doneAt:Date.now()};
+          if(y.calId&&NATIVE&&NATIVE.deleteEvent){try{await NATIVE.deleteEvent(y.calId)}catch(e){}y.calId="";y.calAt=null;y.calDur=null}
+          await db.doc("appts/"+y.id).set(apptBody(y));Object.assign(x,y);ajoutes++}}
+      else{etats[r.id]=ref?"illisible":"introuvable";continue}
+      faits.add("annuler:"+r.id);etats[r.id]="fait";
+    }catch(e){etats[r.id]="echec"}
+  }
+  if(retablir.length||annuler.length)occSyncSoon();   // l'agenda Google des séances suit
   s.recFaits=[...faits].slice(-600);piloteNote(s);   // 600 : les changements d'heure s'ajoutent aux autres demandes, aucune ne doit être rejouée
   return {etats,ajoutes};
+}
+/* Demande du pilote sans repère : on retrouve le RDV par son heure exacte (et la personne si elle est donnée).
+   annule=true : parmi les annulés (rétablir) ; false : parmi les prévus (annuler). Un seul trouvé, sinon rien. */
+function piloteRefA(r,annule){
+  const t=Number(r.t);if(!Number.isFinite(t))return "";
+  const cle=typeof r.cle==="string"?r.cle:"",memePers=ref=>!cle||(agendaPersonne({ref})||{}).cle===cle;
+  const l=occList(dayStart(t),addDays(dayStart(t),1),true).filter(o=>o.t===t&&(annule?o.why==="annulée":!o.why)).map(o=>"occ:"+o.key)
+    .concat(appts.filter(a=>a.when===t&&(annule?a.cancelled:!a.cancelled&&!a.done)).map(a=>"appt:"+a.id)).filter(memePers);
+  return l.length===1?l[0]:"";
 }
 let agendaAttente=null;
 async function envoyerAgendaPilote(manuel){
@@ -1560,7 +1591,7 @@ async function envoyerAgendaPilote(manuel){
     if(rec&&rec.ajoutes){contenu=await agendaPourPilote();sig=agendaEmpreinte(JSON.stringify(contenu));occSyncSoon()}
     else if(!manuel&&inchange&&s.recSig===recSig)return;   // rien de neuf à dire au pilote
     s.recSig=recSig;
-    await piloteBase(a.access_token,"pilote_documents?on_conflict=cle","POST",{cle:"agenda",version:sig,contenu:{...contenu,recurrents:rec?rec.etats:null,envoye_le:Date.now()},maj_le:new Date().toISOString()},"resolution=merge-duplicates,return=minimal");
+    await piloteBase(a.access_token,"pilote_documents?on_conflict=cle","POST",{cle:"agenda",version:sig,contenu:{...contenu,recurrents:rec?rec.etats:null,envoye_le:Date.now(),version_appli:Number(window.PB_VERSION)||null},maj_le:new Date().toISOString()},"resolution=merge-duplicates,return=minimal");
     s.agSig=sig;s.agN=contenu.elements.length;s.agAt=Date.now();s.agErreur=false;piloteNote(s);
     if(manuel){$("#status").textContent+=" Emploi du temps envoyé.";render()}
   }catch(e){

@@ -1,4 +1,4 @@
 {
- "version": 33,
- "notes": "Rétablir depuis le pilote OIKOS un RDV annulé."
+ "version": 34,
+ "notes": "Annuler un RDV depuis le pilote OIKOS, et rétablir aussi un ancien RDV annulé."
 }

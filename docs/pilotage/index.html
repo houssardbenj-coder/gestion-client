@@ -2590,7 +2590,7 @@ function emRecu(doc) {
   // Séances annulées sur le téléphone (« Annulée cette fois ») : plus des rendez-vous, une ligne rouge « Presta annulée » à leur jour
   const annules = (Array.isArray(c.annules) ? c.annules : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Rendez-vous"), cle: typeof x.cle === "string" ? x.cle : null, ref: typeof x.ref === "string" && /^(occ|appt):/.test(x.ref) ? x.ref : null, nom: x.nom || null, annule: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
     .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);   // s'il est rétabli entre-temps, c'est le rendez-vous qui compte
-  return { elements, annules, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {} };
+  return { elements, annules, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {}, version: Number(c.version_appli) || null };
 }
 const emAnnuleHtml = (a, avecHeure = true) => `<div class="em-annule" title="Annulé sur le téléphone">${ico("croix")} <b>Presta annulée</b>${avecHeure ? ` · ${esc(hm(a.t))}` : ""} · <s>${esc(sansEmoji(a.titre))}</s></div>`;
 const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "HP", "AUTRE"].map(k => `<span class="em-s-${k}"><i></i>${EM_NOM[k]}</span>`).join("")}<span class="em-ann"><i></i>Presta annulée</span></div>`;
@@ -2609,14 +2609,17 @@ const emArrets = doc => { const l = doc && doc.contenu && Array.isArray(doc.cont
 const emArretee = (x, arrets) => { if (typeof x.occ !== "string") return false; const [cust, slot, jour] = x.occ.split("_");
   return arrets.some(a => (!a.cust || a.cust === cust) && a.slot === slot && jour > a.jusqu); };
 const emRetablir = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.retablir) ? doc.contenu.retablir : [];
-  return l.filter(r => r && typeof r.id === "string" && typeof r.ref === "string" && /^(occ|appt):/.test(r.ref)); };
-async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l, changerEnvois = l => l, changerHeures = l => l, changerRetablir = l => l) {
+  return l.filter(r => r && typeof r.id === "string" && ((typeof r.ref === "string" && /^(occ|appt):/.test(r.ref)) || (!r.ref && Number.isFinite(r.t)))); };
+const emAnnuler = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.annuler) ? doc.contenu.annuler : [];
+  return l.filter(r => r && typeof r.id === "string" && Number.isFinite(r.t)); };
+async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l, changerEnvois = l => l, changerHeures = l => l, changerRetablir = l => l, changerAnnuler = l => l) {
   const doc = await lireCopie(EM_REC);   // relu juste avant : l'autre PC a pu en ajouter
   const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200), nouveaux = changerNouveaux(emNouveaux(doc)).slice(-200);
   const envois = changerEnvois(emEnvois(doc)).slice(-1000);   // gardés à chaque écriture : le téléphone ne les lit pas
   const heures = changerHeures(emHeures(doc)).slice(-200);   // « Modifier l'heure » : gardés à chaque écriture, le téléphone les applique une fois
-  const retablir = changerRetablir(emRetablir(doc)).slice(-200);   // « Rétablir ce RDV » annulé sur le téléphone (Pense intelligent v33)
-  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux, envois, heures, retablir }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+  const retablir = changerRetablir(emRetablir(doc)).slice(-200);   // « Rétablir ce RDV » annulé sur le téléphone (Pense intelligent v33, sans repère v34)
+  const annuler = changerAnnuler(emAnnuler(doc)).slice(-200);   // « Annuler ce RDV » depuis le pilote (Pense intelligent v34)
+  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux, envois, heures, retablir, annuler }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
 }
 /* ===== Envoyer un RDV vers le reporting ou les IK, une seule fois (09/11/2026) =====
    - RDV d'un client (OIKOS ou Benjamin enseignement) : « Mettre dans reporting » le range dans Chiffres › Déclarer mes heures,
@@ -2887,20 +2890,28 @@ async function emModifierHeure(x, apres, choix, info) {
 let emGlisseLe = 0;
 /* Rétablir un RDV annulé sur le téléphone (09/11/2026) : la demande va dans le document recurrents (liste retablir),
    Pense intelligent v33 la prend à sa prochaine ouverture (séance : comme « Rétablir cette séance » ; RDV ponctuel : comme « Rétablir ce RDV »). */
-const emRetabliEnAttente = (a, doc, ag) => !!a.ref && emRetablir(doc).some(r => r.ref === a.ref && r.t === a.t && !["fait", "introuvable", "illisible", "echec"].includes(ag.recurrents[r.id]));
+const EM_FINI = ["fait", "introuvable", "illisible", "echec"];
+const emMemeDemande = (r, x) => r.t === x.t && (r.ref && x.ref ? r.ref === x.ref : !r.cle || !x.cle || r.cle === x.cle);
+const emRetabliEnAttente = (a, doc, ag) => emRetablir(doc).some(r => emMemeDemande(r, a) && !EM_FINI.includes(ag.recurrents[r.id]));
+const emRefDe = x => x.sorte === "occ" && typeof x.occ === "string" ? "occ:" + x.occ : typeof x.ref === "string" && x.ref.startsWith("appt:") ? x.ref : null;
+const emAnnulable = x => !x.nv && !x.annule && !x.jour_entier && (x.sorte === "occ" || (x.sorte === "rdv" && !(typeof x.ref === "string" && /^(lead|proj):/.test(x.ref))));
+const emAnnulEnAttente = (x, doc, ag) => { const t = x.avant ? x.avant.t : x.t, ref = emRefDe(x);
+  return emAnnuler(doc).find(r => emMemeDemande(r, { t, ref, cle: x.cle }) && !EM_FINI.includes(ag.recurrents[r.id])) || null; };
+let emDocCour = null, emAgCour = null;   // document des demandes et emploi du temps affichés (pour la fenêtre du RDV)
+const emVersionMsg = (ag, v) => ag && ag.version >= v ? "" : ` Il faut Pense intelligent en version ${v} au moins${ag && ag.version ? " (le téléphone est en " + ag.version + ")" : ""} : la demande attend jusque-là.`;
 function emFicheAnnule(a, doc, ag, apres) {
   const c = a.client || null, adr = (c && c.adresse) || "", tel = (c && c.telephone) || "", attente = emRetabliEnAttente(a, doc, ag);
-  const dem = attente ? emRetablir(doc).find(r => r.ref === a.ref && r.t === a.t) : null;
+  const dem = attente ? emRetablir(doc).find(r => emMemeDemande(r, a) && !EM_FINI.includes(ag.recurrents[r.id])) : null;
   fenetre(`<h2 style="margin:0 0 2px">${esc(sansEmoji(a.titre || ""))}</h2>
     <p class="muted small" style="margin:0 0 10px">${esc(new Date(a.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${esc(hm(a.t))}${a.fin > a.t ? "–" + esc(hm(a.fin)) : ""}</p>
     <div class="em-fr-infos">${adr ? `<div>${ico("lieu")} <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adr)}" target="_blank" rel="noopener">${esc(adr)}</a></div>` : ""}${tel ? `<div>${ico("tel")} <a href="tel:${esc(String(tel).replace(/[^\d+]/g, ""))}">${esc(tel)}</a></div>` : ""}</div>
-    <p class="${attente ? "muted small" : "tag warn"}" style="display:block;white-space:normal;margin:10px 0">${attente ? `${ico("retour")} Rétabli ici, en attente du téléphone : Pense intelligent le remet à sa prochaine ouverture.` : a.ref ? `${ico("croix")} Annulé sur le téléphone.` : `${ico("croix")} Annulé sur le téléphone. Pour le rétablir d'ici, il faut Pense intelligent en version 33 (ferme complètement l'appli sur le téléphone et rouvre-la, puis Actualiser ici) ; sinon, rétablis-le sur le téléphone.`}</p>
-    <div class="row">${!attente && a.ref ? `<button class="btn primary" type="button" data-an-ret>${ico("retour")} Rétablir ce RDV</button>` : ""}${attente ? `<button class="btn" type="button" data-an-annul>${ico("croix")} Laisser annulé</button>` : ""}${c ? `<button class="btn flat" type="button" data-an-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`,
+    <p class="${attente ? "muted small" : "tag warn"}" style="display:block;white-space:normal;margin:10px 0">${attente ? `${ico("retour")} Rétabli ici, en attente du téléphone : Pense intelligent le remet à sa prochaine ouverture.${emVersionMsg(ag, a.ref ? 33 : 34)}` : `${ico("croix")} Annulé.`}</p>
+    <div class="row">${!attente ? `<button class="btn primary" type="button" data-an-ret>${ico("retour")} Rétablir ce RDV</button>` : ""}${attente ? `<button class="btn" type="button" data-an-annul>${ico("croix")} Laisser annulé</button>` : ""}${c ? `<button class="btn flat" type="button" data-an-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`,
   (f, fermer) => {
     const fi = f.querySelector("[data-an-fiche]"); if (fi) fi.onclick = () => { fermer(); ficheClient(c.id); };
     const r = f.querySelector("[data-an-ret]"); if (r) r.onclick = async () => { r.disabled = true;
-      const d = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ref: a.ref, t: a.t, titre: sansEmoji(a.titre || "").slice(0, 120), le: Date.now() };
-      const ok = await emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l.filter(y => !(y.ref === a.ref && y.t === a.t)).concat(d));
+      const d = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ref: a.ref || null, t: a.t, cle: a.cle || null, titre: sansEmoji(a.titre || "").slice(0, 120), le: Date.now() };
+      const ok = await emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l.filter(y => !emMemeDemande(y, a)).concat(d), l => l.filter(y => !emMemeDemande(y, a)));
       if (!ok) { r.disabled = false; return toast("Pas enregistré : la base ne répond pas, réessaie."); }
       fermer(); toast("Rétabli : Pense intelligent le remet à sa prochaine ouverture."); if (apres) apres(); };
     const n = f.querySelector("[data-an-annul]"); if (n) n.onclick = async () => { n.disabled = true;
@@ -2914,6 +2925,7 @@ function emFicheRdv(x, envois, apres, choix) {
   const c = x.client || null, adr = (c && c.adresse) || "", tel = (c && c.telephone) || "", det = sansEmoji(x.detail || "");
   const telLien = tel ? `<a href="tel:${esc(String(tel).replace(/[^\d+]/g, ""))}">${esc(tel)}</a>` : "";
   const env = choix ? "" : emEnvoiBouton(x, 0, envois || []).replace('class="em-env', 'class="btn small em-env');
+  const canAnn = !choix && emAnnulable(x) && !!emDocCour, annAtt = canAnn ? emAnnulEnAttente(x, emDocCour, emAgCour) : null;
   const html = `<h2 style="margin:0 0 2px">${esc(sansEmoji(x.titre || ""))}</h2>
     <p class="muted small" style="margin:0 0 10px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)} · ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))} · ${esc(EM_SORTES[x.sorte] || "Agenda")}${x.hmod ? " · nouvelle heure, en attente du téléphone" : ""}</p>
     <div class="em-fr-infos">
@@ -2922,10 +2934,22 @@ function emFicheRdv(x, envois, apres, choix) {
       ${det && det !== adr ? `<div class="muted small">${esc(det)}</div>` : ""}
       ${!adr && !telLien && !det ? `<div class="muted small">Pas d'adresse ni de téléphone connus pour ce RDV.</div>` : ""}
     </div>
-    ${c || env ? `<div class="row" style="margin:8px 0 0">${c ? `<button type="button" class="btn small" data-fr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}${env}</div>` : ""}`;
+    ${c || env || canAnn ? `<div class="row" style="margin:8px 0 0">${c ? `<button type="button" class="btn small" data-fr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}${env}${canAnn && !annAtt ? `<button type="button" class="btn small flat" data-fr-annul>${ico("croix")} Annuler ce RDV</button>` : ""}</div>` : ""}
+    ${annAtt ? `<p class="tag warn" style="display:block;white-space:normal;margin:10px 0 0">${ico("croix")} Annulé ici, en attente du téléphone : Pense intelligent l'annule à sa prochaine ouverture.${emVersionMsg(emAgCour, 34)} <button type="button" class="btn small" data-fr-garder>${ico("retour")} Garder ce RDV</button></p>` : ""}`;
   const info = { html, brancher: (f, fermer) => {
     const b = f.querySelector("[data-fr-fiche]"); if (b) b.onclick = () => { fermer(); ficheClient(c.id); };
     const e = f.querySelector("[data-em-envoi]"); if (e) e.onclick = () => { e.disabled = true; fermer(); emEnvoyer(x, apres); };
+    const an = f.querySelector("[data-fr-annul]"); if (an) an.onclick = async () => {
+      if (!confirm(`Annuler ${sansEmoji(x.titre || "ce RDV")} du ${new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${hm(x.t)} ?\n\nSur le téléphone, ${x.sorte === "occ" ? "seulement cette séance est annulée (les suivantes restent)" : "le RDV est annulé"}. Il reste en rouge « Presta annulée » ici, et tu peux le rétablir.`)) return;
+      an.disabled = true; const t = x.avant ? x.avant.t : x.t, ref = emRefDe(x);
+      const d = { id: "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ref, t, cle: x.cle || null, titre: sansEmoji(x.titre || "").slice(0, 120), le: Date.now() };
+      const ok = await emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l.filter(y => !emMemeDemande(y, { t, ref, cle: x.cle })), l => l.filter(y => !emMemeDemande(y, { t, ref, cle: x.cle })).concat(d));
+      if (!ok) { an.disabled = false; return toast("Pas enregistré : la base ne répond pas, réessaie."); }
+      fermer(); toast("Annulé : Pense intelligent l'annule à sa prochaine ouverture."); if (apres) apres(); };
+    const ga = f.querySelector("[data-fr-garder]"); if (ga) ga.onclick = async () => { ga.disabled = true;
+      const ok = await emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l, l => l.filter(y => y.id !== annAtt.id));
+      if (!ok) { ga.disabled = false; return toast("Pas enregistré : la base ne répond pas, réessaie."); }
+      fermer(); toast("Le RDV est gardé."); if (apres) apres(); };
   } };
   if (emHeureModifiable(x)) return emModifierHeure(x, apres, choix, info);
   if (choix && choix.annule) choix.annule();
@@ -3008,8 +3032,10 @@ async function emNePlusRepeter(id) {
 async function vueEmploi() {
   await chargerBase();
   const [docAg, docRec] = await Promise.all([lireCopie("agenda"), lireCopie(EM_REC)]);
+  emDocCour = docRec;
   const ag = emRecu(docAg);
   if (!ag) return emPasRecu();
+  emAgCour = ag;
   const recDem = emDemandes(docRec), recEtat = d => ag.recurrents[d.id] || "", arrets = emArrets(docRec);
   ag.elements = ag.elements.filter(x => !emArretee(x, arrets));
   const recPb = recDem.filter(d => recEtat(d) === "introuvable" || recEtat(d) === "illisible");
@@ -3109,8 +3135,8 @@ async function vueEmploi() {
           return rt ? `<div class="em-gev ${emClasse(o.a)} att" style="${pos}" data-em-ann="${ia}" title="Rétabli, en attente du téléphone"><b>${esc(hm(o.t))}</b> ${ico("retour")} Rétabli<br>${esc(sansEmoji(o.a.titre))}<br><span class="muted small">en attente du téléphone</span></div>`
             : `<div class="em-gev ann" style="${pos}" data-em-ann="${ia}" title="Annulé sur le téléphone : clic pour le rétablir"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`; }
         const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : x.hmod ? "nouvelle heure, en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
-        const mod = emHeureModifiable(x), fv = x.fin > x.t ? x.fin : x.t + 36e5;
-        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
+        const mod = emHeureModifiable(x), fv = x.fin > x.t ? x.fin : x.t + 36e5, aa = emAnnulEnAttente(x, docRec, ag);
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${aa ? `<s>${esc(sansEmoji(x.titre))}</s><br><span class="small">${ico("croix")} annulation en attente</span>` : esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
     return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
@@ -3125,8 +3151,9 @@ async function vueEmploi() {
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn primary" data-em-plus="1">${ico("plus")} RDV</button><button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. « Modifier l'heure » change le début et la fin d'un RDV, même passé, ici et sur le téléphone : clique sur le RDV, ou maintiens le clic et fais-le glisser, ou tire le petit trait du bas pour changer la fin. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent${ag.version ? " v" + ag.version : ""} (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. « Modifier l'heure » change le début et la fin d'un RDV, même passé, ici et sur le téléphone : clique sur le RDV, ou maintiens le clic et fais-le glisser, ou tire le petit trait du bas pour changer la fin. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
     ${emLegende()}
+    ${emAnnuler(docRec).filter(r => ["introuvable", "illisible", "echec"].includes(ag.recurrents[r.id])).map(r => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas annulé sur le téléphone : ${esc(r.titre || "")}, ${esc(new Date(r.t).toLocaleDateString("fr-FR"))} à ${esc(hm(r.t))}, ${ag.recurrents[r.id] === "introuvable" ? "plus trouvé dans Pense intelligent" : "à faire sur le téléphone"}</span><button class="btn flat" data-em-aret="${esc(r.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${emRetablir(docRec).filter(r => ["introuvable", "illisible", "echec"].includes(ag.recurrents[r.id])).map(r => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas rétabli sur le téléphone : ${esc(r.titre || "")}, ${esc(new Date(r.t).toLocaleDateString("fr-FR"))} à ${esc(hm(r.t))}, ${ag.recurrents[r.id] === "introuvable" ? "plus trouvé dans Pense intelligent" : "à refaire sur le téléphone"}</span><button class="btn flat" data-em-rret="${esc(r.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${emHeuresPb(ag, docRec).map(({ h, pb }) => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Heure pas changée sur le téléphone : ${esc(h.titre || "")}, ${esc(new Date(h.de).toLocaleDateString("fr-FR"))} à ${esc(hm(h.quand))}, ${esc(pb)}</span><button class="btn flat" data-em-hret="${esc(h.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
@@ -3155,6 +3182,7 @@ async function vueEmploi() {
     if (b.dataset.emEnvoi !== undefined) { const x = ag.elements[Number(b.dataset.emEnvoi)]; if (x) { b.disabled = true; return emEnvoyer(x, () => { if (onglet === "emploi") afficher("emploi"); }); } return; }
     if (b.dataset.emHeure !== undefined) { const x = ag.elements[Number(b.dataset.emHeure)]; if (x && emHeureModifiable(x)) return emModifierHeure(x, () => { if (onglet === "emploi") afficher("emploi"); }); return; }
     if (b.dataset.emHret) return emRetirerHeure(b.dataset.emHret, () => afficher("emploi"));
+    if (b.dataset.emAret) return emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l, l => l.filter(r => r.id !== b.dataset.emAret)).then(ok => { toast(ok ? "Retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi"); });
     if (b.dataset.emRret) return emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l.filter(r => r.id !== b.dataset.emRret)).then(ok => { toast(ok ? "Retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi"); });
     if (b.dataset.emPlus) { const d = new Date(); return emNouveau(enSemaine ? (cestMaintenant ? aujourdhui : ymd(emSemaine)) : emJour, Math.min(23 * 60, (d.getHours() + 1) * 60)); }
     if (b.dataset.emNvret) return emRetirerNouveau(b.dataset.emNvret);
