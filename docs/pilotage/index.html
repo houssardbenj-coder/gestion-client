@@ -153,6 +153,14 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-gev{position:absolute;overflow:hidden;font-size:12px;line-height:1.25;padding:3px 26px 3px 6px;border-radius:6px;border:1px solid var(--line);border-left:3px solid var(--em,var(--accent));background:var(--surface);color:var(--ink);cursor:pointer;box-shadow:0 1px 2px rgb(0 0 0 / .08);text-align:left}
 .em-gev b{font-weight:700;font-variant-numeric:tabular-nums}.em-gev:hover{z-index:3;box-shadow:0 2px 8px rgb(0 0 0 / .18)}
 .em-gev.em-s-AUTRE{background:var(--roi-soft);border-color:var(--roi);color:var(--roi)}
+.em-s-HP{--em:var(--ink)}.em-gev.em-s-HP,.em-ev.em-s-HP{background:var(--sunk);border-style:dashed;border-left-style:solid}
+/* Mettre dans reporting / Mettre dans IK : sur la case du RDV, grisé une fois parti */
+.em-gev.a-env{padding-bottom:20px}
+.em-env{display:inline-flex;align-items:center;gap:3px;max-width:calc(100% - 8px);padding:1px 7px;font-size:11px;font-weight:600;line-height:1.4;border-radius:999px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.em-gev .em-env{position:absolute;left:5px;bottom:3px}.em-env .ico{width:12px;height:12px;flex:none}
+.em-env:hover:not(:disabled){background:var(--accent);color:var(--accent-ink)}.em-env:disabled{cursor:default}
+.em-env.fait{border-color:var(--line);color:var(--muted);background:var(--surface)}
+.em-jour .em-l .em-env{margin-left:auto;flex:none;font-size:12px}
 .em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:default}.em-gev.ann s{opacity:.85}
 .em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
@@ -244,6 +252,13 @@ details.pli>summary::-webkit-details-marker{display:none}
 details.pli>summary::after{content:"▾";margin-left:auto;color:var(--muted);transition:transform .2s}
 details.pli:not([open])>summary::after{transform:rotate(-90deg)}
 details.pli[open]>summary{margin-bottom:10px}
+.tf-grille{width:auto;min-width:min(100%,420px)}
+.tf-grille td,.tf-grille th{white-space:nowrap}
+.tf-in{width:78px;padding:6px 8px}
+.tf-zone{display:inline-flex;align-items:center;gap:6px}
+.tf-zone select{width:auto;padding:5px 8px}
+.tf-bloc{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.tf-bloc:first-child{border-top:0;margin-top:0}
 details.pli .pli-alerte{color:var(--warn-vif);display:inline-flex}
 details.pli .pli-ok{color:var(--go);display:inline-flex}
 .dm>summary::after{content:"▾";color:var(--muted);transition:transform .2s}
@@ -2058,7 +2073,7 @@ function htmlLigne(l, i, principal, zone) {
 }
 async function vueJour() {
   const [{ faire, attente, info }, docAg, docRec] = await Promise.all([lignesDuJour(), lireCopie("agenda").catch(() => null), lireCopie(EM_REC).catch(() => null)]);
-  let emHtml = ""; try { const ag = emRecu(docAg); if (ag) { const arr = emArrets(docRec); ag.elements = ag.elements.filter(x => !emArretee(x, arr)); } emHtml = emAujourdhuiHtml(ag); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
+  let emHtml = "", emAg = null; try { const ag = emRecu(docAg); if (ag) { const arr = emArrets(docRec); ag.elements = ag.elements.filter(x => !emArretee(x, arr)); emMarquerHp(ag, docRec); emAg = ag; } emHtml = emAujourdhuiHtml(ag, emEnvois(docRec)); } catch (e) { emHtml = ""; }   // l'emploi du temps ne doit jamais bloquer la page
   nbAFaire = faire.length;
   const bulleJour = document.getElementById("b-avoir"); if (bulleJour) bulleJour.innerHTML = nbAFaire ? `<span class="bulle">${nbAFaire}</span>` : "";
   const n = faire.length, auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
@@ -2078,6 +2093,7 @@ async function vueJour() {
     if (!b) return;
     if (b.dataset.page) return afficher(b.dataset.page);
     if (b.dataset.emSemaine) { emVue = "semaine"; emSemaine = lundi(new Date()); return afficher("emploi"); }
+    if (b.dataset.emEnvoi !== undefined) { const x = emAg && emAg.elements[Number(b.dataset.emEnvoi)]; if (x) { b.disabled = true; return emEnvoyer(x, () => { if (onglet === "jour") afficher("jour"); }); } return; }
     if (b.id === "j-annuler") { await maj(dernier.defaire()); jourDernier = null; return afficher("jour"); }
     if (b.id === "j-tout-vu") { for (const l of info) if (l.table) await marquer(l); return afficher("jour"); }
     const l = ligneDe(b); if (!l) return;
@@ -2535,7 +2551,7 @@ async function plBasculer(x, enlever) {
 /* ===================== Emploi du temps : celui de Pense intelligent, vu depuis le pilotage (SQL 43) =====================
    Pense intelligent vit sur le téléphone : relié avec le compte gérant, il dépose son emploi du temps dans pilote_documents (clé « agenda ») à chaque changement et à chaque ouverture.
    Sens unique : on lit ici, on change sur le téléphone. OIKOS et Benjamin enseignement restent sur des lignes séparées, un client des deux est sur les deux. */
-const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospect"], ["CLIENT", "Client"], ["AUTRE", "Hors presta"], ["TACHE", "Tâche"]];
+const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospect"], ["CLIENT", "Client"], ["HP", "Hors prestation"], ["AUTRE", "Personnel"], ["TACHE", "Tâche"]];
 const EM_NOM = Object.fromEntries(EM_SECTIONS);
 const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine", rec: "Chaque semaine" };
 let emSemaine = lundi(new Date()), emVue = "semaine", emJour = ymd(new Date());
@@ -2572,7 +2588,7 @@ function emRecu(doc) {
   return { elements, annules, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {} };
 }
 const emAnnuleHtml = (a, avecHeure = true) => `<div class="em-annule" title="Annulé sur le téléphone">${ico("croix")} <b>Presta annulée</b>${avecHeure ? ` · ${esc(hm(a.t))}` : ""} · <s>${esc(sansEmoji(a.titre))}</s></div>`;
-const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "AUTRE"].map(k => `<span class="em-s-${k}"><i></i>${EM_NOM[k]}</span>`).join("")}<span class="em-ann"><i></i>Presta annulée</span></div>`;
+const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "HP", "AUTRE"].map(k => `<span class="em-s-${k}"><i></i>${EM_NOM[k]}</span>`).join("")}<span class="em-ann"><i></i>Presta annulée</span></div>`;
 /* Répéter chaque semaine (SQL 47) : la demande va dans pilote_documents, clé « recurrents ». Tant que le téléphone ne l'a pas prise,
    le pilote montre lui-même le RDV les semaines suivantes (pointillés). Pense intelligent en fait une séance régulière du client
    à partir de la semaine d'après, puis le renvoie comme Séance. Seulement un RDV d'un client du téléphone (pas un prospect, pas l'agenda Google). */
@@ -2587,10 +2603,112 @@ const emArrets = doc => { const l = doc && doc.contenu && Array.isArray(doc.cont
 // une séance d'un créneau arrêté, après la date d'arrêt : on ne la montre plus, même si le téléphone ne l'a pas encore pris
 const emArretee = (x, arrets) => { if (typeof x.occ !== "string") return false; const [cust, slot, jour] = x.occ.split("_");
   return arrets.some(a => (!a.cust || a.cust === cust) && a.slot === slot && jour > a.jusqu); };
-async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l) {
+async function emEcrireRec(changer, changerArrets = l => l, changerNouveaux = l => l, changerEnvois = l => l) {
   const doc = await lireCopie(EM_REC);   // relu juste avant : l'autre PC a pu en ajouter
   const demandes = changer(emDemandes(doc)), arrets = changerArrets(emArrets(doc)).slice(-200), nouveaux = changerNouveaux(emNouveaux(doc)).slice(-200);
-  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+  const envois = changerEnvois(emEnvois(doc)).slice(-1000);   // gardés à chaque écriture : le téléphone ne les lit pas
+  try { const { error } = await sb.from("pilote_documents").upsert({ cle: EM_REC, version: new Date().toISOString(), contenu: { demandes, arrets, nouveaux, envois }, maj_le: new Date().toISOString() }); return !error; } catch (e) { return false; }
+}
+/* ===== Envoyer un RDV vers le reporting ou les IK, une seule fois (09/11/2026) =====
+   - RDV d'un client (OIKOS ou Benjamin enseignement) : « Mettre dans reporting » le range dans Chiffres › Déclarer mes heures,
+     pré-rempli (élève, jour, durée), à vérifier puis enregistrer dans SAISIE COURS comme les autres. Rien n'est écrit dans l'Excel sans cette vérification.
+   - RDV « Hors prestation » (prise de devis, visite…) créé dans le pilote : « Mettre dans IK » écrit le trajet dans IK BENJAMIN (trajets_ik.py), jamais dans SAISIE.
+   - RDV personnel (coiffeur, agenda Google…) : aucun bouton, il ne va jamais dans les IK tout seul ; un trajet se met à la main dans Chiffres › Trajets IK.
+   Chaque envoi est noté dans la liste « envois » du document recurrents (pas de nouveau SQL), AVANT d'envoyer : un 2e clic, ou l'autre PC, voit qu'il est
+   déjà parti et le bouton ne se clique plus. Si l'envoi échoue, la note est retirée et on peut réessayer. Seulement un RDV du jour ou passé. */
+const emEnvois = doc => { const l = doc && doc.contenu && Array.isArray(doc.contenu.envois) ? doc.contenu.envois : [];
+  return l.filter(v => v && typeof v.k === "string" && (v.ou === "reporting" || v.ou === "ik")); };
+const emCleEnvoi = x => x.hp ? "hp|" + x.hp.id : "c|" + x.jour + "|" + emHeureTxt(x.t) + "|" + ((x.client && x.client.id) || x.cle || norm(sansEmoji(x.titre || "")));
+const emPourReporting = x => !x.hp && !x.annule && !x.jour_entier && ["rdv", "occ", "cal", "nouveau"].includes(x.sorte)
+  && (x.client ? x.client.etat !== "prospect" : typeof x.cle === "string" && !!x.cle && !/^pi:[lp]:/.test(x.cle))
+  && x.sections.some(k => k === "OIKOS" || k === "BE" || k === "CLIENT");
+/* Les RDV « Hors prestation » créés dans le pilote (liste nouveaux, hp) : retrouvés dans ce que renvoie le téléphone (même heure, même titre) */
+function emMarquerHp(ag, doc) {
+  emNouveaux(doc).filter(n => n.hp).forEach(n => {
+    const memes = ag.elements.filter(x => x.t === n.quand && (x.sorte === "rdv" || (x.nv && x.nv.id === n.id)));
+    const titre = norm(sansEmoji(n.titre || "")), rdvs = memes.filter(x => x.sorte === "rdv");
+    const x = memes.find(y => y.nv && y.nv.id === n.id) || memes.find(y => titre && norm(sansEmoji(y.titre || "")) === titre) || (rdvs.length === 1 ? rdvs[0] : null);
+    if (x) { x.hp = n; x.sections = ["HP"]; }
+  });
+}
+/* Le bouton d'envoi d'un RDV : rien pour un RDV personnel ou à venir ; grisé « Mis dans … » une fois parti */
+function emEnvoiBouton(x, i, envois) {
+  const ik = !!x.hp;
+  if (!ik && !emPourReporting(x)) return "";
+  const fait = envois.find(v => v.k === emCleEnvoi(x));
+  if (fait) return `<button type="button" class="em-env fait" disabled title="Déjà envoyé le ${esc(new Date(fait.le).toLocaleDateString("fr-FR"))} : il ne part pas une 2e fois">${ico("ok")} ${ik ? "Mis dans IK" : "Mis dans reporting"}</button>`;
+  if (x.jour > ymd(new Date())) return "";
+  return `<button type="button" class="em-env" data-em-envoi="${i}" title="${ik ? "Écrit le trajet dans IK BENJAMIN, une seule fois" : "Le range dans Déclarer mes heures, à vérifier puis enregistrer, une seule fois"}">${ico(ik ? "route" : "reporting")} ${ik ? "Mettre dans IK" : "Mettre dans reporting"}</button>`;
+}
+const emEnvoiEnCours = new Set();
+async function emEnvoyer(x, apres) {
+  const k = emCleEnvoi(x), ik = !!x.hp;
+  if (emEnvoiEnCours.has(k)) return;   // double clic : le premier suffit
+  if (x.jour > ymd(new Date())) return toast("Possible à partir du jour du RDV");
+  emEnvoiEnCours.add(k);
+  try {
+    const trajet = ik ? await emTrajet(x) : null;
+    if (ik && !trajet) return;
+    const note = { k, ou: ik ? "ik" : "reporting", jour: x.jour, titre: sansEmoji(x.titre || "").slice(0, 120), le: Date.now() };
+    let deja = null;
+    const ok = await emEcrireRec(l => l, l => l, l => l, l => { deja = l.find(v => v.k === k) || null; return deja ? l : l.concat(note); });
+    if (deja) return toast("Déjà envoyé le " + new Date(deja.le).toLocaleDateString("fr-FR") + " : rien n'est envoyé une 2e fois.");
+    if (!ok) return toast("Pas envoyé : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
+    let dit;
+    try { dit = ik ? await emVersIk(trajet) : await emVersReporting(x, k); }
+    catch (err) { await emEcrireRec(l => l, l => l, l => l, l => l.filter(v => !(v.k === k && v.le === note.le))); throw err; }
+    toast(dit);
+  } catch (e) { toast("Pas envoyé : " + (e && e.message || e) + " Tu peux réessayer."); }
+  finally { emEnvoiEnCours.delete(k); if (apres) apres(); }
+}
+/* Reporting de Benjamin = Déclarer mes heures : une ligne pré-remplie, à vérifier (élève, tarif) puis enregistrer dans SAISIE COURS */
+async function emVersReporting(x, k) {
+  if (hdBrouillon.some(l => l.rdv === k)) return "Déjà dans Déclarer mes heures, à vérifier.";
+  if (!lgP && !SUR_TELEPHONE) { try { lgP = await pc("/lignes", null, 15000); } catch (e) {} }   // PC pas relié : l'élève se choisira dans la page
+  const c = x.client, eleves = (c && c.eleves) || [], motsTitre = new Set(norm(sansEmoji(x.titre || "")).split(" "));
+  const eleve = eleves.find(e => motsTitre.has(norm(e).split(" ")[0])) || (eleves.length === 1 ? eleves[0] : "");
+  const ecrit = eleve ? norm(eleve).split(" ")[0] : hdMots(sansEmoji(x.titre || "")).join(" ").slice(0, 60);
+  let prenom = "";
+  if (lgP) { const f = hdFiche(eleve) || hdFiche(ecrit); prenom = f ? f.prenom : (ecrit && hdDeviner(ecrit)) || ""; }
+  const minutes = x.fin > x.t ? Math.round((x.fin - x.t) / 6e4) : 0;
+  hdBrouillon.push({ eleve: prenom, ecrit, jour: x.jour, minutes, tarif: "", moitie: !!prenom && !!lgP && hdMoitieHabituelle(prenom), note: "",
+    lu: "RDV de l'emploi du temps, " + emHeure(x) + " : " + sansEmoji(x.titre || ""), cle: Math.random().toString(36).slice(2), rdv: k });
+  hdGarder();
+  return "Mis dans reporting : à vérifier puis enregistrer dans Chiffres › Déclarer mes heures (sur ce PC).";
+}
+/* Le trajet d'un RDV hors prestation : lieu, adresse et motif notés à sa création ; adresse manquante = demandée une fois */
+async function emTrajet(x) {
+  if (SUR_TELEPHONE) { toast("L'Excel est sur le PC : mets ce RDV dans IK depuis le PC."); return null; }
+  try { if (!ikP) ikP = await pc("/ik", null, 30000); }
+  catch (e) { toast("L'Excel est sur le PC : relie-le (Chiffres › Trajets IK), puis réessaie."); return null; }
+  const n = x.hp, lieu = String(n.lieu || n.objet || sansEmoji(x.titre || "")).trim().slice(0, 120);
+  const connu = (ikP.lieux || []).find(l => norm(l[0]) === norm(lieu));
+  const t = { date: x.jour, lieu, adresse: String(n.adresse || (connu && connu[1]) || "").trim().slice(0, 300), motif: String(n.objet || "").trim().slice(0, 200) };
+  if (t.lieu && t.adresse) return t;
+  return new Promise(ok => {
+    let rendu = null;
+    fenetre(`<form id="em-ik"><h2 style="margin-top:0">${ico("route")} Mettre dans IK</h2>
+        <p class="muted small">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>
+        <label class="f">Lieu ou personne<input name="lieu" maxlength="120" required value="${esc(t.lieu)}"></label>
+        <label class="f">Adresse<input name="adresse" maxlength="300" required placeholder="N°, rue, code postal, ville" value="${esc(t.adresse)}"></label>
+        <label class="f">Motif (facultatif)<input name="motif" maxlength="200" value="${esc(t.motif)}"></label>
+        <div class="row"><button class="btn primary" type="submit">${ico("route")} Mettre dans IK</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`,
+      (f, fermer) => { const form = f.querySelector("#em-ik"); setTimeout(() => form.adresse.focus(), 30);
+        form.onsubmit = e => { e.preventDefault(); const v = { date: t.date, lieu: form.lieu.value.trim(), adresse: form.adresse.value.trim(), motif: form.motif.value.trim() };
+          if (!v.lieu || !v.adresse) return toast("Il faut le lieu et l'adresse"); rendu = v; fermer(); }; },
+      () => ok(rendu));
+  });
+}
+async function emVersIk(trajet) {
+  try {
+    let r = await pc("/ik", { version: ikP.version, trajet, confirmer: false }, 60000);
+    if (r.doublon) {
+      if (!confirm(r.doublon + " L'ajouter quand même ?")) return "Déjà dans IK BENJAMIN : rien d'ajouté, le RDV est noté comme envoyé.";
+      r = await pc("/ik", { version: ikP.version, trajet, confirmer: true }, 60000);
+    }
+    ikP = r;
+    return "Mis dans IK : trajet ajouté dans IK BENJAMIN (ligne " + r.ajoute.ligne + ").";
+  } catch (e) { ikP = null; throw e; }   // relu au prochain essai (l'Excel a pu changer)
 }
 /* RDV créés dans le pilote : liste « nouveaux » du document recurrents ; Pense intelligent en fait un vrai RDV (ou une séance
    régulière si « Chaque semaine ») à sa prochaine ouverture, puis le renvoie dans l'emploi du temps comme les autres. */
@@ -2599,12 +2717,18 @@ const emNouveaux = doc => { const l = doc && doc.contenu && Array.isArray(doc.co
 const emLibelleClient = c => c.nom + (c.eleves && c.eleves.length ? " (" + c.eleves.join(", ") + ")" : "");
 function emNouveau(jourTxt, minutes) {
   const actifs = cacheClients.filter(c => c.etat !== "termine").sort((a, b) => String(a.nom).localeCompare(String(b.nom), "fr"));
-  let hors = false, chaque = false;
+  let hors = false, hp = false, chaque = false;
   const h = Math.floor(minutes / 60), m = minutes % 60;
   fenetre(`<form class="em-nv" id="em-nv"><h2 style="margin-top:0">${ico("agenda")} Nouveau RDV</h2>
-      <div class="seg"><button type="button" class="chip" data-nv-mode="client" aria-pressed="true">Avec un client</button><button type="button" class="chip" data-nv-mode="hors" aria-pressed="false">Hors presta</button></div>
+      <div class="seg"><button type="button" class="chip" data-nv-mode="client" aria-pressed="true">Avec un client</button><button type="button" class="chip" data-nv-mode="hp" aria-pressed="false">Hors prestation</button><button type="button" class="chip" data-nv-mode="hors" aria-pressed="false">Personnel</button></div>
       <label class="f" id="nv-cl-l">Client (nom du parent ou de l'élève)<input id="nv-cl" list="nv-liste" autocomplete="off" placeholder="Tape un nom…"><datalist id="nv-liste">${actifs.map(c => `<option value="${esc(emLibelleClient(c))}">`).join("")}</datalist></label>
       <label class="f" id="nv-obj-l" hidden>Objet<input id="nv-obj" autocomplete="off" placeholder="Ex. coiffeur, comptable, réunion…"></label>
+      <div id="nv-hp" hidden><label class="f">Objet<input id="nv-hp-obj" list="nv-hp-motifs" autocomplete="off" maxlength="80" placeholder="Ex. prise de devis, visite de courtoisie"></label>
+        <datalist id="nv-hp-motifs"><option value="Prise de devis"><option value="Visite de courtoisie"><option value="Achat matériel"><option value="Décheterie"></datalist>
+        <label class="f">Chez qui ou où<input id="nv-hp-lieu" list="nv-hp-lieux" autocomplete="off" maxlength="120" placeholder="Ex. Delfino"></label>
+        <datalist id="nv-hp-lieux">${cacheClients.filter(c => c.etat !== "termine").map(c => `<option value="${esc(c.nom)}">`).join("")}</datalist>
+        <label class="f">Adresse (pour les IK)<input id="nv-hp-adr" autocomplete="off" maxlength="300" placeholder="N°, rue, code postal, ville"></label>
+        <p class="muted small" style="margin:0 0 8px">Pas une prestation : ce RDV ne va jamais dans reporting. Le jour venu, « Mettre dans IK » écrit le trajet dans IK BENJAMIN.</p></div>
       <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Jour<input type="date" id="nv-j" value="${jourTxt}"></label>
         <label class="f">Heure<input type="time" id="nv-h" step="900" value="${pad2(h)}:${pad2(m)}"></label>
         <label class="f">Durée<select id="nv-d">${[30, 45, 60, 90, 120, 150, 180, 240].map(d => `<option value="${d}" ${d === 60 ? "selected" : ""}>${d < 60 ? d + " min" : (d / 60 + " h").replace(".", ",")}</option>`).join("")}</select></label></div>
@@ -2613,22 +2737,28 @@ function emNouveau(jourTxt, minutes) {
       <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (f, fermer) => {
     const $ = s => f.querySelector(s);
     f.addEventListener("click", e => { const b = e.target.closest("[data-nv-mode]");
-      if (b) { hors = b.dataset.nvMode === "hors"; f.querySelectorAll("[data-nv-mode]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); $("#nv-cl-l").hidden = hors; $("#nv-obj-l").hidden = !hors; $("#nv-rep").hidden = hors; (hors ? $("#nv-obj") : $("#nv-cl")).focus(); }
+      if (b) { hors = b.dataset.nvMode === "hors"; hp = b.dataset.nvMode === "hp"; f.querySelectorAll("[data-nv-mode]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        $("#nv-cl-l").hidden = hors || hp; $("#nv-obj-l").hidden = !hors; $("#nv-hp").hidden = !hp; $("#nv-rep").hidden = hors || hp; (hp ? $("#nv-hp-obj") : hors ? $("#nv-obj") : $("#nv-cl")).focus(); }
       if (e.target.closest("#nv-rep")) { chaque = !chaque; $("#nv-rep").setAttribute("aria-pressed", String(chaque)); } });
     setTimeout(() => $("#nv-cl").focus(), 30);
     $("#em-nv").onsubmit = async e => {
       e.preventDefault();
-      let client = null, titre = "";
-      if (hors) { titre = $("#nv-obj").value.trim(); if (!titre) return toast("Indique l'objet du RDV"); }
+      let client = null, titre = "", hpInfos = null;
+      if (hp) { const objet = $("#nv-hp-obj").value.trim(), lieu = $("#nv-hp-lieu").value.trim();
+        if (!objet) return toast("Indique l'objet du RDV (ex. prise de devis)");
+        const chez = lieu && cacheClients.find(c => norm(c.nom) === norm(lieu));
+        hpInfos = { hp: true, objet: objet.slice(0, 80), lieu: lieu.slice(0, 120), adresse: ($("#nv-hp-adr").value.trim() || (chez && chez.adresse) || "").slice(0, 300) };
+        titre = "Hors prestation : " + objet + (lieu ? " – " + lieu : ""); }
+      else if (hors) { titre = $("#nv-obj").value.trim(); if (!titre) return toast("Indique l'objet du RDV"); }
       else { const v = $("#nv-cl").value.trim(), n = norm(v);
         client = actifs.find(c => emLibelleClient(c) === v) || actifs.find(c => norm(c.nom) === n) || (n ? (l => l.length === 1 ? l[0] : null)(actifs.filter(c => norm(emLibelleClient(c)).includes(n))) : null);
-        if (!client) return toast("Choisis le client dans la liste (ou « Hors presta »)");
+        if (!client) return toast("Choisis le client dans la liste (ou « Hors prestation », « Personnel »)");
         titre = emLibelleClient(client); }
       const [hh, mm] = ($("#nv-h").value || "").split(":").map(Number), j = $("#nv-j").value;
       if (!j || !Number.isFinite(hh)) return toast("Indique le jour et l'heure");
       const quand = new Date(j + "T" + pad2(hh) + ":" + pad2(mm || 0)).getTime();
       const nv = { id: "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), quand, dur: Number($("#nv-d").value) || 60, titre: titre.slice(0, 120),
-        cle: client && client.source_pense || null, nom: client ? client.nom : null, client_id: client ? client.id : null, chaque_semaine: !hors && chaque, le: Date.now() };
+        cle: client && client.source_pense || null, nom: client ? client.nom : null, client_id: client ? client.id : null, chaque_semaine: !hors && !hp && chaque, le: Date.now(), ...(hpInfos || {}) };
       const ok = await emEcrireRec(l => l, l => l, l => l.concat(nv));
       if (!ok) return toast("Pas enregistré : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
       fermer(); toast("RDV enregistré : il arrive dans Pense intelligent à sa prochaine ouverture."); afficher("emploi");
@@ -2704,6 +2834,8 @@ async function vueEmploi() {
   { const rang = x => ({ occ: 0, rdv: 1, rec: 3, nouveau: 4 })[x.sorte] ?? 2, garde = new Map();
     ag.elements.forEach(x => { const k = ident(x) + "|" + x.t, y = garde.get(k); if (!y || rang(x) < rang(y)) garde.set(k, x); });
     ag.elements = ag.elements.filter(x => garde.get(ident(x) + "|" + x.t) === x); }
+  emMarquerHp(ag, docRec);
+  const envois = emEnvois(docRec);
   const horsFenetre = (ag.fin && borneA >= ag.fin) || (ag.debut && borneB <= ag.debut);
   const vus = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.t >= borneA && x.t < borneB);
   const annVus = ag.annules.filter(a => a.t >= borneA && a.t < borneB);
@@ -2735,8 +2867,9 @@ async function vueEmploi() {
     toast(ok ? "Répété chaque semaine." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi"); };
   const occSuivante = x => ag.elements.find(y => y.sorte === "occ" && typeof y.occ === "string" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
   const action = (x, i) => {
+    if (x.hp) return "";   // hors prestation : pas de répétition
     if (repete(x)) return bascule(true, `data-em-couper="${i}"`);
-    if (x.nv) return bascule(false, `data-em-nvrep="${esc(x.nv.id)}"`);
+    if (x.nv) return x.hp ? "" : bascule(false, `data-em-nvrep="${esc(x.nv.id)}"`);
     if (!emEligible(x)) return "";
     return bascule(false, `data-em-rec="${i}"`); };
   const ev = (x, i) => { const dedans = `<b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}`, cl = `em-ev em-${esc(x.sorte)} ${emClasse(x)}`, bulle = x.sections.map(k => EM_NOM[k]).join(" + ") + " · " + esc(EM_SORTES[x.sorte] || "Agenda") + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
@@ -2753,7 +2886,7 @@ async function vueEmploi() {
     tim.map(([x]) => x).concat(an).forEach(x => { const d = new Date(x.t), f = new Date(Math.max(x.t + 18e5, x.fin || x.t) - 1); h0 = Math.min(h0, d.getHours()); h1 = Math.max(h1, Math.min(24, f.getHours() + 1)); });
     const H = (h1 - h0) * PX, minDe = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
     const colonne = j => {
-      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => ({ t: x.t, f: Math.max(x.fin || x.t, x.t + 18e5), x, i })).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
+      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => { const env = emEnvoiBouton(x, i, envois); return { t: x.t, f: Math.max(x.fin || x.t, x.t + (env ? 42e5 : 18e5)), x, i, env }; }).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
       // couloirs : deux RDV qui se chevauchent se partagent la largeur
       let groupe = [], finG = 0; const groupes = [];
       l.forEach(o => { if (groupe.length && o.t >= finG) { groupes.push(groupe); groupe = []; finG = 0; } const fins = []; groupe.forEach(g => fins[g.c] = Math.max(fins[g.c] || 0, g.f)); let c = 0; while (fins[c] > o.t) c++; o.c = c; groupe.push(o); finG = Math.max(finG, o.f); });
@@ -2762,7 +2895,7 @@ async function vueEmploi() {
       const tuiles = l.map(o => { const top = (minDe(o.t) - h0 * 60) / 60 * PX, haut = Math.max(22, (o.f - o.t) / 36e5 * PX - 2), pos = `top:${top}px;height:${haut}px;left:calc(${o.c * 100 / o.n}% + 2px);width:calc(${100 / o.n}% - 4px)`;
         if (o.a) return `<div class="em-gev ann" style="${pos}" title="Annulé sur le téléphone"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`;
         const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
-        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv ? " att" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}</div>`; }).join("");
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv ? " att" : ""}${o.env ? " a-env" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
     return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
@@ -2777,7 +2910,7 @@ async function vueEmploi() {
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn primary" data-em-plus="1">${ico("plus")} RDV</button><button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture.</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
     ${emLegende()}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
@@ -2797,6 +2930,7 @@ async function vueEmploi() {
         return emNouveau(v.dataset.emVide, Math.min(23 * 60 + 45, h0 * 60 + Math.max(0, Math.floor(y / PX * 4)) * 15)); }
       return;
     }
+    if (b.dataset.emEnvoi !== undefined) { const x = ag.elements[Number(b.dataset.emEnvoi)]; if (x) { b.disabled = true; return emEnvoyer(x, () => { if (onglet === "emploi") afficher("emploi"); }); } return; }
     if (b.dataset.emPlus) { const d = new Date(); return emNouveau(enSemaine ? (cestMaintenant ? aujourdhui : ymd(emSemaine)) : emJour, Math.min(23 * 60, (d.getHours() + 1) * 60)); }
     if (b.dataset.emNvret) return emRetirerNouveau(b.dataset.emNvret);
     if (b.dataset.emCouper !== undefined) { const x = ag.elements[Number(b.dataset.emCouper)]; if (x) return emCouper(x); }
@@ -2813,10 +2947,10 @@ async function vueEmploi() {
   };
 }
 /* Mis en avant sur Aujourd'hui : l'emploi du temps du jour, tout le monde dans une seule liste, une couleur par activité, « Presta annulée » en rouge */
-function emAujourdhuiHtml(ag) {
+function emAujourdhuiHtml(ag, envois = []) {
   if (!ag) return "";
-  const auj = ymd(new Date()), el = ag.elements.filter(x => x.jour === auj), an = ag.annules.filter(a => a.jour === auj);
-  const blocs = el.map(x => [x.t, `<div class="em-l ${emClasse(x)}"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))} <span class="muted small">· ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" && emSection(x) !== "TACHE" ? " · " + esc(EM_SORTES[x.sorte]) : ""}</span></span></div>`])
+  const auj = ymd(new Date()), el = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.jour === auj), an = ag.annules.filter(a => a.jour === auj);
+  const blocs = el.map(([x, i]) => [x.t, `<div class="em-l ${emClasse(x)}"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))} <span class="muted small">· ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" && emSection(x) !== "TACHE" ? " · " + esc(EM_SORTES[x.sorte]) : ""}</span></span>${emEnvoiBouton(x, i, envois)}</div>`])
     .concat(an.map(a => [a.t, `<div class="em-l em-annule"><b>${esc(hm(a.t))}</b><span>${ico("croix")} Presta annulée · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
     .sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
   return `<section class="card em-jour" aria-label="Emploi du temps d'aujourd'hui"><h2>${ico("agenda")} Emploi du temps d'aujourd'hui</h2>
@@ -3642,12 +3776,19 @@ async function ficheIntervenante(id) {
         ${fmAttente ? `<span class="tag warn">${fmAttente} à contrôler</span>` : ""}</summary><div id="fm"></div></details>` : ""}
     <details class="card pli" data-pli="clients" ${pliOuvert.clients ? "open" : ""}><summary>Clients confiés <span class="tag">${actives.length}</span>${aSonNom.length ? `<span class="tag warn">${aSonNom.length} sans accès</span>` : ""}</summary>
       ${aSonNom.length ? `<div class="ligne"><span style="min-width:0"><b>Notés à son nom, sans accès (${aSonNom.length})</b> ${aide("Son nom était seulement écrit sur ces clients, avant son compte. Tant que tu ne les ouvres pas, il ne les voit pas dans son appli.")}<br>${ENTREPRISES.map(([k, t]) => { const l = [...new Set(aSonNom.map(a => cacheClients.find(c => c.id === a.client_id)))].filter(c => dansEntreprise(c, k)); return l.length ? `<span class="muted small">${t} : ${l.map(c => esc(c.nom)).join(", ")}</span><br>` : ""; }).join("")}</span><button class="btn primary" data-ouvrir-clients>${ico("ouvert")} Lui ouvrir ces clients</button></div>` : ""}
-      ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
-      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></details>`, (el, fermer) => {
+      ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><span class="row">${zoneSelectHtml(a)}<button class="btn stop" data-retire="${a.id}">Retirer</button></span></div>`).join("") || `<p class="muted small">Aucun.</p>`}
+      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></details>
+    <details class="card pli" data-pli="tarifs" ${pliOuvert.tarifs ? "open" : ""}><summary>${ico("euro")} Tarifs à l'heure <span class="tag">toi seul</span></summary><div id="tfp"></div></details>`, (el, fermer) => {
     const recharger = () => { fermer(); ficheIntervenante(id); };
     el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
     el.style.maxWidth = "1120px";   // place pour le tableau des passages
     passagesPresta(el.querySelector("#pp"), p);
+    tarifsDuPresta(el.querySelector("#tfp"), p).catch(x => { el.querySelector("#tfp").innerHTML = `<p class="err">${esc(x.message || x)}</p>`; });
+    el.addEventListener("change", async e => {
+      const s = e.target.closest("[data-zone-ligne]"); if (!s) return;
+      const a = attrib.find(x => x.id === s.dataset.zoneLigne); if (!a) return;
+      if (await changerZone(a, s.value)) recharger(); else s.value = zoneAu(a, tfAujourdhui()) || "";
+    });
     if (el.querySelector("#fm")) facturesDuPresta(el.querySelector("#fm"), p, factures, docs, recharger);
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
@@ -5013,6 +5154,198 @@ async function changerIntervenante(c, a, apres) {
     };
   });
 }
+/* ===================== Tarifs à l'heure des presta (SQL 50) =====================
+   Benjamin seul règle ce qu'il paie de l'heure à chaque presta : par activité et par zone, ou un seul tarif pour tout, ou les deux
+   (quelques cases précises + « pour tout le reste »). Une grille compte « à partir du » : on ne change jamais une grille qui compte
+   déjà, on en ajoute une nouvelle à partir de demain au plus tôt (la base le refuse aussi). Le tout premier tarif peut compter
+   « depuis toujours ». La zone n'est pas celle du client : c'est le trajet de ce presta jusqu'à ce client, notée sur la ligne
+   client-presta (attributions.zones), datée elle aussi. Les heures déjà faites gardent donc le tarif et la zone de leur jour.
+   L'appli des presta ne lit rien de tout cela (table au gérant seul, attributions aussi depuis le SQL 34). */
+const ZONES_TARIF = [1, 2, 3], ACTIVITES_TARIF = ["Ménage", "Jardinage", "Bricolage", "Cours"], DEPUIS_TOUJOURS = "2000-01-01";
+let cacheTarifs = null;   // null : pas encore lu ; false : SQL 50 pas encore lancé
+async function chargerTarifs() {
+  const r = await sb.from("tarifs_presta").select("*").order("a_partir_du");
+  cacheTarifs = r.error ? false : r.data || [];
+  return cacheTarifs;
+}
+const tfAujourdhui = () => ymd(new Date());
+const tfDemain = () => ymd(new Date(Date.now() + 864e5));
+const tfNombre = s => { const t = String(s ?? "").replace(/\s|€/g, "").replace(",", "."); if (!t) return ""; const n = Number(t); return isFinite(n) && n > 0 && n < 1000 ? Math.round(n * 100) / 100 : null; };
+const tfVirgule = n => n == null || n === "" ? "" : String(+n).replace(".", ",");
+const tfDateFr = d => d === DEPUIS_TOUJOURS ? "toujours" : new Date(d + "T12:00").toLocaleDateString("fr-FR");
+const grillesDe = (tarifs, id) => (tarifs || []).filter(t => t.intervenante_id === id).sort((x, y) => x.a_partir_du < y.a_partir_du ? -1 : 1);
+const grilleAu = (tarifs, id, date) => grillesDe(tarifs, id).filter(t => t.a_partir_du <= date).pop() || null;
+const zonesTriees = a => ((a && a.zones) || []).slice().sort((x, y) => (x.depuis || "") < (y.depuis || "") ? -1 : 1);
+function zoneAu(a, date) { const l = zonesTriees(a).filter(z => !z.depuis || z.depuis <= date); return l.length ? +l[l.length - 1].zone : null; }
+const zoneAVenir = a => zonesTriees(a).find(z => z.depuis && z.depuis > tfAujourdhui()) || null;
+/* Le tarif d'une heure faite tel jour : la grille de ce jour-là, puis la case activité + zone, sinon l'activité « toutes zones », sinon « pour tout le reste » */
+function tarifAu(tarifs, id, activite, zone, date) {
+  const g = grilleAu(tarifs, id, date);
+  if (!g) return { taux: null, pourquoi: "pas de tarif à cette date" };
+  const l = g.grille || [];
+  const x = (zone && l.find(k => k.activite === activite && +k.zone === +zone)) || l.find(k => k.activite === activite && !k.zone);
+  if (x) return { taux: +x.taux, grille: g, origine: x.zone ? activite + ", zone " + x.zone : activite };
+  if (+g.taux_unique > 0) return { taux: +g.taux_unique, grille: g, origine: l.length ? "pour tout le reste" : "tarif unique" };
+  return { taux: null, grille: g, pourquoi: !zone && l.some(k => k.activite === activite) ? "zone à choisir" : "pas de tarif " + activite + (zone ? " en zone " + zone : "") };
+}
+function grilleHtml(g) {
+  const l = g.grille || [], acts = ACTIVITES_TARIF.filter(a => l.some(k => k.activite === a)), toutes = l.some(k => !k.zone);
+  const cel = (a, z) => { const x = l.find(k => k.activite === a && (z ? +k.zone === z : !k.zone)); return x ? suEuros(x.taux) : `<span class="muted">—</span>`; };
+  return (acts.length ? `<table class="tf-grille"><thead><tr><th>Activité</th>${ZONES_TARIF.map(z => `<th>Zone ${z}</th>`).join("")}${toutes ? "<th>Toutes zones</th>" : ""}</tr></thead>
+      <tbody>${acts.map(a => `<tr><td>${esc(a)}</td>${ZONES_TARIF.map(z => `<td>${cel(a, z)}</td>`).join("")}${toutes ? `<td>${cel(a, 0)}</td>` : ""}</tr>`).join("")}</tbody></table>` : "")
+    + (+g.taux_unique > 0 ? `<p style="margin:6px 0 0">${acts.length ? "Pour tout le reste" : "Un seul tarif pour tout"} : <b>${suEuros(g.taux_unique)}</b> de l'heure</p>` : "")
+    + (g.note ? `<p class="muted small" style="margin:4px 0 0">${esc(g.note)}</p>` : "");
+}
+/* Fiche presta › Tarifs à l'heure : la grille du moment, les changements prévus, les anciennes grilles */
+async function tarifsDuPresta(zone, p) {
+  const tarifs = await chargerTarifs();
+  if (tarifs === false) { zone.innerHTML = `<p class="muted small" style="margin:0">Pour régler ses tarifs, lance d'abord le SQL 50 dans Supabase (base › 50 - tarifs des presta par activite et zone).</p>`; return; }
+  const l = grillesDe(tarifs, p.id), aujourd = tfAujourdhui(), actuelle = grilleAu(tarifs, p.id, aujourd);
+  const aVenir = l.filter(g => g.a_partir_du > aujourd), anciennes = l.filter(g => g.a_partir_du <= aujourd && g !== actuelle).reverse();
+  const jusquau = g => { const s = l[l.indexOf(g) + 1]; return s ? new Date(new Date(s.a_partir_du + "T12:00").getTime() - 864e5).toLocaleDateString("fr-FR") : ""; };
+  zone.innerHTML = `<p class="muted small" style="margin-top:0">Ce que tu lui paies de l'heure. Il ne le voit pas dans son appli. Les heures déjà faites gardent le tarif de leur jour.</p>
+    ${actuelle ? `<h3>En ce moment <span class="muted small">${actuelle.a_partir_du === DEPUIS_TOUJOURS ? "depuis toujours" : "depuis le " + tfDateFr(actuelle.a_partir_du)}</span></h3>${grilleHtml(actuelle)}` : `<p class="muted small">Aucun tarif en ce moment.</p>`}
+    ${aVenir.map(g => `<div class="ligne tf-avenir"><span style="min-width:0"><b>À partir du ${tfDateFr(g.a_partir_du)}</b>${grilleHtml(g)}</span><button class="btn flat" data-tf-retirer="${g.id}">${ico("corbeille")} Retirer ce changement</button></div>`).join("")}
+    <div class="row" style="margin-top:10px"><button class="btn primary" data-tf-changer>${ico("euro")} ${l.length ? "Changer ses tarifs" : "Régler ses tarifs"}</button></div>
+    ${anciennes.length ? `<details style="margin-top:10px"><summary class="muted small">Anciens tarifs (${anciennes.length})</summary>${anciennes.map(g => `<h3>${g.a_partir_du === DEPUIS_TOUJOURS ? "Depuis toujours" : "Du " + tfDateFr(g.a_partir_du)} jusqu'au ${jusquau(g)}</h3>${grilleHtml(g)}`).join("")}</details>` : ""}`;
+  zone.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.hasAttribute("data-tf-changer")) return reglerTarifs(p, tarifs, () => tarifsDuPresta(zone, p));
+    if (b.dataset.tfRetirer) {
+      if (!confirm("Retirer ce changement de tarif prévu ? Le tarif d'aujourd'hui continue.")) return;
+      const { error } = await sb.from("tarifs_presta").delete().eq("id", b.dataset.tfRetirer);
+      if (error) return souci(error);
+      toast("Changement retiré"); tarifsDuPresta(zone, p);
+    }
+  };
+}
+/* Régler ou changer les tarifs : la nouvelle grille part de la dernière, et compte à partir de demain au plus tôt */
+function reglerTarifs(p, tarifs, apres) {
+  const l = grillesDe(tarifs, p.id), premier = !l.length, base = l[l.length - 1] || null;
+  const parZones = !base || (base.grille || []).length > 0;
+  const val = (a, z) => { const x = base && (base.grille || []).find(k => k.activite === a && (z ? +k.zone === z : !k.zone)); return x ? tfVirgule(x.taux) : ""; };
+  const prevu = d => l.find(g => g.a_partir_du === d && d > tfAujourdhui());
+  fenetre(`<h2 style="margin:0">Tarifs à l'heure · ${esc(nomPers(p))}</h2>
+    <p class="muted small" style="margin:6px 0 0">Ce que tu lui paies de l'heure. Il ne voit ni ce tarif ni cette fenêtre.</p>
+    <form id="tf" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+      <div class="row"><label class="chk"><input type="radio" name="mode" value="zones" ${parZones ? "checked" : ""}>Par activité et zone</label>
+        <label class="chk"><input type="radio" name="mode" value="unique" ${parZones ? "" : "checked"}>Un seul tarif pour tout</label></div>
+      <div id="tf-zones" ${parZones ? "" : "hidden"}>
+        <div style="overflow-x:auto"><table class="tf-grille"><thead><tr><th>Activité</th>${ZONES_TARIF.map(z => `<th>Zone ${z}</th>`).join("")}<th>Toutes zones ${aide("Le même tarif pour cette activité, quelle que soit la zone. Une case de zone remplie passe avant.")}</th></tr></thead>
+          <tbody>${ACTIVITES_TARIF.map(a => `<tr><td>${esc(a)}</td>${[1, 2, 3, 0].map(z => `<td><input class="tf-in" type="text" inputmode="decimal" data-act="${esc(a)}" data-z="${z}" value="${esc(val(a, z))}" placeholder="—" aria-label="${esc(a)} ${z ? "zone " + z : "toutes zones"}"></td>`).join("")}</tr>`).join("")}</tbody></table></div>
+        <p class="muted small" style="margin:4px 0 0">En euros de l'heure. Une case vide : pas de tarif pour ce cas.</p>
+        <label class="f" style="margin-top:8px">Pour tout le reste (facultatif) ${aide("Compte pour une activité ou une zone sans case remplie, par exemple une mission inhabituelle.")}<input type="text" inputmode="decimal" name="reste" value="${base && (base.grille || []).length ? esc(tfVirgule(base.taux_unique)) : ""}" style="max-width:140px"></label></div>
+      <label class="f" id="tf-unique" ${parZones ? "hidden" : ""}>Tarif de l'heure, pour tout<input type="text" inputmode="decimal" name="unique" value="${base && !(base.grille || []).length ? esc(tfVirgule(base.taux_unique)) : ""}" style="max-width:140px"></label>
+      ${premier ? `<label class="chk"><input type="checkbox" name="toujours" checked>Compte depuis toujours ${aide("C'est son premier tarif : il peut compter aussi pour les heures déjà faites, puisqu'aucune n'avait de tarif. Décoche pour choisir une date.")}</label>` : ""}
+      <label class="f" id="tf-date" ${premier ? "hidden" : ""}>À partir du<input type="date" name="date" value="${premier ? tfAujourdhui() : tfDemain()}" ${premier ? "" : `min="${tfDemain()}"`}></label>
+      ${premier ? "" : `<p class="muted small" style="margin:0">Les heures faites avant cette date gardent l'ancien tarif. Au plus tôt demain : le tarif d'aujourd'hui compte déjà.</p>`}
+      <label class="f">Note (facultative)<input type="text" name="note" maxlength="300"></label>
+      <p class="err" id="tf-err"></p>
+      <div class="row"><button class="btn primary" type="submit">${ico("ok")} Enregistrer ces tarifs</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
+    const form = el.querySelector("#tf"), err = el.querySelector("#tf-err");
+    form.onchange = () => {
+      const z = form.mode.value === "zones"; el.querySelector("#tf-zones").hidden = !z; el.querySelector("#tf-unique").hidden = z;
+      if (form.toujours) el.querySelector("#tf-date").hidden = form.toujours.checked;
+    };
+    form.onsubmit = async e => {
+      e.preventDefault(); err.textContent = "";
+      const grille = [], mauvais = [];
+      let taux_unique = null;
+      if (form.mode.value === "zones") {
+        form.querySelectorAll(".tf-in").forEach(i => { const n = tfNombre(i.value); if (n === null) mauvais.push(i.getAttribute("aria-label")); else if (n) grille.push({ activite: i.dataset.act, zone: +i.dataset.z || null, taux: n }); });
+        taux_unique = tfNombre(form.reste.value); if (taux_unique === null) mauvais.push("pour tout le reste");
+        if (!mauvais.length && !grille.length && !taux_unique) { err.textContent = "Remplis au moins une case."; return; }
+      } else {
+        taux_unique = tfNombre(form.unique.value);
+        if (!taux_unique) { err.textContent = "Écris le tarif de l'heure, en euros."; return; }
+      }
+      if (mauvais.length) { err.textContent = "Pas un nombre en euros : " + mauvais.join(", ") + "."; return; }
+      const date = premier && form.toujours.checked ? DEPUIS_TOUJOURS : form.date.value;
+      if (!date) { err.textContent = "Choisis la date à partir de laquelle il compte."; return; }
+      if (!premier && date < tfDemain()) { err.textContent = "Le tarif d'aujourd'hui compte déjà : choisis demain ou plus tard."; return; }
+      const ligne = { intervenante_id: p.id, a_partir_du: date, taux_unique: taux_unique || null, grille, note: form.note.value.trim() || null };
+      const deja = prevu(date), bouton = form.querySelector("[type=submit]"); bouton.disabled = true;
+      const { error } = deja ? await sb.from("tarifs_presta").update(ligne).eq("id", deja.id) : await sb.from("tarifs_presta").insert(ligne);
+      if (error) { bouton.disabled = false; err.textContent = error.message || String(error); return; }
+      fermer(); toast(date === DEPUIS_TOUJOURS ? "Tarifs enregistrés" : "Tarifs enregistrés : ils comptent à partir du " + tfDateFr(date)); apres();
+    };
+  });
+}
+/* La zone sur une ligne client-presta : choisie une fois (compte depuis le début), puis un changement compte à partir de demain */
+function zoneSelectHtml(a) {
+  if (!a.intervenante_id || !("zones" in a)) return "";   // sans compte, ou SQL 50 pas lancé
+  const z = zoneAu(a, tfAujourdhui()), v = zoneAVenir(a);
+  return `<span class="tf-zone"><select data-zone-ligne="${a.id}" aria-label="Zone de trajet" title="Zone : le trajet de ce presta jusqu'à ce client (sert à son tarif)">${z ? "" : `<option value="">Zone ?</option>`}${ZONES_TARIF.map(k => `<option value="${k}" ${z === k ? "selected" : ""}>Zone ${k}</option>`).join("")}</select>${v ? `<span class="muted small">zone ${+v.zone} à partir du ${tfDateFr(v.depuis)}</span>` : ""}</span>`;
+}
+async function changerZone(a, valeur) {
+  const aujourd = tfAujourdhui(), passe = zonesTriees(a).filter(z => !z.depuis || z.depuis <= aujourd), z = zoneAu(a, aujourd), nv = +valeur || null;
+  let zones, message;
+  if (!nv) { zones = passe; message = passe.length ? "Une zone qui compte déjà ne s'efface pas" : ""; }
+  else if (!(a.zones || []).length) { zones = [{ zone: nv, depuis: null }]; message = "Zone " + nv + " notée"; }
+  else if (nv === z) { zones = passe; message = "Zone " + nv + " gardée : le changement prévu est retiré"; }
+  else { zones = passe.concat({ zone: nv, depuis: tfDemain() }); message = "Zone " + nv + " à partir de demain" + (z ? " : les heures d'avant gardent la zone " + z : ""); }
+  if (JSON.stringify(zones) === JSON.stringify(zonesTriees(a))) { if (message) toast(message); return false; }
+  const { error } = await sb.from("attributions").update({ zones }).eq("id", a.id);
+  if (error) { souci(error); return false; }
+  a.zones = zones; const k = cacheAttrib.find(x => x.id === a.id); if (k) k.zones = zones;
+  toast(message); return true;
+}
+/* Ce que rapporte un client régulier : la prévision suit le tarif d'aujourd'hui (et le prochain s'il change) ;
+   ce qui est déjà fait est calculé avec le tarif et la zone du jour de chaque passage, donc ne bouge pas quand le tarif change. */
+const SEMAINES_MOIS = 52 / 12;
+async function rapporteClient(c, zone, lignes) {
+  const titre = `<h2 style="margin-top:0">Ce que rapporte ce client ${aide("Facturé moins ce qui est payé aux presta. Ce n'est pas un bénéfice : charges, URSSAF, frais et trajets ne sont pas déduits.")}</h2>`;
+  const tarifs = await chargerTarifs();
+  if (tarifs === false || !("prevision" in c)) { zone.innerHTML = titre + `<p class="muted small">Il faut d'abord lancer le SQL 50 dans Supabase.</p>`; return; }
+  const aujourd = tfAujourdhui(), m0 = new Date(); m0.setMonth(m0.getMonth() - 2, 1); m0.setHours(0, 0, 0, 0);
+  const huit = new Date(Date.now() - 56 * 864e5), depuis = new Date(Math.min(m0, huit));
+  const pts = await q(sb.from("pointages").select("id,intervenante_id,arrivee,depart,activite").eq("client_id", c.id).gte("arrivee", depuis.toISOString()).not("depart", "is", null).order("arrivee"));
+  const duree = x => (new Date(x.depart) - new Date(x.arrivee)) / 36e5;
+  const regul = lignes.filter(a => prestaEnCours(a) && !ligneDeMission(a));
+  const actDe = a => a.activite || activitePrincipale(activitesClient(c));
+  const acts = [...new Set(regul.map(actDe))], prev = c.prevision || {};
+  /* une heure faite : la ligne client-presta de ce jour-là donne la zone, le passage donne l'activité */
+  const ligneDu = (id, date) => lignes.find(a => a.intervenante_id === id && (!a.debut || a.debut <= date) && (!a.fin || a.fin >= date) && !ligneDeMission(a)) || lignes.find(a => a.intervenante_id === id && (!a.debut || a.debut <= date) && (!a.fin || a.fin >= date));
+  const coutPassage = x => { const date = ymd(new Date(x.arrivee)), a = ligneDu(x.intervenante_id, date); return tarifAu(tarifs, x.intervenante_id, x.activite || (a && actDe(a)), a ? zoneAu(a, date) : null, date); };
+  const blocs = acts.map(act => {
+    const ls = regul.filter(a => actDe(a) === act), pv = prev[act] || {};
+    const moy = pts.filter(x => new Date(x.arrivee) >= huit && ls.some(a => a.intervenante_id === x.intervenante_id) && (x.activite || act) === act).reduce((s, x) => s + duree(x), 0) / 8;
+    const hEstime = acts.length === 1 && c.temps_semaine_min ? c.temps_semaine_min / 60 : Math.round(moy * 4) / 4;
+    const h = +pv.heures_semaine > 0 ? +pv.heures_semaine : hEstime, prix = +pv.prix > 0 ? +pv.prix : 0;
+    const payes = ls.map(a => ({ a, t: a.intervenante_id ? tarifAu(tarifs, a.intervenante_id, act, zoneAu(a, aujourd), aujourd) : { taux: null, pourquoi: "pas de compte dans l'appli" } }));
+    const dates = [...new Set(ls.flatMap(a => [...grillesDe(tarifs, a.intervenante_id).map(g => g.a_partir_du), ...zonesTriees(a).map(z => z.depuis)]).filter(d => d && d > aujourd))].sort();
+    const apres = dates[0] ? ls.map(a => a.intervenante_id ? tarifAu(tarifs, a.intervenante_id, act, zoneAu(a, dates[0]), dates[0]) : { taux: null }) : null;
+    const moyenne = l => l.every(t => t.taux > 0) && l.length ? l.reduce((s, t) => s + t.taux, 0) / l.length : null;   // plusieurs presta : on partage les heures
+    const calcul = taux => taux == null ? `<span class="tag warn">${ico("alerte")} tarif manquant</span>` : `payé <b>${suEuros(h * SEMAINES_MOIS * taux)}</b>${prix ? ` · reste <b>${suEuros(h * SEMAINES_MOIS * (prix - taux))}</b>` : ""}`;
+    const tNow = moyenne(payes.map(x => x.t)), tApres = apres ? moyenne(apres) : null;
+    return `<div class="tf-bloc" data-act="${esc(act)}"><h3>${esc(act)}</h3>
+      ${payes.map(({ a, t }) => `<div class="ligne"><span>${esc(nomPresta(a))}${t.taux ? ` <span class="muted small">· ${esc(t.origine)}</span>` : ""}</span><span>${t.taux ? suEuros(t.taux) + " de l'heure" : `<span class="tag warn">${esc(t.pourquoi)}</span>`}</span></div>`).join("")}
+      <div class="deux" style="margin-top:6px"><label class="f">Prix de l'heure facturé au client<input type="text" inputmode="decimal" name="prix" value="${esc(tfVirgule(pv.prix))}" placeholder="—"></label>
+        <label class="f">Heures par semaine<input type="text" inputmode="decimal" name="heures" value="${esc(tfVirgule(pv.heures_semaine))}" placeholder="${esc(tfVirgule(hEstime) || "—")}"></label></div>
+      <p class="muted small" style="margin:4px 0 0">${+pv.heures_semaine > 0 ? "" : hEstime ? (acts.length === 1 && c.temps_semaine_min ? "Heures : le temps acheté de sa fiche. " : "Heures : la moyenne des 8 dernières semaines. ") : "Écris les heures par semaine pour voir la prévision. "}</p>
+      ${h ? `<p style="margin:4px 0 0">Par mois : ${prix ? `facturé <b>${suEuros(h * SEMAINES_MOIS * prix)}</b> · ` : ""}${calcul(tNow)}</p>
+        ${apres && tApres !== tNow ? `<p style="margin:2px 0 0">À partir du ${tfDateFr(dates[0])} : ${calcul(tApres)}</p>` : ""}` : ""}</div>`;
+  });
+  /* Déjà fait : 3 derniers mois, avec le tarif du jour de chaque passage */
+  const mois = [0, 1, 2].map(k => { const d = new Date(); d.setMonth(d.getMonth() - k, 1); return ymd(d).slice(0, 7); });
+  const passe = mois.map(m => { const l = pts.filter(x => ymd(new Date(x.arrivee)).slice(0, 7) === m && x.intervenante_id), r = { m, h: 0, cout: 0, sans: 0 };
+    l.forEach(x => { const t = coutPassage(x), d = duree(x); r.h += d; if (t.taux > 0) r.cout += d * t.taux; else r.sans += d; }); return r; });
+  zone.innerHTML = titre + (acts.length ? `<form id="rc">${blocs.join("")}<div class="row" style="margin-top:10px"><button class="btn primary" type="submit">${ico("ok")} Enregistrer la prévision</button></div></form>` : `<p class="muted small">Aucun presta régulier en ce moment.</p>`)
+    + `<h3>Déjà fait ${aide("Chaque passage est compté avec le tarif et la zone de son jour : changer un tarif ne modifie pas ces chiffres.")}</h3>
+      <table class="tf-grille"><thead><tr><th>Mois</th><th>Heures</th><th>Payé aux presta</th></tr></thead><tbody>${passe.map(r => `<tr><td>${new Date(r.m + "-15T12:00").toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</td><td>${r.h ? heures(r.h * 60) : "—"}</td><td>${r.h ? suEuros(r.cout) : "—"}${r.sans ? ` <span class="tag warn">${heures(r.sans * 60)} sans tarif</span>` : ""}</td></tr>`).join("")}</tbody></table>`;
+  const f = zone.querySelector("#rc");
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    const nv = { ...(c.prevision || {}) }, mauvais = [];
+    f.querySelectorAll(".tf-bloc").forEach(b => { const act = b.dataset.act, prix = tfNombre(b.querySelector("[name=prix]").value), h = tfNombre(b.querySelector("[name=heures]").value);
+      if (prix === null || h === null) mauvais.push(act); else if (prix || h) nv[act] = { prix: prix || null, heures_semaine: h || null }; else delete nv[act]; });
+    if (mauvais.length) return toast("Pas un nombre : " + mauvais.join(", "));
+    const { error } = await sb.from("clients").update({ prevision: nv }).eq("id", c.id);
+    if (error) return souci(error);
+    c.prevision = nv; const k = cacheClients.find(x => x.id === c.id); if (k) k.prevision = nv;
+    toast("Prévision enregistrée"); rapporteClient(c, zone, lignes);
+  };
+}
 /* Qui intervient chez ce client, et tous ceux qui y sont passés */
 async function dosPresta(c, corps, re) {
   const lignes = await q(sb.from("attributions").select("*").eq("client_id", c.id));
@@ -5028,7 +5361,7 @@ async function dosPresta(c, corps, re) {
       ${enAttente.map(d => { const p = potentielsDemande(d), l = [p.oui.length ? "D'accord : " + p.oui.join(", ") : "", p.attente.length ? "Réponse attendue : " + p.attente.join(", ") : "", p.contacter.length ? "À contacter : " + p.contacter.join(", ") : ""].filter(Boolean).join(" · ");
         return `<div class="ligne"><span style="min-width:0"><b>${esc(d.titre)}</b>${d.devis_numero ? ` <span class="muted small">devis ${esc(d.devis_numero)}</span>` : ""}<br><span class="muted small">${esc(l || "Personne pour l'instant")}</span></span>${["estimee", "devis_cree"].includes(d.etat) && (!p.oui.length || !signeLe(d)) ? `<button class="btn" data-pot="${d.id}">${ico("mission")} Mobiliser</button>` : ""}</div>`; }).join("")}</section>` : ""}
     <section class="card"><h2 style="margin-top:0">En ce moment</h2>
-      ${actuels.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} ${ligneDeMission(a) ? `<span class="tag">Mission</span> ${aide("Cette personne vient pour une mission précise. Changer l'intervenante habituelle n'y touche pas.")} ` : ""}${a.debut ? `<span class="muted small">depuis le ${dateFr(a.debut)}</span>` : ""}${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><span class="row">${ligneDeMission(a) ? "" : `<button class="btn" data-changer="${a.id}">${ico("mission")} Changer d'intervenante</button>`}<button class="btn stop" data-arret="${a.id}">Fin de mission</button></span></div>`).join("") || `<p class="muted small">Aucun prestataire.</p>`}
+      ${actuels.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} ${ligneDeMission(a) ? `<span class="tag">Mission</span> ${aide("Cette personne vient pour une mission précise. Changer l'intervenante habituelle n'y touche pas.")} ` : ""}${a.debut ? `<span class="muted small">depuis le ${dateFr(a.debut)}</span>` : ""}${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><span class="row">${zoneSelectHtml(a)}${ligneDeMission(a) ? "" : `<button class="btn" data-changer="${a.id}">${ico("mission")} Changer d'intervenante</button>`}<button class="btn stop" data-arret="${a.id}">Fin de mission</button></span></div>`).join("") || `<p class="muted small">Aucun prestataire.</p>`}
       <h3>Ajouter un prestataire</h3>
       <form id="pr-aj" style="display:flex;flex-direction:column;gap:10px">
         <div class="deux"><label class="f">Qui<input type="text" name="qui" list="pr-noms" autocomplete="off" required><datalist id="pr-noms">${connus.map(n => `<option value="${esc(n)}">`).join("")}</datalist></label>
@@ -5036,8 +5369,15 @@ async function dosPresta(c, corps, re) {
         <div class="deux"><label class="f">Depuis le<input type="date" name="debut" value="${ymd(new Date())}" required></label><label class="f">Note (facultative)<input type="text" name="note" maxlength="1000"></label></div>
         <p class="muted small" style="margin:0">Si cette personne a un compte dans l'appli, elle verra ce client dans la sienne. Sinon, son nom est seulement noté ici.</p>
         <div class="row"><button class="btn primary" type="submit">Ajouter</button></div></form></section>
+    <section class="card" style="margin-top:12px" id="pr-rapporte"></section>
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Historique</h2>
       ${anciens.map(a => `<div class="ligne"><span style="min-width:0">${titre(a)} <span class="muted small">${a.debut ? "du " + dateFr(a.debut) + " au" : "jusqu'au"} ${dateFr(a.fin)}</span>${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ""}</span><button class="btn flat" data-efface="${a.id}">Effacer</button></div>`).join("") || `<p class="muted small">Personne n'est encore parti.</p>`}</section>`;
+  rapporteClient(c, corps.querySelector("#pr-rapporte"), lignes).catch(x => { corps.querySelector("#pr-rapporte").innerHTML = `<p class="err">${esc(x.message || x)}</p>`; });
+  corps.onchange = async e => {
+    const s = e.target.closest("[data-zone-ligne]"); if (!s) return;
+    const a = lignes.find(x => x.id === s.dataset.zoneLigne); if (!a) return;
+    await changerZone(a, s.value); re();
+  };
   corps.querySelector("#pr-aj").onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), qui = String(f.get("qui")).trim(); if (!qui) return;
