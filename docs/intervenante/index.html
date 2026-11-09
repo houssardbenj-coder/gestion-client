@@ -2225,7 +2225,81 @@ function ajouterPassage(pre = {}) {
 const heuresSaisie = min => min ? String(Math.round(min / 60 * 100) / 100).replace(".", ",") : "";
 const minutesSaisie = v => { v = String(v || "").trim().toLowerCase().replace(",", "."); const m = /^(\d+)\s*h\s*(\d{1,2})$/.exec(v); return m ? +m[1] * 60 + +m[2] : Math.round(parseFloat(v) * 60) || 0; };
 const ligneOk = l => l.client_id && l.minutes > 0 && l.jour && l.jour <= versLocal(new Date()).slice(0, 10);
+/* ---------- Facture du mois (SQL 49) : seulement le presta qui fait lui-même sa facture ----------
+   Chaque mois fini depuis octobre 2026 : « Importer la facture du mois » (pages rangées comme un papier,
+   dans la case Factures de son dossier par le pont) ou « Pas de presta ce mois-ci ». OIKOS contrôle dans le pilote. */
+const FACTURES_DEPUIS = new Date(2026, 9, 1);
+const faitSaFacture = () => sousTraitante() && !moi.facture_par_oikos;
+const moisTxt = d => new Date(d + (String(d).length === 10 ? "T12:00" : "")).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+const deMois = iso => (/^[aeiouyéèêâàô]/i.test(moisTxt(iso)) ? "d'" : "de ") + moisTxt(iso);   // « d'octobre », « de novembre »
+const moisIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+async function facturesDues() {
+  if (!faitSaFacture()) return null;
+  const { data, error } = await sb.from("factures_mois").select("*").eq("intervenante_id", moi.id).order("mois", { ascending: false });
+  if (error) return null;   // SQL 49 pas encore lancé : rien n'apparaît
+  const debut = new Date(Math.max(FACTURES_DEPUIS, new Date(new Date(moi.cree_le || FACTURES_DEPUIS).getFullYear(), new Date(moi.cree_le || FACTURES_DEPUIS).getMonth(), 1)));
+  const auj = new Date(), dues = [];
+  for (let d = new Date(debut); d < new Date(auj.getFullYear(), auj.getMonth(), 1); d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    const iso = moisIso(d), f = data.find(x => x.mois === iso);
+    if (!f || f.etat === "refusee") dues.push({ mois: iso, f });
+  }
+  return { dues: dues.reverse(), derniere: data[0] || null };
+}
+function blocFactures(fx) {
+  if (!fx) return "";
+  const etat = { envoyee: "envoyée, OIKOS vérifie", aucune: "pas de presta ce mois-là", validee: "✓ validée par OIKOS" };
+  return `${fx.dues.map(({ mois, f }) => `<div class="card" style="margin-top:10px;border-color:var(--warn)">
+      <div class="row" style="justify-content:space-between"><b style="text-transform:capitalize">Facture ${esc(deMois(mois))}</b><span class="tag warn">${f ? "refusée" : "attendue"}</span></div>
+      ${f && f.motif ? `<p class="err" style="min-height:0">${esc(f.motif)}</p>` : ""}
+      <button class="btn primary" data-fact-imp="${mois}"><span class="ic">${ico("photo")}</span>Importer la facture du mois</button>
+      <button class="btn flat" data-fact-aucune="${mois}">Pas de presta ce mois-ci</button></div>`).join("")}
+    ${!fx.dues.length && fx.derniere ? `<p class="muted small" style="margin-top:8px">Facture ${esc(deMois(fx.derniere.mois))} : ${esc(etat[fx.derniere.etat] || "")}${fx.derniere.numero ? " (n° " + esc(fx.derniere.numero) + ")" : ""}</p>` : ""}`;
+}
+async function minutesDuMois(mois) {
+  const d = new Date(mois + "T00:00"), f = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  const { data, error } = await sb.from("pointages").select("arrivee,depart").eq("intervenante_id", moi.id).gte("arrivee", d.toISOString()).lt("arrivee", f.toISOString());
+  if (error) throw error;
+  return data.filter(p => p.depart).reduce((s, p) => s + minutesEntre(p.arrivee, p.depart), 0);
+}
+async function factureAucune(mois) {
+  const mn = await minutesDuMois(mois);
+  if (mn > 0) return toast(`Tu as déclaré ${heuresTxt(mn)} en ${moisTxt(mois)} : envoie plutôt ta facture.`);
+  if (!confirm(`Aucune prestation pour OIKOS en ${moisTxt(mois)} ?`)) return;
+  const { error } = await sb.from("factures_mois").upsert({ intervenante_id: moi.id, mois, etat: "aucune" }, { onConflict: "intervenante_id,mois" });
+  if (error) return souci(error);
+  toast("C'est noté, merci"); accueil("mois");
+}
+function factureImporter(mois) {
+  const champ = document.createElement("input"); champ.type = "file"; champ.accept = "image/*,application/pdf"; champ.multiple = true;
+  let fichiers = [];
+  feuille(`<h2 style="margin:0;text-transform:capitalize">Facture ${esc(deMois(mois))}</h2>
+    <form class="stack" id="ff"><button class="btn" type="button" id="choisir"><span class="ic">${ico("photo")}</span>Choisir le PDF ou les photos</button>
+      <p class="muted small" id="choisis">Aucun fichier choisi. Plusieurs pages : choisis-les d'un coup.</p>
+      <div class="grid2"><label class="f">N° de la facture<input name="numero" required maxlength="60" placeholder="ex. 2026-10"></label>
+        <label class="f">Montant total (€)<input name="montant" required inputmode="decimal" placeholder="ex. 540,00"></label></div>
+      <p class="err" id="err"></p>
+      <button class="btn primary big" type="submit"><span class="ic">${ico("envoi")}</span>Envoyer à OIKOS</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#choisir").onclick = () => { champ.value = ""; champ.click(); };
+    champ.onchange = () => { fichiers = [...champ.files]; el.querySelector("#choisis").textContent = fichiers.length ? fichiers.map(f => f.name).join(", ") : "Aucun fichier choisi."; };
+    el.querySelector("#ff").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), err = el.querySelector("#err");
+      const montant = Number(String(f.get("montant")).replace(/\s|€/g, "").replace(",", "."));
+      if (!fichiers.length) return err.textContent = "Choisis d'abord le fichier de ta facture.";
+      if (!(montant > 0)) return err.textContent = "Écris le montant total, par exemple 540,00.";
+      const b = e.target.querySelector("[type=submit]"); b.disabled = true; err.textContent = "Envoi en cours…";
+      try {
+        const libelle = "Facture " + moisTxt(mois);
+        for (const x of fichiers) await envoyerPapier({ id: null, libelle }, x, { facture_mois: mois });
+        const { error } = await sb.from("factures_mois").upsert({ intervenante_id: moi.id, mois, etat: "envoyee", numero: String(f.get("numero")).trim(), montant }, { onConflict: "intervenante_id,mois" });
+        if (error) throw error;
+        fermer(); toast("Facture envoyée à OIKOS ✓"); accueil("mois");
+      } catch (x) { b.disabled = false; err.textContent = ""; refusDepot(x) ? toast(MSG_PLAFOND) : souci(x); }
+    };
+  });
+}
+
 async function vueMois() {
+  const fx = await facturesDues().catch(() => null);
   const m0 = moisVu, m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
   const { data: pt, error } = await sb.from("pointages").select("*").eq("intervenante_id", moi.id)
     .gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).order("arrivee");
@@ -2247,6 +2321,7 @@ async function vueMois() {
       <div class="acts">${ACTIVITES.map(a => `<label><input type="checkbox" name="activite" value="${a}" ${(l.activite || "Ménage") === a ? "checked" : ""}>${a}</label>`).join("")}</div>
       <details class="rq" ${l.note ? "open" : ""}><summary>+ remarque</summary><input name="note" value="${esc(l.note || "")}" aria-label="Remarque"></details></div>`;
   contenu(`<h1>Reporting</h1>
+    ${blocFactures(fx)}
     <div class="card" style="margin-top:10px">
       <label class="f" for="dire">Ce que tu as fait</label>
       <textarea id="dire" rows="3" style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);font-size:17px;width:100%" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier&#10;ou pour tout un mois : octobre Houssard 7 - 14 - 21 - 28 3h"></textarea>
@@ -2266,8 +2341,10 @@ async function vueMois() {
         <span class="row" style="gap:4px;margin-top:3px">${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans mon rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></button>
         <b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</div>
     ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px;width:100%"><span class="ic">${ico("ok")}</span>Mes heures du mois sont justes</button>` : ""}
-    <p class="muted small" style="margin-top:8px">Chaque passage envoyé part tout seul dans ton rapport d'activité (ta feuille d'heures OIKOS). OIKOS fait ta facture à partir de ces heures.</p>`);
+    <p class="muted small" style="margin-top:8px">Chaque passage envoyé part tout seul dans ton rapport d'activité (ta feuille d'heures OIKOS). ${faitSaFacture() ? "Chaque début de mois, ta facture du mois fini s'envoie ici, en haut de Reporting : OIKOS la compare à ces heures." : "OIKOS fait ta facture à partir de ces heures."}</p>`);
   const el = document.getElementById("contenu"), zone = document.getElementById("dire");
+  el.querySelectorAll("[data-fact-imp]").forEach(b => b.onclick = () => factureImporter(b.dataset.factImp));
+  el.querySelectorAll("[data-fact-aucune]").forEach(b => b.onclick = () => factureAucune(b.dataset.factAucune).catch(souci));
   document.getElementById("verifier").onclick = () => {
     const lignes = lireDeclaration(zone.value);
     if (!lignes.length) return toast("Écris par exemple : Bibas 3h ce matin");
@@ -2374,7 +2451,7 @@ async function chargerPapiers() {
   const pour = p => (p.pour === "tous" || p.pour === moi.statut)
     && (!p.condition || (p.condition === "ae_a_creer" ? moi.ae_a_creer : p.condition === "voiture" ? moi.transport === "Voiture" : true));
   const liste = pi.data.filter(pour).map(p => ({ ...p, doc: dc.data.find(d => d.piece_id === p.id) }));
-  return { liste, autres: dc.data.filter(d => !d.piece_id || !liste.some(p => p.id === d.piece_id)) };
+  return { liste, autres: dc.data.filter(d => !d.facture_mois && (!d.piece_id || !liste.some(p => p.id === d.piece_id))) };   // ses factures sont dans Reporting
 }
 const etatPapier = d => !d ? `<span class="tag warn">à envoyer</span>` : d.etat === "valide" ? `<span class="tag">✓ validé</span>`
   : d.etat === "refuse" ? `<span class="tag warn">refusé</span>` : `<span class="tag">reçu, OIKOS vérifie</span>`;
@@ -2430,7 +2507,7 @@ async function preparerFichier(f) {
     return b ? new File([b], f.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : f;
   } catch (e) { return f; }
 }
-async function envoyerPapier(piece, brut) {
+async function envoyerPapier(piece, brut, plus) {
   const f = await preparerFichier(brut);
   if (f.size > 10 * 1024 * 1024) throw new Error("fichier trop gros (10 Mo au plus) : prends plutôt une photo.");
   const ext = (f.name.match(/\.(\w+)$/) || [, f.type === "application/pdf" ? "pdf" : "jpg"])[1].toLowerCase();
@@ -2438,7 +2515,7 @@ async function envoyerPapier(piece, brut) {
   const chemin = `${moi.id}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${nom}.${ext}`;   // plusieurs pages d'un coup : jamais le même nom
   const up = await sb.storage.from("documents").upload(chemin, f, { contentType: f.type || "application/octet-stream" });
   if (up.error) throw up.error;
-  const { error } = await sb.from("documents").insert({ piece_id: piece.id, libelle: piece.libelle, fichier: chemin, nom_origine: brut.name });
+  const { error } = await sb.from("documents").insert({ piece_id: piece.id, libelle: piece.libelle, fichier: chemin, nom_origine: brut.name, ...(plus || {}) });
   if (error) throw error;
 }
 

@@ -872,7 +872,7 @@ async function compteurAVoir() {
   try {
     const [n, d, c, ta, ph, ju, td, dv, rt] = await Promise.all([
       sb.from("notes_terrain").select("id", { count: "exact", head: true }).is("vue_le", null),
-      sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu"),
+      sb.from("documents").select("id", { count: "exact", head: true }).eq("etat", "recu").is("facture_mois", null),
       sb.from("clients_import").select("id", { count: "exact", head: true }).in("etat", ["nouveau", "different", "a_verifier"]),
       sb.from("taches").select("id", { count: "exact", head: true }).is("vue_le", null),
       sb.from("client_photos").select("id", { count: "exact", head: true }).is("vue_le", null).is("supprime_le", null),
@@ -2276,6 +2276,8 @@ async function vueAVoir() {
   let mesTaches = []; try { mesTaches = await q(sb.from("taches").select("id,echeance").eq("intervenante_id", moi.id).is("fait_le", null)); } catch (e) { mesTaches = []; }
   const mesRetard = mesTaches.filter(t => t.echeance && t.echeance <= ymd(new Date())).length;
   const reponses = taches.filter(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || ""));
+  const facturesRecues = await sb.from("factures_mois").select("*").eq("etat", "envoyee").order("mois").then(r => r.error ? [] : r.data);   // SQL 49
+  const papiersRecus = docs.filter(d => !d.facture_mois);   // une facture du mois se contrôle dans la fiche du presta
   /* Vue d'ensemble : chaque sujet a sa ligne, même à zéro, pour que rien ne reste caché. Le bouton est sur la ligne. */
   const VE = [
     ["À décider par toi", [
@@ -2286,7 +2288,8 @@ async function vueAVoir() {
       ["drapeau", "Prestations à finaliser", "Toutes les tâches sont cochées par le presta", aFinaliser.length, "Finaliser", 'data-dsection="PRESTA"'],
       ["personne", "Propositions sur les feuilles de route", "Un presta propose d'ajouter, retirer ou changer", demandesTaches.length, "Décider", 'data-aller="ve-propositions"'],
       ["mission", "Réponses des presta à une proposition", "Le presta a répondu à ce que tu lui as proposé", reponses.length, "Voir", 'data-dsection="ATTENTE"'],
-      ["doc", "Papiers reçus à vérifier", "Pièces envoyées par les presta", docs.length, "Vérifier", 'data-aller="ve-papiers"'],
+      ["doc", "Papiers reçus à vérifier", "Pièces envoyées par les presta", papiersRecus.length, "Vérifier", 'data-aller="ve-papiers"'],
+      ["recu", "Factures des presta à contrôler", "Facture du mois envoyée depuis leur appli", facturesRecues.length, "Contrôler", 'data-aller="ve-factures"'],
       ["dossier", "Fichiers des presta retenus", "Fichiers bloqués avant d'aller dans le Drive", garde.liste.length, "Vérifier", 'data-aller="ve-fichiers"'],
       ["balance", "Rappels juridiques", "Échéances des 7 prochains jours ou en retard", echeances.length, "Voir", 'data-aller="ve-juridique"']]],
     ["Envoyé par les presta", [
@@ -2313,10 +2316,13 @@ async function vueAVoir() {
       <section class="card" id="ve-notes"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
         ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${esc(nomInterv(n.intervenante_id))}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
           <button class="btn" data-lu="${n.id}">Fait</button></div>`).join("") : `<p class="muted">Rien de nouveau.</p>`}</section>
-      <section class="card" id="ve-papiers"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${docs.length}</span></h2>
-        ${docs.length ? docs.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
+      <section class="card" id="ve-papiers"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${papiersRecus.length}</span></h2>
+        ${papiersRecus.length ? papiersRecus.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
           <span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
     </div>
+    ${facturesRecues.length ? `<section class="card" id="ve-factures" style="margin-top:12px"><h2 style="margin-top:0">${ico("recu")} Factures des presta à contrôler <span class="tag">${facturesRecues.length}</span></h2>
+      ${facturesRecues.map(f => `<div class="ligne"><span><b>${esc(nomInterv(f.intervenante_id))}</b> · <span style="text-transform:capitalize">${esc(moisLong(f.mois))}</span><br><span class="muted small">n° ${esc(f.numero || "?")} · ${euros(f.montant)} · reçue le ${jour(f.cree_le)}</span></span>
+        <button class="btn primary" data-fpresta="${f.intervenante_id}">Contrôler</button></div>`).join("")}</section>` : ""}
     ${taches.length ? `<section class="card" id="ve-taches" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenants <span class="tag">${taches.length}</span></h2>
         <button class="btn" data-tlu="tout">Tout marquer fait</button></div>
       ${taches.map(t => `<div class="ligne"><span><b>${esc(nomInterv(t.intervenante_id))}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté ou modifié dans sa liste" : "a commenté ou remis à faire"} : ${esc(t.texte)}${t.commentaire ? `<br><span class="muted small">${ico("bulle")} ${esc(t.commentaire)}</span>` : ""}
@@ -2346,6 +2352,7 @@ async function vueAVoir() {
     if (b.closest("[data-dt]")) return deciderDemandeTache(b, demandesTaches, () => afficher());
     if (b.dataset.dsection) { sectionDevis = b.dataset.dsection; return afficher("clients"); }
     if (b.dataset.o) return afficher(b.dataset.o);
+    if (b.dataset.fpresta) { pliOuvert.factures = true; return ficheIntervenante(b.dataset.fpresta); }
     if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); afficher(); }
     if (b.dataset.dossier) { const [id, o] = b.dataset.dossier.split("|"); return ficheClient(id, o); }
     if (b.dataset.jtraite) { await maj(sb.from("client_juridique").update({ traite: true }).eq("id", b.dataset.jtraite)); afficher(); }
@@ -3582,6 +3589,8 @@ async function ficheIntervenante(id) {
     q(sb.from("attributions").select("*").eq("intervenante_id", id)),
     q(sb.from("pointages").select("*").eq("intervenante_id", id).gte("arrivee", m0).order("arrivee")),
     q(sb.from("propositions_drive").select("*").eq("intervenante_id", id).eq("etat", "a_voir").order("nom_fichier"))]);
+  const factures = p.statut === "sous-traitant" ? await sb.from("factures_mois").select("*").eq("intervenante_id", id).then(r => r.error ? null : r.data) : null;
+  const fmAttente = factures ? factures.filter(f => f.etat === "envoyee").length : 0;
   const lien = d => d.fichier.startsWith("drive:") && d.drive_url ? d.drive_url : d.fichier;
   const enCours = p.scan_demande_le && (!p.scan_fait_le || new Date(p.scan_demande_le) > new Date(p.scan_fait_le));
   const aujourd = new Date().toISOString().slice(0, 10);
@@ -3598,6 +3607,7 @@ async function ficheIntervenante(id) {
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
+        ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
         <label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
         <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici.</p>
         <div class="row" style="margin-top:10px"><button class="btn primary" id="enr">Enregistrer</button>
@@ -3619,7 +3629,7 @@ async function ficheIntervenante(id) {
       ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
         <span class="row">${!d ? `<span class="tag warn">pas envoyé</span>` : `<span class="tag ${d.etat === "refuse" ? "warn" : ""}">${{ recu: "reçu", valide: "✓ validé", refuse: "refusé" }[d.etat]}</span>
         <button class="btn" data-voir="${esc(lien(d))}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
-      ${docs.filter(d => !d.piece_id).map(d => `<div class="ligne"><span>${esc(d.libelle)} <span class="muted small">(autre)</span></span><span class="row"><button class="btn" data-voir="${esc(lien(d))}">Voir</button></span></div>`).join("")}
+      ${docs.filter(d => !d.piece_id && !d.facture_mois).map(d => `<div class="ligne"><span>${esc(d.libelle)} <span class="muted small">(autre)</span></span><span class="row"><button class="btn" data-voir="${esc(lien(d))}">Voir</button></span></div>`).join("")}
       <div class="row" style="justify-content:space-between;margin-top:10px">
         <span class="muted small">${enCours ? ico("loupe") + " Recherche demandée : résultat dans 5 minutes environ (pont Google)." : p.scan_message ? "Dernière recherche" + (p.scan_fait_le ? " le " + jour(p.scan_fait_le) : "") + " : " + esc(p.scan_message) : "Papiers déjà rangés dans son dossier Drive ?"}</span>
         <button class="btn flat" id="scan" ${enCours ? "disabled" : ""}>${ico("loupe")} Chercher dans son dossier Drive</button></div>
@@ -3628,6 +3638,8 @@ async function ficheIntervenante(id) {
           ${x.perime ? ` <span class="tag warn">périmé ?</span>` : ""}</span>
         <span class="row"><select data-choix style="max-width:230px"><option value="">— pas un papier demandé —</option>${liste.map(k => `<option value="${k.id}" ${k.id === x.piece_id ? "selected" : ""}>${esc(k.libelle)}</option>`).join("")}</select>
           <button class="btn go" data-pok>Oui</button><button class="btn flat" data-pko>Non</button></span></div>`).join("")}` : ""}</details>
+    ${factures && !p.facture_par_oikos ? `<details class="card pli" data-pli="factures" ${pliOuvert.factures || fmAttente ? "open" : ""}><summary>${fmAttente ? `<span class="pli-alerte">${ico("alerte")}</span>` : `<span class="pli-ok">${ico("recu")}</span>`}Factures du mois
+        ${fmAttente ? `<span class="tag warn">${fmAttente} à contrôler</span>` : ""}</summary><div id="fm"></div></details>` : ""}
     <details class="card pli" data-pli="clients" ${pliOuvert.clients ? "open" : ""}><summary>Clients confiés <span class="tag">${actives.length}</span>${aSonNom.length ? `<span class="tag warn">${aSonNom.length} sans accès</span>` : ""}</summary>
       ${aSonNom.length ? `<div class="ligne"><span style="min-width:0"><b>Notés à son nom, sans accès (${aSonNom.length})</b> ${aide("Son nom était seulement écrit sur ces clients, avant son compte. Tant que tu ne les ouvres pas, il ne les voit pas dans son appli.")}<br>${ENTREPRISES.map(([k, t]) => { const l = [...new Set(aSonNom.map(a => cacheClients.find(c => c.id === a.client_id)))].filter(c => dansEntreprise(c, k)); return l.length ? `<span class="muted small">${t} : ${l.map(c => esc(c.nom)).join(", ")}</span><br>` : ""; }).join("")}</span><button class="btn primary" data-ouvrir-clients>${ico("ouvert")} Lui ouvrir ces clients</button></div>` : ""}
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
@@ -3636,9 +3648,11 @@ async function ficheIntervenante(id) {
     el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
     el.style.maxWidth = "1120px";   // place pour le tableau des passages
     passagesPresta(el.querySelector("#pp"), p);
+    if (el.querySelector("#fm")) facturesDuPresta(el.querySelector("#fm"), p, factures, docs, recharger);
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
-      await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked }).eq("id", id));
+      await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked,
+        ...(el.querySelector("#fpo") ? { facture_par_oikos: el.querySelector("#fpo").checked } : {}) }).eq("id", id));
       toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
     el.querySelector("#nv-code").onclick = async () => {
       if (!p.mdp_provisoire && !confirm(`${nomPers(p)} a déjà choisi son mot de passe. Il ne marchera plus : il devra en rechoisir un avec le nouveau code. Continuer ?`)) return;
@@ -3672,6 +3686,88 @@ async function ficheIntervenante(id) {
         await maj(sb.from("attributions").update({ fin: hier }).eq("id", b.dataset.retire)); toast("Client retiré"); recharger(); }
     };
   });
+}
+
+/* Factures du mois (SQL 49) : ce que le presta envoie depuis son appli, comparé à ses heures déclarées dans l'appli
+   et à ses lignes de SAISIE SERVICES (heures, coût = heures × taux payé, lu par le programme du PC).
+   Valider écrit son numéro dans FACTURE INTERVENANT (colonne X) sur ses lignes du mois qui n'en ont pas : la pastille passe en bleu. */
+const FACTURES_DEPUIS = new Date(2026, 9, 1);
+const moisLong = iso => new Date(iso + "T12:00").toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+function motsDuNom(t) { return new Set(String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter(m => m.length > 1)); }
+function memeIntervenant(nomExcel, p) {
+  const a = motsDuNom(nomExcel), b = motsDuNom(nomPers(p));
+  return a.size > 0 && b.size > 0 && ([...a].every(m => b.has(m)) || [...b].every(m => a.has(m)));
+}
+async function facturesDuPresta(zone, p, factures, docs, recharger) {
+  const cree = new Date(p.cree_le || FACTURES_DEPUIS), debut = new Date(Math.max(FACTURES_DEPUIS, new Date(cree.getFullYear(), cree.getMonth(), 1)));
+  const auj = new Date(), moisListe = [];
+  for (let d = new Date(debut); d < new Date(auj.getFullYear(), auj.getMonth(), 1); d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) moisListe.unshift(ymd(d).slice(0, 8) + "01");
+  if (!moisListe.length) { zone.innerHTML = `<p class="muted small">Sa première facture sera demandée au début du mois prochain.</p>`; return; }
+  zone.innerHTML = `<p class="muted small">Lecture des heures et de l'Excel…</p>`;
+  const pts = await q(sb.from("pointages").select("arrivee,depart").eq("intervenante_id", p.id).gte("arrivee", debut.toISOString()));
+  let xl = null;
+  try { xl = lgP = await pc("/lignes", null, 30000); } catch (e) { xl = null; }
+  const lignes = moisListe.map(mois => {
+    const m = mois.slice(0, 7), f = factures.find(x => x.mois === mois) || null;
+    const mn = pts.filter(x => x.depart && ymd(new Date(x.arrivee)).slice(0, 7) === m).reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
+    const lx = xl ? xl.services.filter(l => l.date.slice(0, 7) === m && memeIntervenant(l.intervenant, p)) : null;
+    const hx = lx ? lx.reduce((s, l) => s + (+l.heures || 0), 0) : null;
+    const cx = lx && lx.every(l => l.cout != null) ? lx.reduce((s, l) => s + l.cout, 0) : null;
+    return { mois, f, mn, lx, hx, cx, sansNum: lx ? lx.filter(l => !l.facture_interv) : [], pages: docs.filter(d => d.facture_mois === mois) };
+  });
+  const ok = b => b ? `<span style="color:var(--go)">${ico("ok")}</span>` : `<span style="color:var(--warn-vif)">${ico("alerte")}</span>`;
+  const controle = l => {
+    const t = [`appli ${heures(l.mn)}`];
+    if (l.lx) t.push(`Excel ${heures(l.hx * 60)}${l.cx != null ? ", coût " + euros(l.cx) : ", taux payé manquant"}`);
+    else t.push("Excel : PC pas relié");
+    return t.join(" · ");
+  };
+  const ecarts = l => {
+    const e = [];
+    if (l.f && l.f.etat === "aucune") { if (l.mn > 0 || (l.lx && l.lx.length)) e.push("dit « pas de presta » mais des heures existent"); return e; }
+    if (l.lx && Math.abs(l.hx * 60 - l.mn) > 1) e.push("heures de l'appli ≠ Excel");
+    if (l.f && l.cx != null && Math.abs(+l.f.montant - l.cx) > 0.05) e.push(`facture ${euros(l.f.montant)} ≠ coût Excel ${euros(l.cx)}`);
+    return e;
+  };
+  const ETAT = { envoyee: ["", "reçue, à contrôler"], aucune: ["", "pas de presta"], validee: ["", "✓ validée"], refusee: ["warn", "refusée"] };
+  zone.innerHTML = lignes.map((l, i) => { const e = ecarts(l), [ton, txt] = l.f ? ETAT[l.f.etat] : ["warn", "attendue"];
+    return `<div class="ligne" data-fm="${i}"><span style="min-width:0"><b style="text-transform:capitalize">${esc(moisLong(l.mois))}</b> <span class="tag ${ton}">${txt}</span>
+        ${l.f && l.f.numero ? `<span class="tag">n° ${esc(l.f.numero)}</span>` : ""}${l.f && l.f.montant != null ? ` <b>${euros(l.f.montant)}</b>` : ""}
+        <br><span class="muted small">${controle(l)}</span>
+        ${l.f && l.f.etat !== "validee" ? `<br><span class="small">${e.length ? ok(false) + " " + esc(e.join(" ; ")) : ok(true) + " tout correspond"}</span>` : ""}
+        ${l.f && l.f.etat === "refusee" && l.f.motif ? `<br><span class="muted small">Motif : ${esc(l.f.motif)}</span>` : ""}
+        ${l.f && l.f.etat === "validee" && l.f.controle ? `<br><span class="muted small">${esc(l.f.controle)}</span>` : ""}</span>
+      <span class="row" style="flex:none">${l.pages.map((d, k) => `<button class="btn" data-voir="${esc(d.fichier)}">Voir${l.pages.length > 1 ? " p. " + (k + 1) : ""}</button>`).join("")}
+        ${l.f && l.f.etat !== "validee" ? `<button class="btn go" data-fm-ok>Valider</button>` : ""}${l.f && ["envoyee", "aucune"].includes(l.f.etat) ? `<button class="btn stop" data-fm-ko>Refuser</button>` : ""}</span></div>`; }).join("")
+    + `<p class="muted small" style="margin-top:8px">Valider écrit le numéro de sa facture dans la colonne FACTURE INTERVENANT de ses lignes du mois (SAISIE SERVICES) qui n'en ont pas encore.</p>`;
+  zone.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    e.stopPropagation();
+    if (b.dataset.voir) return voirFichier(b.dataset.voir);
+    const l = lignes[+b.closest("[data-fm]").dataset.fm]; if (!l || !l.f) return;
+    if (b.hasAttribute("data-fm-ko")) {
+      const motif = prompt("Pourquoi la refuser ? Le presta lira ce message dans son appli.", "");
+      if (motif === null) return;
+      await maj(sb.from("factures_mois").update({ etat: "refusee", motif: motif.trim() || "Facture à refaire : appelle OIKOS.", traite_le: new Date().toISOString() }).eq("id", l.f.id));
+      if (l.pages.length) await maj(sb.from("documents").update({ etat: "refuse", motif: "Facture refusée", traite_le: new Date().toISOString() }).in("id", l.pages.map(d => d.id)));
+      toast("Refusée : son appli lui redemande sa facture"); return recharger();
+    }
+    if (!b.hasAttribute("data-fm-ok")) return;
+    const e2 = ecarts(l), ecrire = l.f.etat === "envoyee" && l.f.numero && l.sansNum.length;
+    if (!confirm([e2.length ? "Attention : " + e2.join(" ; ") + "." : "", ecrire ? `Écrire le n° « ${l.f.numero} » sur ${l.sansNum.length} ligne(s) de l'Excel (FACTURE INTERVENANT) et valider ?`
+      : l.f.etat === "envoyee" && !l.lx ? "Le PC n'est pas relié : valider sans écrire le numéro dans l'Excel ?" : "Valider ?"].filter(Boolean).join("\n\n"))) return;
+    b.disabled = true;
+    try {
+      if (ecrire) {
+        const r = await pc("/lignes", { version: xl.version, changements: l.sansNum.map(x => ({ onglet: "services", ligne: x.ligne, valeurs: { facture_interv: l.f.numero } })) }, 90000);
+        lgP = r; suiviP = null;
+      }
+      await maj(sb.from("factures_mois").update({ etat: "validee", motif: null, traite_le: new Date().toISOString(),
+        controle: `Validée le ${new Date().toLocaleDateString("fr-FR")} : ${controle(l)}${ecrire ? ` · n° écrit sur ${l.sansNum.length} ligne(s) de l'Excel` : ""}${e2.length ? " · écart accepté : " + e2.join(" ; ") : ""}` }).eq("id", l.f.id));
+      if (l.pages.length) await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).in("id", l.pages.map(d => d.id)));
+      toast(ecrire ? "Validée et écrite dans l'Excel. Une copie de sécurité a été faite avant." : "Validée"); recharger();
+    } catch (x) { b.disabled = false; souci(x); }
+  };
 }
 
 /* Ses passages : petit tableau comme sa feuille d'heures, modifiable, dans la fiche du presta.
