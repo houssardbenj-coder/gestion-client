@@ -2684,7 +2684,8 @@ async function emEleveDuRdv(x) {
   if (lgP) { const f = hdFiche(eleve) || hdFiche(ecrit); prenom = f ? f.prenom : (ecrit && hdDeviner(ecrit)) || ""; }
   return { prenom, ecrit };
 }
-/* Une presta semblable le même jour : même élève (ou même client) dans SAISIE COURS, ou déjà dans Déclarer mes heures.
+/* Une presta semblable le même jour : même élève (ou même client) dans SAISIE COURS, même client dans SAISIE SERVICES (OIKOS),
+   ou déjà dans Déclarer mes heures.
    S'il y en a, une fenêtre demande si on l'inscrit quand même (09/11/2026). */
 async function emDoublons(x) {
   const { prenom, ecrit } = await emEleveDuRdv(x), c = x.client, nomC = c ? norm(c.nom || "") : "";
@@ -2693,6 +2694,12 @@ async function emDoublons(x) {
   const l = [];
   ((lgP && lgP.cours) || []).filter(r => r.date === x.jour && meme(r.prenom, r.client)).forEach(r =>
     l.push(`SAISIE COURS, ligne ${r.ligne} : ${r.prenom || "?"}${r.heures != null ? ", " + hm2(r.heures) : ""}${r.notes ? " (" + r.notes + ")" : ""}`));
+  // OIKOS : même client le même jour dans SAISIE SERVICES (nom identique, ou tous les mots du plus court dans l'autre)
+  const mots = s => norm(s).split(" ").filter(m => m.length > 2);
+  const memeClient = cl => { if (!nomC || !cl) return false; const a = mots(nomC), b = mots(cl); if (!a.length || !b.length) return false;
+    const [p, g] = a.length <= b.length ? [a, b] : [b, a]; return p.every(m => g.includes(m)); };
+  ((lgP && lgP.services) || []).filter(r => r.date === x.jour && memeClient(r.client)).forEach(r =>
+    l.push(`SAISIE SERVICES, ligne ${r.ligne} : ${r.client}${r.activite ? ", " + r.activite : ""}${r.intervenant ? ", " + r.intervenant : ""}${r.heures != null ? ", " + hm2(r.heures) : ""}`));
   hdBrouillon.filter(b => b.jour === x.jour && meme(b.eleve || b.ecrit, "")).forEach(b =>
     l.push(`Déclarer mes heures, pas encore enregistrée : ${b.eleve || b.ecrit || "?"}${b.minutes ? ", " + hm2(b.minutes / 60) : ""}`));
   return l;
