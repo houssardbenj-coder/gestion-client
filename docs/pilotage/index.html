@@ -554,6 +554,19 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .page-large .rail.ouvert{display:flex;position:fixed;top:0;right:0;bottom:0;width:min(320px,100vw);max-height:none;z-index:14;background:var(--bg);padding:18px;box-shadow:0 0 40px rgb(0 0 0 / .25)}
 .page-large .volet{right:min(320px,calc(100vw - 460px))}
 .lg-coche{text-align:center}
+/* Ses passages (fiche d'un presta) : même tableau à écrire que les lignes Excel */
+.pp-boite{overflow-x:auto}
+.lg-table select.lg-c{border:1px solid transparent;border-radius:6px;background:transparent;padding:4px 2px;font-size:13px;max-width:190px}
+.lg-table select.lg-c:hover{border-color:var(--line);background:var(--surface)}
+.lg-table select.lg-c:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 2px var(--accent-soft)}
+.pp-table{min-width:930px}
+.pp-table td{white-space:nowrap}
+.pp-table td.pp-note{white-space:normal;min-width:150px}
+.pp-table select[name=client_id]{min-width:160px}
+.pp-table select[name=activite]{min-width:104px}
+.pp-table input[type=time].lg-c{min-width:84px}
+.pp-table tr.pp-modif td{background:var(--warn-soft)}
+.pp-table .btn{padding:4px 8px;font-size:13px}
 .lg-coche input{width:17px;height:17px;accent-color:var(--go);vertical-align:middle}
 .lg-table td.lg-manque{background:var(--stop-soft)}
 /* Factures en pastille : numéro de facture client en olive, facture intervenant en bleu-gris, « à voir » (pas de numéro) en ocre. Au clic, la case redevient une case à écrire. */
@@ -3518,6 +3531,8 @@ async function ficheIntervenante(id) {
         ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
         ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par lui.</p>`}</section>
     </div>
+    <section class="card"><h3 style="margin-top:0">Ses passages ${aide("Comme sa feuille d'heures, mais relié à son appli : ce que tu modifies ici change tout de suite dans son appli (marqué « corrigé par OIKOS »), et le pont réécrit la même ligne de sa feuille d'heures dans les 5 minutes.")}</h3>
+      <div id="pp"></div></section>
     <section class="card"><h3 style="margin-top:0">Papiers</h3>
       ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
         <span class="row">${!d ? `<span class="tag warn">pas envoyé</span>` : `<span class="tag ${d.etat === "refuse" ? "warn" : ""}">${{ recu: "reçu", valide: "✓ validé", refuse: "refusé" }[d.etat]}</span>
@@ -3536,6 +3551,8 @@ async function ficheIntervenante(id) {
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
       <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
     const recharger = () => { fermer(); ficheIntervenante(id); };
+    el.style.maxWidth = "1120px";   // place pour le tableau des passages
+    passagesPresta(el.querySelector("#pp"), p);
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
       await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, actif: el.querySelector("#ac").checked }).eq("id", id));
@@ -3572,6 +3589,114 @@ async function ficheIntervenante(id) {
         await maj(sb.from("attributions").update({ fin: hier }).eq("id", b.dataset.retire)); toast("Client retiré"); recharger(); }
     };
   });
+}
+
+/* Ses passages : petit tableau comme sa feuille d'heures, modifiable, dans la fiche du presta.
+   Écrit directement dans la base de l'appli (pointages) : son appli le montre tout de suite (« corrigé par OIKOS »),
+   et garde_pointage remet exporte_le à vide, donc le Pont intervenantes réécrit la même ligne de sa feuille d'heures (colonne « id appli »). */
+const ACTIVITES_PASSAGE = ["Ménage", "Jardinage", "Bricolage"];
+const hhmm = d => pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+const ppMois = {};   // mois affiché, par presta
+async function passagesPresta(boite, p) {
+  const id = p.id, auj = new Date();
+  const m0 = ppMois[id] || new Date(auj.getFullYear(), auj.getMonth(), 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
+  boite.innerHTML = `<p class="muted small">Chargement des passages…</p>`;
+  let pts, attrib;
+  try {
+    [pts, attrib] = await Promise.all([
+      q(sb.from("pointages").select("*").eq("intervenante_id", id).gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).order("arrivee")),
+      q(sb.from("attributions").select("client_id").eq("intervenante_id", id))]);
+  } catch (e) { boite.innerHTML = `<p class="muted small">Passages introuvables.</p>`; return souci(e); }
+  const ids = new Set([...attrib.map(a => a.client_id), ...pts.map(x => x.client_id)]);
+  const clients = cacheClients.filter(c => ids.has(c.id)).sort((a, b) => norm(a.nom) < norm(b.nom) ? -1 : 1);
+  const versLigne = x => {
+    const a = new Date(x.arrivee), d = x.depart ? new Date(x.depart) : null, cr = x.creneau_connu !== false;
+    return { jour: ymd(a), client_id: x.client_id || "", activite: x.activite || "Ménage", minutes: d ? Math.round((d - a) / 6e4) : 0,
+      debut: cr ? hhmm(a) : "", fin: cr && d ? hhmm(d) : "", note: x.note || "" };
+  };
+  const finis = pts.filter(x => x.depart), total = finis.reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
+  const etat = x => [x.verrouille ? `<span class="tag">facturé</span>` : "", x.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : "",
+    !x.depart ? `<span class="tag warn">pas fini</span>` : x.exporte_le ? `<span class="tag">✓ dans sa feuille</span>` : `<span class="tag warn">feuille d'ici 5 min</span>`].join(" ");
+  const ligne = (x, l) => `<tr data-pt="${x ? x.id : ""}">
+      <td><input class="lg-c w-date" type="date" name="jour" value="${l.jour}" max="${ymd(auj)}" aria-label="Date"></td>
+      <td><select class="lg-c" name="client_id" aria-label="Client"><option value="">— client —</option>${optionsClients(clients, l.client_id)}</select></td>
+      <td><select class="lg-c" name="activite" aria-label="Service">${ACTIVITES_PASSAGE.map(a => `<option ${a === l.activite ? "selected" : ""}>${a}</option>`).join("")}</select></td>
+      <td class="n"><input class="lg-c w-num" name="heures" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="3 ou 2,5" aria-label="Heures"></td>
+      <td><input class="lg-c" type="time" name="debut" value="${l.debut}" aria-label="Début"></td>
+      <td><input class="lg-c" type="time" name="fin" value="${l.fin}" aria-label="Fin"></td>
+      <td class="pp-note"><input class="lg-c w-long" name="note" value="${esc(l.note)}" placeholder="—" aria-label="Commentaire"></td>
+      <td class="lg-ro">${x ? etat(x) : `<span class="tag warn">nouveau</span>`}</td>
+      <td><span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn go" data-pp-enr hidden>Enregistrer</button>
+        <button class="btn flat" data-pp-sup title="${x ? "Supprimer ce passage" : "Retirer cette ligne"}" aria-label="Supprimer">✕</button></span></td></tr>`;
+  boite.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <span class="row"><button class="btn" data-pp-mois="-1" aria-label="Mois précédent">‹</button>
+        <b style="text-transform:capitalize;min-width:130px;text-align:center">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
+        <button class="btn" data-pp-mois="1" aria-label="Mois suivant" ${m1 > auj ? "disabled" : ""}>›</button></span>
+      <span class="muted small"><b>${heures(total)}</b> · ${finis.length} passage${finis.length > 1 ? "s" : ""}</span>
+      <span class="row">${p.feuille_heures ? `<a class="btn flat" href="${esc(p.feuille_heures)}" target="_blank" rel="noopener">${ico("reporting")} Sa feuille</a>` : ""}
+        <button class="btn" data-pp-ajout>${ico("plus")} Ajouter un passage</button></span></div>
+    <div class="pp-boite"><table class="lg-table pp-table"><thead><tr><th>Date</th><th>Client</th><th>Service</th><th class="n">Heures</th><th>Début</th><th>Fin</th><th>Commentaire</th><th>État</th><th></th></tr></thead>
+      <tbody>${pts.map(x => ligne(x, versLigne(x))).join("") || `<tr class="pp-vide"><td colspan="9"class="muted">Aucun passage ce mois-ci.</td></tr>`}</tbody></table></div>`;
+  const tbody = boite.querySelector("tbody");
+  const passage = tr => pts.find(x => x.id === tr.dataset.pt);
+  const lire = tr => { const v = n => tr.querySelector(`[name=${n}]`).value;
+    return { jour: v("jour"), client_id: v("client_id"), activite: v("activite"), minutes: minutesSaisie(v("heures")), debut: v("debut"), fin: v("fin"), note: v("note").trim() }; };
+  const pareil = (a, b) => ["jour", "client_id", "activite", "minutes", "debut", "fin"].every(k => a[k] === b[k]) && a.note === b.note.trim();
+  const marquer = tr => { const x = passage(tr), modif = !x || !pareil(lire(tr), versLigne(x));
+    tr.classList.toggle("pp-modif", modif); tr.querySelector("[data-pp-enr]").hidden = !modif; };
+  const modifiees = () => tbody.querySelectorAll("tr.pp-modif").length;
+  // début + fin donnent les heures ; heures changées avec un début connu déplacent la fin
+  tbody.addEventListener("input", e => {
+    const tr = e.target.closest("tr[data-pt]"); if (!tr) return;
+    const n = e.target.name, deb = tr.querySelector("[name=debut]"), fin = tr.querySelector("[name=fin]"), h = tr.querySelector("[name=heures]");
+    const mn = t => { const [a, b] = t.split(":").map(Number); return a * 60 + b; };
+    if ((n === "debut" || n === "fin") && deb.value && fin.value && mn(fin.value) > mn(deb.value)) h.value = heuresSaisie(mn(fin.value) - mn(deb.value));
+    if (n === "debut" && deb.value && !fin.value && minutesSaisie(h.value) > 0) { const f = mn(deb.value) + minutesSaisie(h.value); if (f < 1440) fin.value = pad2(Math.floor(f / 60)) + ":" + pad2(f % 60); }
+    if (n === "heures" && deb.value && minutesSaisie(h.value) > 0) { const f = mn(deb.value) + minutesSaisie(h.value); fin.value = f < 1440 ? pad2(Math.floor(f / 60)) + ":" + pad2(f % 60) : ""; }
+    marquer(tr);
+  });
+  tbody.addEventListener("change", e => { const tr = e.target.closest("tr[data-pt]"); if (tr) marquer(tr); });
+  const enregistrer = async (tr, bouton) => {
+    const x = passage(tr), l = lire(tr);
+    if (!l.client_id || !l.jour) return toast("Choisis le client et la date");
+    if (l.jour > ymd(auj)) return toast("La date ne peut pas être dans le futur");
+    let a, d; const cr = !!(l.debut && l.fin);
+    if (cr) { a = new Date(l.jour + "T" + l.debut); d = new Date(l.jour + "T" + l.fin); if (d <= a) return toast("La fin doit être après le début"); }
+    else {   // sans créneau : seule la durée compte ; même jour = on garde l'heure d'arrivée d'origine
+      if (!(l.minutes > 0)) return toast("Indique les heures, ou un début et une fin");
+      a = x && ymd(new Date(x.arrivee)) === l.jour ? new Date(x.arrivee) : new Date(l.jour + "T12:00"); d = new Date(a.getTime() + l.minutes * 6e4); }
+    if (x && x.verrouille && !confirm("Ce passage est déjà passé dans une facture du presta. Le modifier ne change pas la facture déjà faite. Modifier quand même ?")) return;
+    const champs = { client_id: l.client_id, arrivee: a.toISOString(), depart: d.toISOString(), creneau_connu: cr, activite: l.activite, note: l.note || null };
+    bouton.disabled = true;
+    try {
+      if (x) await maj(sb.from("pointages").update(champs).eq("id", x.id));
+      else await maj(sb.from("pointages").insert({ ...champs, intervenante_id: id, source: "declaration" }));
+    } catch (e) { bouton.disabled = false; return; }
+    toast((x ? "Modifié" : "Ajouté") + " : déjà dans son appli, sa feuille d'heures suit d'ici 5 minutes");
+    passagesPresta(boite, p);
+  };
+  boite.onclick = async e => {   // onclick et pas addEventListener : la boîte reste, le tableau se redessine
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.ppMois) {
+      if (modifiees() && !confirm("Des lignes modifiées ne sont pas enregistrées. Changer de mois quand même ?")) return;
+      ppMois[id] = new Date(m0.getFullYear(), m0.getMonth() + Number(b.dataset.ppMois), 1); return passagesPresta(boite, p);
+    }
+    if (b.hasAttribute("data-pp-ajout")) {
+      const vide = tbody.querySelector(".pp-vide"); if (vide) vide.remove();
+      const jour = m0.getMonth() === auj.getMonth() && m0.getFullYear() === auj.getFullYear() ? ymd(auj) : ymd(new Date(m1.getTime() - 864e5));
+      tbody.insertAdjacentHTML("beforeend", ligne(null, { jour, client_id: clients.length === 1 ? clients[0].id : "", activite: "Ménage", minutes: 0, debut: "", fin: "", note: "" }));
+      const tr = tbody.lastElementChild; marquer(tr); tr.querySelector("[name=client_id]").focus(); return;
+    }
+    const tr = b.closest("tr[data-pt]"); if (!tr) return;
+    if (b.hasAttribute("data-pp-enr")) return enregistrer(tr, b);
+    if (b.hasAttribute("data-pp-sup")) {
+      const x = passage(tr);
+      if (!x) { tr.remove(); return; }
+      if (!confirm(`Supprimer le passage ${nomClient(x.client_id)} du ${new Date(x.arrivee).toLocaleDateString("fr-FR")} ?\n\nIl disparaît de son appli. La ligne déjà écrite dans sa feuille d'heures reste : efface-la à la main.`)) return;
+      try { await maj(sb.from("pointages").delete().eq("id", x.id)); } catch (err) { return; }
+      toast("Passage supprimé de son appli"); passagesPresta(boite, p);
+    }
+  };
 }
 
 /* ===================== Clients + zone tampon ===================== */
