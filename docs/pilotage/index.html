@@ -2861,7 +2861,8 @@ function versPassage(l, intervenante) {
   const avecCreneau = !!(l.debut && l.fin);
   const a = new Date(l.jour + "T" + (avecCreneau ? l.debut : "12:00"));
   return { intervenante_id: intervenante, client_id: l.client_id, arrivee: a.toISOString(), depart: new Date(a.getTime() + l.minutes * 60000).toISOString(),
-    source: "declaration", creneau_connu: avecCreneau, note: (l.note || "").trim() || null };
+    source: "declaration", creneau_connu: avecCreneau, note: (l.note || "").trim() || null,
+    activite: ["Ménage", "Jardinage", "Bricolage"].includes(l.activite) ? l.activite : "Ménage" };
 }
 /* Lignes à vérifier : gardées dans ce navigateur jusqu'à l'envoi, chacune rattachée à son intervenante */
 const RP_CLE = "oikos-gerant-reporting";
@@ -2893,6 +2894,7 @@ async function vueReporting() {
         <label class="f">Heures<input name="heures" type="text" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label>
         <label class="f">Début (facultatif)<input name="debut" type="time" value="${esc(l.debut || "")}"></label>
         <label class="f">Fin (facultatif)<input name="fin" type="time" value="${esc(l.fin || "")}"></label></div>
+      <div class="row" style="gap:14px;margin-top:6px">${ACTIVITES_PASSAGE.map(a => `<label class="row" style="gap:5px;cursor:pointer"><input type="radio" name="act-${l.cle}" data-rp-choix value="${a}" ${(l.activite || "Ménage") === a ? "checked" : ""}>${a}</label>`).join("")}</div>
       <label class="f">Remarque (facultatif)<input name="note" type="text" value="${esc(l.note || "")}"></label></div>`;
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Reporting</h1>
       <select id="rp-qui" aria-label="Intervenant" style="max-width:260px">${gens.map(p => `<option value="${p.id}" ${p.id === rpQui ? "selected" : ""}>${esc(nomPers(p))}${p.actif ? "" : " (accès coupé)"}</option>`).join("")}</select></div>
@@ -2915,7 +2917,7 @@ async function vueReporting() {
       <section class="card"><h3 style="margin-top:0">Par client</h3>${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${heures(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</section>
     </div>
     <section class="card" style="margin-top:12px"><h3 style="margin-top:0">Chaque passage</h3>${pt.length ? pt.map(p => `<div class="ligne"><span><b>${esc(nomClient(p.client_id))}</b><br><span class="muted small">${jour(p.arrivee)}${p.creneau_connu !== false ? " · " + hm(p.arrivee) + " → " + (p.depart ? hm(p.depart) : "?") : ""}</span>${p.note ? `<br><span class="small">${esc(p.note)}</span>` : ""}
-        <span class="row" style="gap:4px;margin-top:3px">${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans son rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></span>
+        <span class="row" style="gap:4px;margin-top:3px"><select data-rp-act="${p.id}" aria-label="Service" title="Service écrit dans son rapport (Type de service)" style="width:auto;padding:2px 6px;font-size:13px">${ACTIVITES_PASSAGE.map(a => `<option ${a === (p.activite || "Ménage") ? "selected" : ""}>${a}</option>`).join("")}</select>${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans son rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></span>
         <b style="flex:none">${p.depart ? heures(minutes(p)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</section>`);
   el.querySelector("#rp-qui").onchange = e => { rpQui = e.target.value; afficher("reporting"); };
   el.querySelector("#rp-prec").onclick = () => { rpMois = new Date(m0.getFullYear(), m0.getMonth() - 1, 1); afficher("reporting"); };
@@ -2923,6 +2925,8 @@ async function vueReporting() {
   if (el.querySelector("#rp-verifier")) el.querySelector("#rp-verifier").onclick = () => {
     const ls = lireDeclaration(el.querySelector("#rp-texte").value, clients);
     if (!ls.length) return toast("Écris par exemple : Bibas 3h ce matin");
+    ls.forEach(l => { const m = /\b(menage|nettoyage|repassage|jardin|tonte|taille|haie|debroussaill|elagage|brico|reparation|montage)/.exec(norm(l.lu || ""));   // Ménage par défaut
+      l.activite = !m ? "Ménage" : /^(menage|nettoyage|repassage)/.test(m[1]) ? "Ménage" : /^(brico|reparation|montage)/.test(m[1]) ? "Bricolage" : "Jardinage"; });
     ajouter(ls);
     const manque = ls.filter(l => !ligneOk(l)).length;
     toast(ls.length + " passage" + (ls.length > 1 ? "s" : "") + " à vérifier" + (manque ? " (" + manque + " à compléter)" : ""));
@@ -2934,6 +2938,7 @@ async function vueReporting() {
     const c = e.target.closest("[data-cle]"); if (!c) return;
     const l = rpBrouillon.find(x => x.cle === c.dataset.cle), n = e.target.name;
     if (n === "heures") l.minutes = minutesSaisie(e.target.value);
+    else if (e.target.hasAttribute("data-rp-choix")) l.activite = e.target.value;
     else if (n) l[n] = e.target.value;
     if ((n === "debut" || n === "fin") && l.debut && l.fin) {
       const [ha, ma] = l.debut.split(":").map(Number), [hb, mb] = l.fin.split(":").map(Number), mn = hb * 60 + mb - ha * 60 - ma;
@@ -2941,6 +2946,17 @@ async function vueReporting() {
     }
     c.classList.toggle("incomplete", !ligneOk(l));
     rpGarder();
+  });
+  // service d'un passage déjà envoyé : la ligne de sa feuille d'heures est réécrite par le pont
+  el.addEventListener("change", async e => {
+    const s = e.target.closest("[data-rp-act]"); if (!s) return;
+    const x = pt.find(p => p.id === s.dataset.rpAct); if (!x) return;
+    if (x.verrouille && !confirm("Ce passage est déjà passé dans une facture du presta. Changer le service réécrit sa feuille d'heures, mais ne change pas la facture déjà faite. Changer quand même ?")) { s.value = x.activite || "Ménage"; return; }
+    s.disabled = true;
+    try { await q(sb.from("pointages").update({ activite: s.value }).eq("id", x.id)); }
+    catch (err) { s.disabled = false; s.value = x.activite || "Ménage"; return souci(err); }
+    x.activite = s.value; s.disabled = false;
+    toast("Service changé : " + s.value + " (sa feuille d'heures suit d'ici 5 minutes)");
   });
   el.addEventListener("click", e => {
     const s = e.target.closest("[data-suppr]"); if (!s) return;
