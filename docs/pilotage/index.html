@@ -165,7 +165,7 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:default}.em-gev.ann s{opacity:.85}
 .em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
 .em-gev.em-mod{cursor:grab;user-select:none}.em-gev.glisse{cursor:grabbing;z-index:5;opacity:.85;box-shadow:0 4px 14px rgb(0 0 0 / .25);outline:2px solid var(--em,var(--accent))}
-.em-gev.em-mod{padding-bottom:12px}.em-gev.em-mod.a-env{padding-bottom:28px}.em-gev.em-mod.a-env2{padding-bottom:46px}.em-gev.em-mod .em-bas{bottom:10px}
+.em-gev.em-mod{padding-bottom:10px}.em-fr-t{font-size:14px;margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--line)}.em-fr-infos{display:flex;flex-direction:column;gap:4px}.em-fr-infos .ico{width:14px;height:14px;vertical-align:-2px}
 .em-poignee{position:absolute;left:0;right:0;bottom:0;height:10px;cursor:ns-resize;touch-action:none;z-index:2}.em-poignee::after{content:"";position:absolute;left:50%;top:4px;width:22px;margin-left:-11px;height:3px;border-radius:2px;background:currentColor;opacity:.35}.em-gev:hover .em-poignee::after{opacity:.7}
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .em-tg .ico{width:13px;height:13px}.em-tg[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -2812,15 +2812,15 @@ async function emRetirerHeure(id, apres) {
   toast(ok ? "Retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok && apres) apres();
 }
 /* choix (glisser dans la grille) : { quand, fin } déjà choisis à la souris, annule() remet la case en place si on ferme sans enregistrer */
-async function emModifierHeure(x, apres, choix) {
+async function emModifierHeure(x, apres, choix, info) {
   if (x.hmod && x.hmod.portee === "tous" && x.hmod.occ !== x.occ) { if (choix && choix.annule) choix.annule(); return toast("L'heure de toutes les semaines vient d'être changée : ouvre Pense intelligent sur le téléphone pour qu'il la prenne, puis recommence."); }
   const doc = await lireCopie(EM_REC), cleAvant = emCleEnvoi(x);
   const envoi = x.hp ? null : emEnvois(doc).find(v => v.k === cleAvant && v.ou === "reporting");
   const occ = x.sorte === "occ", serieNv = !!(x.nv && x.nv.chaque_semaine), f0 = x.fin > x.t ? x.fin : x.t + 36e5;
   let portee = "un", enregistre = false;
   const q1 = choix ? choix.quand : x.t, f1 = choix ? choix.fin : f0;
-  fenetre(`<form id="em-hr"><h2 style="margin-top:0">${ico("chrono")} Modifier l'heure</h2>
-      <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>
+  fenetre(`${info ? info.html + `<h3 class="em-fr-t">${ico("chrono")} Changer l'heure</h3>` : ""}<form id="em-hr">${info ? "" : `<h2 style="margin-top:0">${ico("chrono")} Modifier l'heure</h2>
+      <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>`}
       <p style="margin:0 0 8px">Maintenant : <b>${esc(hm(x.t))}–${esc(hm(f0))}</b>${x.avant ? ` <span class="muted small">(au départ ${esc(hm(x.avant.t))}–${esc(hm(x.avant.fin > x.avant.t ? x.avant.fin : x.avant.t + 36e5))})</span>` : ""}</p>
       <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(q1)}"></label>
         <label class="f">Durée<select id="hr-dur">${(() => { const d0 = Math.round((f1 - q1) / 6e4), l = Array.from({ length: 48 }, (_, k) => (k + 1) * 15); if (!l.includes(d0)) l.push(d0); return l.sort((a, b) => a - b).map(m => `<option value="${m}"${m === d0 ? " selected" : ""}>${m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + pad2(m % 60) : "") : m + " min"}</option>`).join(""); })()}</select></label>
@@ -2830,7 +2830,8 @@ async function emModifierHeure(x, apres, choix) {
       ${serieNv ? `<p class="muted small">Ce RDV n'est pas encore arrivé sur le téléphone : l'heure change pour toutes les semaines. Pour un seul jour, attends qu'il soit dans Pense intelligent.</p>` : ""}
       ${envoi ? `<p class="tag warn" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} Déjà mis dans reporting le ${esc(new Date(envoi.le).toLocaleDateString("fr-FR"))} : la ligne envoyée ne change pas. Corrige la durée dans Chiffres › Déclarer mes heures (ou dans SAISIE COURS si elle est déjà enregistrée).</p>` : ""}
       <p class="muted small">Le pilote affiche la nouvelle heure tout de suite ; Pense intelligent fait le même changement à sa prochaine ouverture.</p>
-      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button>${x.client ? `<button class="btn flat" type="button" data-hr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}</div></form>`, (f, fermer) => {
+      <div class="row"><button class="btn primary" type="submit">Enregistrer${info ? " l'heure" : ""}</button><button class="btn flat" type="button" data-fermer>${info && !choix ? "Fermer" : "Annuler"}</button>${x.client && !info ? `<button class="btn flat" type="button" data-hr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}</div></form>`, (f, fermer) => {
+    if (info && info.brancher) info.brancher(f, fermer);
     f.addEventListener("click", e => { if (e.target.closest("[data-hr-fiche]")) { fermer(); return ficheClient(x.client.id); } const b = e.target.closest("[data-hr-portee]"); if (!b) return; portee = b.dataset.hrPortee; f.querySelectorAll("[data-hr-portee]").forEach(y => y.setAttribute("aria-pressed", String(y === b))); });
     setTimeout(() => f.querySelector("#hr-f").focus(), 30);
     // Début, durée et fin se suivent : changer le début ou la durée recalcule la fin, changer la fin recalcule la durée
@@ -2881,8 +2882,30 @@ async function emModifierHeure(x, apres, choix) {
    maintenir le clic et glisser le déplace (par quarts d'heure, même jour), tirer sa poignée du bas change la fin.
    Au lâcher, la fenêtre s'ouvre déjà remplie : Enregistrer (et pour une séance : ce jour-là ou toutes les semaines). */
 let emGlisseLe = 0;
+/* Fenêtre d'un RDV de la grille : d'abord qui, où, quel téléphone, puis le reporting et le réglage de l'heure */
+function emFicheRdv(x, envois, apres, choix) {
+  const c = x.client || null, adr = (c && c.adresse) || "", tel = (c && c.telephone) || "", det = sansEmoji(x.detail || "");
+  const telLien = tel ? `<a href="tel:${esc(String(tel).replace(/[^\d+]/g, ""))}">${esc(tel)}</a>` : "";
+  const env = choix ? "" : emEnvoiBouton(x, 0, envois || []).replace('class="em-env', 'class="btn small em-env');
+  const html = `<h2 style="margin:0 0 2px">${esc(sansEmoji(x.titre || ""))}</h2>
+    <p class="muted small" style="margin:0 0 10px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)} · ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))} · ${esc(EM_SORTES[x.sorte] || "Agenda")}${x.hmod ? " · nouvelle heure, en attente du téléphone" : ""}</p>
+    <div class="em-fr-infos">
+      ${adr ? `<div>${ico("lieu")} <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adr)}" target="_blank" rel="noopener">${esc(adr)}</a></div>` : ""}
+      ${telLien ? `<div>${ico("tel")} ${telLien}</div>` : ""}
+      ${det && det !== adr ? `<div class="muted small">${esc(det)}</div>` : ""}
+      ${!adr && !telLien && !det ? `<div class="muted small">Pas d'adresse ni de téléphone connus pour ce RDV.</div>` : ""}
+    </div>
+    ${c || env ? `<div class="row" style="margin:8px 0 0">${c ? `<button type="button" class="btn small" data-fr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}${env}</div>` : ""}`;
+  const info = { html, brancher: (f, fermer) => {
+    const b = f.querySelector("[data-fr-fiche]"); if (b) b.onclick = () => { fermer(); ficheClient(c.id); };
+    const e = f.querySelector("[data-em-envoi]"); if (e) e.onclick = () => { e.disabled = true; fermer(); emEnvoyer(x, apres); };
+  } };
+  if (emHeureModifiable(x)) return emModifierHeure(x, apres, choix, info);
+  if (choix && choix.annule) choix.annule();
+  return emPourquoiFixe(x, info);
+}
 /* RDV qu'on ne peut pas changer d'ici : on dit pourquoi au lieu de ne rien faire */
-function emPourquoiFixe(x) {
+function emPourquoiFixe(x, info) {
   const pq = x.annule ? "Ce RDV est annulé."
     : x.sorte === "cal" ? "Il vient de l'agenda Google du téléphone (pas de Pense intelligent) : change-le dans Google Agenda, puis ouvre Pense intelligent pour qu'il renvoie l'emploi du temps."
     : x.sorte === "call" ? "C'est un « À rappeler » : son heure se change sur le téléphone."
@@ -2890,13 +2913,14 @@ function emPourquoiFixe(x) {
     : x.sorte === "rdv" ? "Pense intelligent ne l'a pas encore envoyé avec son repère (il faut la version 32 du téléphone). Ouvre Pense intelligent sur le téléphone, vérifie qu'il est en version 32, attends quelques secondes puis clique sur Actualiser ici. Ensuite ce RDV se change même s'il est passé."
     : x.sorte === "occ" ? "Cette séance n'a pas un repère lisible : ouvre Pense intelligent puis Actualiser."
     : "Ce RDV se change sur le téléphone.";
+  if (info) return fenetre(`${info.html}<p class="muted small" style="margin:10px 0">${ico("chrono")} L'heure ne se change pas d'ici : ${esc(pq)}</p><div class="row"><button class="btn flat" type="button" data-fermer>Fermer</button></div>`, (f, fermer) => { if (info.brancher) info.brancher(f, fermer); });
   fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre || ""))}</h2>
     <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)} · ${esc(EM_SORTES[x.sorte] || "Agenda")}</p>
     <p class="tag warn" style="display:block;white-space:normal;margin:0 0 10px">${ico("alerte")} L'heure ne peut pas être changée d'ici. ${esc(pq)}</p>
     <div class="row">${x.client ? `<button class="btn primary" type="button" data-pq-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`,
   (f, fermer) => { const b = f.querySelector("[data-pq-fiche]"); if (b) b.onclick = () => { fermer(); ficheClient(x.client.id); }; });
 }
-function emGlisser(el, ag, PX, apres) {
+function emGlisser(el, ag, PX, apres, envois) {
   el.onpointerdown = e => {   // #contenu sert à toutes les pages : une seule écoute, remplacée à chaque affichage
     if (e.button !== 0 || e.target.closest("button")) return;
     const tu = e.target.closest(".em-gev.em-mod[data-em-ouvrir]"); if (!tu) return;
@@ -2923,7 +2947,7 @@ function emGlisser(el, ag, PX, apres) {
       emGlisseLe = Date.now();
       if (ev.type === "pointercancel") return remettre();   // le doigt a fait défiler la page : rien n'est changé
       if (q === x.t && f === f0) return remettre();
-      emModifierHeure(x, apres, { quand: q, fin: f, annule: remettre });
+      emFicheRdv(x, envois, apres, { quand: q, fin: f, annule: remettre });
     };
     window.addEventListener("pointermove", bouger); window.addEventListener("pointerup", lacher); window.addEventListener("pointercancel", lacher);
   };
@@ -3046,7 +3070,8 @@ async function vueEmploi() {
     tim.map(([x]) => x).concat(an).forEach(x => { const d = new Date(x.t), f = new Date(Math.max(x.t + 18e5, x.fin || x.t) - 1); h0 = Math.min(h0, d.getHours()); h1 = Math.max(h1, Math.min(24, f.getHours() + 1)); });
     const H = (h1 - h0) * PX, minDe = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
     const colonne = j => {
-      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => { const bas = [emHeureBouton(x, i), emEnvoiBouton(x, i, envois)].filter(Boolean); return { t: x.t, f: Math.max(x.fin || x.t, x.t + (bas.length > 1 ? 57e5 : bas.length ? 42e5 : 18e5)), x, i, env: bas.length ? `<span class="em-bas">${bas.join("")}</span>` : "", nb: bas.length }; }).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
+      // Plus de boutons dans les cases : un clic ouvre la fenêtre du RDV (adresse, téléphone, reporting, heure)
+      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => ({ t: x.t, f: Math.max(x.fin || x.t, x.t + 18e5), x, i, env: "", nb: 0 })).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
       // couloirs : deux RDV qui se chevauchent se partagent la largeur
       let groupe = [], finG = 0; const groupes = [];
       l.forEach(o => { if (groupe.length && o.t >= finG) { groupes.push(groupe); groupe = []; finG = 0; } const fins = []; groupe.forEach(g => fins[g.c] = Math.max(fins[g.c] || 0, g.f)); let c = 0; while (fins[c] > o.t) c++; o.c = c; groupe.push(o); finG = Math.max(finG, o.f); });
@@ -3078,16 +3103,15 @@ async function vueEmploi() {
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
     ${enSemaine ? semaine() : grille([jourD])}`);
-  emGlisser(el, ag, PX, () => { if (onglet === "emploi") afficher("emploi"); });
+  emGlisser(el, ag, PX, () => { if (onglet === "emploi") afficher("emploi"); }, envois);
   el.onclick = e => {
     if (Date.now() - emGlisseLe < 400) return;   // fin d'un glisser, pas un clic
     const b = e.target.closest("button");
     if (!b) {
       const o = e.target.closest("[data-em-ouvrir]");
       if (o) { const x = ag.elements[Number(o.dataset.emOuvrir)]; if (!x) return;
-        if (o.classList.contains("em-mod") && emHeureModifiable(x)) return emModifierHeure(x, () => { if (onglet === "emploi") afficher("emploi"); });
+        if (!x.nv && !x.jour_entier && x.sorte !== "todo") return emFicheRdv(x, envois, () => { if (onglet === "emploi") afficher("emploi"); });
         if (x.nv) return fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre))}</h2><p>${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)}${x.nv.chaque_semaine ? ", chaque semaine" : ""}</p><p class="muted small">Pas encore pris par Pense intelligent : il arrive à sa prochaine ouverture.</p><div class="row"><button class="btn" data-nv-ret="1">${ico("croix")} Retirer ce RDV</button><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => { f.querySelector("[data-nv-ret]").onclick = () => { fermer(); emRetirerNouveau(x.nv.id); }; });
-        if (!x.jour_entier && x.sorte !== "todo") return emPourquoiFixe(x);
         if (x.client) return ficheClient(x.client.id);
         return toast(sansEmoji(x.titre) + " · " + emHeure(x) + (x.detail ? " · " + sansEmoji(x.detail) : "") + " — à changer sur le téléphone");
       }
