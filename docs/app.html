@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=34;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=35;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1490,7 +1490,7 @@ async function recurrentsDuPilote(jeton,s){
     if(!h||typeof h.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(h.id))continue;
     if(faits.has("heure:"+h.id)){etats[h.id]="fait";continue}
     const de=Number(h.de),quand=Number(h.quand),dur=Math.round(Number(h.dur));
-    if(!Number.isFinite(de)||!Number.isFinite(quand)||!(dur>=15&&dur<=720)||ymd(new Date(de))!==ymd(new Date(quand))){etats[h.id]="illisible";continue}
+    if(!Number.isFinite(de)||!Number.isFinite(quand)||!(dur>=15&&dur<=720)||Math.abs(quand-de)>400*864e5){etats[h.id]="illisible";continue}   // autre jour permis (v35)
     const sid="pil"+h.id,dq=new Date(quand),time=pad(dq.getHours())+":"+pad(dq.getMinutes());
     try{
       if(typeof h.occ==="string"&&h.occ.split("_").length===3){
@@ -1500,7 +1500,7 @@ async function recurrentsDuPilote(jeton,s){
         if(!o||o.why){etats[h.id]="introuvable";continue}   // séance changée, déplacée ou annulée ici entre-temps
         if(h.portee==="tous"){
           const until=ymd(new Date(addDays(dayTs(o.day),-1)));
-          const slots=slotsOf(o.c).map(x=>x.id===o.s.id?{...x,until}:x).filter(x=>!(x.from&&x.until&&x.until<x.from)).concat({...o.s,id:sid,time,dur,from:o.day,until:o.s.until||""});
+          const slots=slotsOf(o.c).map(x=>x.id===o.s.id?{...x,until}:x).filter(x=>!(x.from&&x.until&&x.until<x.from)).concat({...o.s,id:sid,wd:dq.getDay(),time,dur,from:ymd(dq)<o.day?ymd(dq):o.day,until:o.s.until||""});
           await db.doc("customers/"+o.c.id).set(custBody({...o.c,slots}));o.c.slots=slots;
         }else{
           const a={id:sid,customerId:o.c.id,when:quand,dur,note:"Heure changée depuis OIKOS Pilotage (au lieu du "+fmtDT(o.t)+")",createdAt:Date.now()};

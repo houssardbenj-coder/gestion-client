@@ -1,1 +1,1 @@
-Annuler un RDV depuis le pilote OIKOS, et rétablir aussi un ancien RDV annulé.
+Changer le jour d'un RDV depuis le pilote OIKOS (le glisser d'un jour à l'autre).

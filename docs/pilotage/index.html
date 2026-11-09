@@ -2797,6 +2797,7 @@ const emHeureModifiable = x => !x.annule && !x.jour_entier && (x.sorte === "nouv
   : x.sorte === "rdv" && typeof x.ref === "string" && /^(appt|lead|proj):/.test(x.ref));   // ref : envoyé par Pense intelligent v32
 const emHeureBouton = (x, i) => emHeureModifiable(x) ? `<button type="button" class="em-env em-hr" data-em-heure="${i}" title="Changer l'heure de début et de fin de ce RDV">${ico("chrono")} Modifier l'heure</button>` : "";
 /* La nouvelle heure demandée, montrée tant que le téléphone ne l'a pas prise (« toutes les semaines » : aussi les séances suivantes) */
+const emMinuit = t => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
 function emAppliquerHeures(ag, doc) {
   const rec = ag.recurrents || {};
   emHeures(doc).filter(h => !rec[h.id] || rec[h.id] === "echec").forEach(h => {
@@ -2806,8 +2807,9 @@ function emAppliquerHeures(ag, doc) {
       if (h.occ) { if (typeof x.occ === "string") { const [c, s, j] = x.occ.split("_"); vise = x.occ === h.occ || (h.portee === "tous" && c === c0 && s === s0 && j > j0); } }
       else vise = x.ref === h.ref && (x.avant ? x.avant.t : x.t) === h.de;
       if (!vise) return;
-      const d = new Date(x.t), t = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hq.getHours(), hq.getMinutes()).getTime();
-      x.avant = x.avant || { t: x.t, fin: x.fin }; x.t = t; x.fin = t + Number(h.dur) * 6e4; x.hmod = h;
+      const dj = Math.round((emMinuit(h.quand) - emMinuit(h.de)) / 864e5);   // jours de décalage (0 = même jour)
+      const d = new Date(x.t), t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + dj, hq.getHours(), hq.getMinutes()).getTime();
+      x.avant = x.avant || { t: x.t, fin: x.fin }; x.t = t; x.fin = t + Number(h.dur) * 6e4; x.hmod = h; x.jour = ymd(new Date(t));
     });
   });
   ag.elements.sort((a, b) => a.t - b.t);
@@ -2828,10 +2830,11 @@ async function emModifierHeure(x, apres, choix, info) {
   fenetre(`${info ? info.html + `<h3 class="em-fr-t">${ico("chrono")} Changer l'heure</h3>` : ""}<form id="em-hr">${info ? "" : `<h2 style="margin-top:0">${ico("chrono")} Modifier l'heure</h2>
       <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>`}
       <p style="margin:0 0 8px">Maintenant : <b>${esc(hm(x.t))}–${esc(hm(f0))}</b>${x.avant ? ` <span class="muted small">(au départ ${esc(hm(x.avant.t))}–${esc(hm(x.avant.fin > x.avant.t ? x.avant.fin : x.avant.t + 36e5))})</span>` : ""}</p>
-      <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(q1)}"></label>
+      <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Jour<input type="date" id="hr-j" required value="${ymd(new Date(q1))}"></label><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(q1)}"></label>
         <label class="f">Durée<select id="hr-dur">${(() => { const d0 = Math.round((f1 - q1) / 6e4), l = Array.from({ length: 48 }, (_, k) => (k + 1) * 15); if (!l.includes(d0)) l.push(d0); return l.sort((a, b) => a - b).map(m => `<option value="${m}"${m === d0 ? " selected" : ""}>${m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + pad2(m % 60) : "") : m + " min"}</option>`).join(""); })()}</select></label>
         <label class="f">Fin<input type="time" id="hr-f" step="300" required value="${emHeureTxt(f1)}"></label></div>
-      ${choix ? `<p style="margin:0 0 8px"><b>Nouvelle heure : ${esc(hm(q1))}–${esc(hm(f1))}</b> <span class="muted small">(${Math.round((f1 - q1) / 6e4)} min)</span></p>` : ""}
+      ${choix ? `<p style="margin:0 0 8px"><b>Nouvelle heure : ${emMinuit(q1) !== emMinuit(x.t) ? esc(new Date(q1).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })) + ", " : ""}${esc(hm(q1))}–${esc(hm(f1))}</b> <span class="muted small">(${Math.round((f1 - q1) / 6e4)} min)</span></p>` : ""}
+      <p class="muted small" id="hr-autre-jour" style="margin:0 0 8px"${emMinuit(q1) !== emMinuit(x.t) ? "" : " hidden"}>Autre jour que prévu.${emVersionMsg(emAgCour, 35)}</p>
       ${occ ? `<p class="muted small" style="margin:4px 0">Ce RDV revient chaque semaine :</p><div class="seg" style="margin-bottom:8px"><button type="button" class="chip" data-hr-portee="un" aria-pressed="true">Seulement ce jour-là</button><button type="button" class="chip" data-hr-portee="tous" aria-pressed="false">Toutes les semaines</button></div>` : ""}
       ${serieNv ? `<p class="muted small">Ce RDV n'est pas encore arrivé sur le téléphone : l'heure change pour toutes les semaines. Pour un seul jour, attends qu'il soit dans Pense intelligent.</p>` : ""}
       ${envoi ? `<p class="tag warn" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} Déjà mis dans reporting le ${esc(new Date(envoi.le).toLocaleDateString("fr-FR"))} : la ligne envoyée ne change pas. Corrige la durée dans Chiffres › Déclarer mes heures (ou dans SAISIE COURS si elle est déjà enregistrée).</p>` : ""}
@@ -2846,6 +2849,7 @@ async function emModifierHeure(x, apres, choix, info) {
     const mettreDuree = d => { if (![...sel.options].some(o => Number(o.value) === d)) sel.add(new Option(d >= 60 ? Math.floor(d / 60) + " h" + (d % 60 ? " " + pad2(d % 60) : "") : d + " min", d)); sel.value = String(d); };
     const finDepuisDuree = () => { const d = mins("#hr-d"); if (Number.isFinite(d)) f.querySelector("#hr-f").value = hhmm(Math.min(23 * 60 + 59, d + Number(sel.value))); };
     f.querySelector("#hr-d").addEventListener("change", finDepuisDuree); sel.addEventListener("change", finDepuisDuree);
+    f.querySelector("#hr-j").addEventListener("change", () => { const v = f.querySelector("#hr-j").value, m = f.querySelector("#hr-autre-jour"); if (m) m.hidden = !v || v === ymd(new Date(x.t)); });
     f.querySelector("#hr-f").addEventListener("change", () => { const d = mins("#hr-f") - mins("#hr-d"); if (d >= 15) mettreDuree(d); });
     let envoiEnCours = false;
     f.querySelector("#em-hr").onsubmit = async e => {
@@ -2855,7 +2859,9 @@ async function emModifierHeure(x, apres, choix, info) {
       const dur = (fh * 60 + (fm || 0)) - (dh * 60 + (dm || 0));
       if (dur < 15) return toast("La fin doit venir au moins 15 min après le début, le même jour");
       if (dur > (x.nv ? 600 : 720)) return toast(x.nv ? "10 h au plus" : "12 h au plus");
-      const j = new Date(x.t), quand = new Date(j.getFullYear(), j.getMonth(), j.getDate(), dh, dm || 0).getTime(), fin = quand + dur * 6e4;
+      const jv = (f.querySelector("#hr-j").value || "").split("-").map(Number);
+      if (jv.length !== 3 || !jv.every(Number.isFinite)) return toast("Indique le jour");
+      const quand = new Date(jv[0], jv[1] - 1, jv[2], dh, dm || 0).getTime(), fin = quand + dur * 6e4;
       if (quand === x.t && fin === f0 && portee === "un") { fermer(); return toast("Rien n'a changé."); }
       // Déjà mis dans reporting : la marque suit le RDV à sa nouvelle heure (il ne repart pas une 2e fois)
       const cleApres = emCleEnvoi({ ...x, t: quand });
@@ -2863,7 +2869,7 @@ async function emModifierHeure(x, apres, choix, info) {
       let ok;
       envoiEnCours = true;
       if (x.nv) {   // pas encore sur le téléphone : on change sa demande
-        const d0 = new Date(x.nv.quand), nq = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), dh, dm || 0).getTime();
+        const nq = quand;   // le jour choisi (même s'il change)
         ok = await emEcrireRec(l => l, l => l, l => l.map(n => n.id === x.nv.id ? { ...n, quand: nq, dur } : n), envChange);
       } else {
         const remplace = x.hmod && (x.hmod.occ ? x.hmod.occ === x.occ : x.hmod.ref === x.ref) ? x.hmod.id : null;   // 2e changement avant que le téléphone ait pris le 1er
@@ -2979,18 +2985,26 @@ function emGlisser(el, ag, PX, apres, envois) {
     e.preventDefault();
     const etire = !!e.target.closest(".em-poignee"), f0 = x.fin > x.t ? x.fin : x.t + 36e5, Q = 9e5, y0 = e.clientY;
     const j = new Date(x.t), deb = new Date(j.getFullYear(), j.getMonth(), j.getDate()).getTime(), finJ = deb + 864e5 - Q;
-    const lab = tu.querySelector("b"), lab0 = lab ? lab.innerHTML : "", top0 = tu.style.top, haut0 = tu.style.height;
+    const lab = tu.querySelector("b"), lab0 = lab ? lab.innerHTML : "", top0 = tu.style.top, haut0 = tu.style.height, x0 = e.clientX;
+    const col0 = tu.closest(".em-gcol"), cols = [...el.querySelectorAll(".em-gcol[data-em-vide]")].map(c => ({ jour: c.dataset.emVide, r: c.getBoundingClientRect() }));
+    const r0 = col0 ? col0.getBoundingClientRect() : null;
     let bouge = false, q = x.t, f = f0;
-    const remettre = () => { tu.style.top = top0; tu.style.height = haut0; if (lab) lab.innerHTML = lab0; tu.classList.remove("glisse"); };
+    const remettre = () => { tu.style.top = top0; tu.style.height = haut0; tu.style.transform = ""; if (lab) lab.innerHTML = lab0; tu.classList.remove("glisse"); };
     const bouger = ev => {
-      const dy = ev.clientY - y0; if (!bouge && Math.abs(dy) < 5) return;
+      const dy = ev.clientY - y0; if (!bouge && Math.abs(dy) < 5 && Math.abs(ev.clientX - x0) < 8) return;
       if (!bouge) { bouge = true; tu.classList.add("glisse"); }
       const d = Math.round(dy / PX * 4) * Q;
       if (etire) { q = x.t; f = Math.min(finJ, Math.max(x.t + Q, f0 + d)); }
       else { q = x.t + d; f = f0 + d; if (q < deb) { f += deb - q; q = deb; } if (f > finJ) { q -= f - finJ; f = finJ; } }
       if (etire) tu.style.height = Math.max(22, (parseFloat(haut0) || 0) + (f - f0) / 36e5 * PX) + "px";   // la poignée reste en bas de la case
       else tu.style.top = (parseFloat(top0) + (q - x.t) / 36e5 * PX) + "px";
-      if (lab) lab.textContent = `${hm(q)}–${hm(f)}`;
+      // colonne sous la souris : autre jour, même heure
+      const cible = !etire && r0 ? cols.find(c => ev.clientX >= c.r.left && ev.clientX < c.r.right) : null;
+      if (cible && cible.jour !== x.jour) {
+        const b = new Date(q), [a, m, jj] = cible.jour.split("-").map(Number), nq = new Date(a, m - 1, jj, b.getHours(), b.getMinutes()).getTime();
+        f = nq + (f - q); q = nq; tu.style.transform = `translateX(${cible.r.left - r0.left}px)`;
+      } else if (!etire) tu.style.transform = "";
+      if (lab) lab.textContent = `${emMinuit(q) !== emMinuit(x.t) ? new Date(q).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }) + " " : ""}${hm(q)}–${hm(f)}`;
     };
     const lacher = ev => {
       window.removeEventListener("pointermove", bouger); window.removeEventListener("pointerup", lacher); window.removeEventListener("pointercancel", lacher);
