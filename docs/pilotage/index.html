@@ -2661,6 +2661,7 @@ async function emEnvoyer(x, apres) {
   try {
     const trajet = ik ? await emTrajet(x) : null;
     if (ik && !trajet) return;
+    if (!ik && !(await emDoublonOk(x))) return toast("Rien n'est mis dans le reporting.");
     const note = { k, ou: ik ? "ik" : "reporting", jour: x.jour, titre: sansEmoji(x.titre || "").slice(0, 120), le: Date.now() };
     let deja = null;
     const ok = await emEcrireRec(l => l, l => l, l => l, l => { deja = l.find(v => v.k === k) || null; return deja ? l : l.concat(note); });
@@ -2673,15 +2674,44 @@ async function emEnvoyer(x, apres) {
   } catch (e) { toast("Pas envoyé : " + (e && e.message || e) + " Tu peux réessayer."); }
   finally { emEnvoiEnCours.delete(k); if (apres) apres(); }
 }
-/* Reporting de Benjamin = Déclarer mes heures : une ligne pré-remplie, à vérifier (élève, tarif) puis enregistrer dans SAISIE COURS */
-async function emVersReporting(x, k) {
-  if (hdBrouillon.some(l => l.rdv === k)) return "Déjà dans Déclarer mes heures, à vérifier.";
+/* L'élève d'un RDV (prénom de la fiche CLIENTS COURS si on le trouve) ; lit l'Excel si le PC est relié */
+async function emEleveDuRdv(x) {
   if (!lgP && !SUR_TELEPHONE) { try { lgP = await pc("/lignes", null, 15000); } catch (e) {} }   // PC pas relié : l'élève se choisira dans la page
   const c = x.client, eleves = (c && c.eleves) || [], motsTitre = new Set(norm(sansEmoji(x.titre || "")).split(" "));
   const eleve = eleves.find(e => motsTitre.has(norm(e).split(" ")[0])) || (eleves.length === 1 ? eleves[0] : "");
   const ecrit = eleve ? norm(eleve).split(" ")[0] : hdMots(sansEmoji(x.titre || "")).join(" ").slice(0, 60);
   let prenom = "";
   if (lgP) { const f = hdFiche(eleve) || hdFiche(ecrit); prenom = f ? f.prenom : (ecrit && hdDeviner(ecrit)) || ""; }
+  return { prenom, ecrit };
+}
+/* Une presta semblable le même jour : même élève (ou même client) dans SAISIE COURS, ou déjà dans Déclarer mes heures.
+   S'il y en a, une fenêtre demande si on l'inscrit quand même (09/11/2026). */
+async function emDoublons(x) {
+  const { prenom, ecrit } = await emEleveDuRdv(x), c = x.client, nomC = c ? norm(c.nom || "") : "";
+  const meme = (pr, cl) => (prenom && pr && norm(pr) === norm(prenom)) || (!prenom && ecrit && pr && norm(pr).split(" ")[0] === norm(ecrit).split(" ")[0]) || (nomC && cl && norm(cl) === nomC);
+  const hm2 = h => { const m = Math.round(Number(h) * 60); return m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + pad2(m % 60) : "") : m + " min"; };
+  const l = [];
+  ((lgP && lgP.cours) || []).filter(r => r.date === x.jour && meme(r.prenom, r.client)).forEach(r =>
+    l.push(`SAISIE COURS, ligne ${r.ligne} : ${r.prenom || "?"}${r.heures != null ? ", " + hm2(r.heures) : ""}${r.notes ? " (" + r.notes + ")" : ""}`));
+  hdBrouillon.filter(b => b.jour === x.jour && meme(b.eleve || b.ecrit, "")).forEach(b =>
+    l.push(`Déclarer mes heures, pas encore enregistrée : ${b.eleve || b.ecrit || "?"}${b.minutes ? ", " + hm2(b.minutes / 60) : ""}`));
+  return l;
+}
+function emDoublonOk(x) {
+  return emDoublons(x).then(l => !l.length || new Promise(ok => {
+    let fini = false; const rep = v => { if (!fini) { fini = true; ok(v); } };
+    fenetre(`<h2 style="margin-top:0">${ico("alerte")} Déjà une presta ce jour-là</h2>
+      <p style="margin:0 0 8px">${esc(sansEmoji(x.titre || ""))}, ${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} : il y a déjà</p>
+      <ul style="margin:0 0 12px;padding-left:20px">${l.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+      <p class="muted small" style="margin:0 0 12px">C'est peut-être le même cours, ou un 2e cours le même jour.</p>
+      <div class="row"><button class="btn primary" type="button" data-db-oui>L'inscrire quand même</button><button class="btn flat" type="button" data-fermer>Non, ne rien ajouter</button></div>`,
+      (f, fermer) => { f.querySelector("[data-db-oui]").onclick = () => { rep(true); fermer(); }; }, () => rep(false));
+  }));
+}
+/* Reporting de Benjamin = Déclarer mes heures : une ligne pré-remplie, à vérifier (élève, tarif) puis enregistrer dans SAISIE COURS */
+async function emVersReporting(x, k) {
+  if (hdBrouillon.some(l => l.rdv === k)) return "Déjà dans Déclarer mes heures, à vérifier.";
+  const { prenom, ecrit } = await emEleveDuRdv(x);
   const minutes = x.fin > x.t ? Math.round((x.fin - x.t) / 6e4) : 0;
   hdBrouillon.push({ eleve: prenom, ecrit, jour: x.jour, minutes, tarif: "", moitie: !!prenom && !!lgP && hdMoitieHabituelle(prenom), note: "",
     lu: "RDV de l'emploi du temps, " + emHeure(x) + " : " + sansEmoji(x.titre || ""), cle: Math.random().toString(36).slice(2), rdv: k });
