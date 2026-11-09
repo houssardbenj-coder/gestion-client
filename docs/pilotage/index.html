@@ -164,6 +164,8 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-env.em-hr{border-color:var(--line);color:var(--ink)}.em-env.em-hr:hover{background:var(--sunk);color:var(--ink)}
 .em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:default}.em-gev.ann s{opacity:.85}
 .em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
+.em-gev.em-mod{cursor:grab;user-select:none}.em-gev.glisse{cursor:grabbing;z-index:5;opacity:.85;box-shadow:0 4px 14px rgb(0 0 0 / .25);outline:2px solid var(--em,var(--accent))}
+.em-poignee{position:absolute;left:0;right:0;height:9px;cursor:ns-resize;touch-action:none}.em-poignee::after{content:"";position:absolute;left:50%;top:3px;width:22px;margin-left:-11px;height:3px;border-radius:2px;background:currentColor;opacity:.35}.em-gev:hover .em-poignee::after{opacity:.7}
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .em-tg .ico{width:13px;height:13px}.em-tg[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .em-maint{position:absolute;left:0;right:0;height:2px;background:var(--stop);z-index:2;pointer-events:none}
@@ -2808,23 +2810,26 @@ async function emRetirerHeure(id, apres) {
   const ok = await emEcrireRec(l => l, l => l, l => l, l => l, l => l.filter(h => h.id !== id));
   toast(ok ? "Retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok && apres) apres();
 }
-async function emModifierHeure(x, apres) {
-  if (x.hmod && x.hmod.portee === "tous" && x.hmod.occ !== x.occ) return toast("L'heure de toutes les semaines vient d'être changée : ouvre Pense intelligent sur le téléphone pour qu'il la prenne, puis recommence.");
+/* choix (glisser dans la grille) : { quand, fin } déjà choisis à la souris, annule() remet la case en place si on ferme sans enregistrer */
+async function emModifierHeure(x, apres, choix) {
+  if (x.hmod && x.hmod.portee === "tous" && x.hmod.occ !== x.occ) { if (choix && choix.annule) choix.annule(); return toast("L'heure de toutes les semaines vient d'être changée : ouvre Pense intelligent sur le téléphone pour qu'il la prenne, puis recommence."); }
   const doc = await lireCopie(EM_REC), cleAvant = emCleEnvoi(x);
   const envoi = x.hp ? null : emEnvois(doc).find(v => v.k === cleAvant && v.ou === "reporting");
   const occ = x.sorte === "occ", serieNv = !!(x.nv && x.nv.chaque_semaine), f0 = x.fin > x.t ? x.fin : x.t + 36e5;
-  let portee = "un";
+  let portee = "un", enregistre = false;
+  const q1 = choix ? choix.quand : x.t, f1 = choix ? choix.fin : f0;
   fenetre(`<form id="em-hr"><h2 style="margin-top:0">${ico("chrono")} Modifier l'heure</h2>
       <p class="muted small" style="margin:0 0 8px">${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))} · ${esc(sansEmoji(x.titre || ""))}</p>
       <p style="margin:0 0 8px">Maintenant : <b>${esc(hm(x.t))}–${esc(hm(f0))}</b>${x.avant ? ` <span class="muted small">(au départ ${esc(hm(x.avant.t))}–${esc(hm(x.avant.fin > x.avant.t ? x.avant.fin : x.avant.t + 36e5))})</span>` : ""}</p>
-      <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(x.t)}"></label>
-        <label class="f">Fin<input type="time" id="hr-f" step="300" required value="${emHeureTxt(f0)}"></label></div>
+      <div class="row" style="gap:10px;align-items:flex-end"><label class="f">Début<input type="time" id="hr-d" step="300" required value="${emHeureTxt(q1)}"></label>
+        <label class="f">Fin<input type="time" id="hr-f" step="300" required value="${emHeureTxt(f1)}"></label></div>
+      ${choix ? `<p style="margin:0 0 8px"><b>Nouvelle heure : ${esc(hm(q1))}–${esc(hm(f1))}</b> <span class="muted small">(${Math.round((f1 - q1) / 6e4)} min)</span></p>` : ""}
       ${occ ? `<p class="muted small" style="margin:4px 0">Ce RDV revient chaque semaine :</p><div class="seg" style="margin-bottom:8px"><button type="button" class="chip" data-hr-portee="un" aria-pressed="true">Seulement ce jour-là</button><button type="button" class="chip" data-hr-portee="tous" aria-pressed="false">Toutes les semaines</button></div>` : ""}
       ${serieNv ? `<p class="muted small">Ce RDV n'est pas encore arrivé sur le téléphone : l'heure change pour toutes les semaines. Pour un seul jour, attends qu'il soit dans Pense intelligent.</p>` : ""}
       ${envoi ? `<p class="tag warn" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} Déjà mis dans reporting le ${esc(new Date(envoi.le).toLocaleDateString("fr-FR"))} : la ligne envoyée ne change pas. Corrige la durée dans Chiffres › Déclarer mes heures (ou dans SAISIE COURS si elle est déjà enregistrée).</p>` : ""}
       <p class="muted small">Le pilote affiche la nouvelle heure tout de suite ; Pense intelligent fait le même changement à sa prochaine ouverture.</p>
-      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (f, fermer) => {
-    f.addEventListener("click", e => { const b = e.target.closest("[data-hr-portee]"); if (!b) return; portee = b.dataset.hrPortee; f.querySelectorAll("[data-hr-portee]").forEach(y => y.setAttribute("aria-pressed", String(y === b))); });
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button>${x.client ? `<button class="btn flat" type="button" data-hr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}</div></form>`, (f, fermer) => {
+    f.addEventListener("click", e => { if (e.target.closest("[data-hr-fiche]")) { fermer(); return ficheClient(x.client.id); } const b = e.target.closest("[data-hr-portee]"); if (!b) return; portee = b.dataset.hrPortee; f.querySelectorAll("[data-hr-portee]").forEach(y => y.setAttribute("aria-pressed", String(y === b))); });
     setTimeout(() => f.querySelector("#hr-f").focus(), 30);
     let envoiEnCours = false;
     f.querySelector("#em-hr").onsubmit = async e => {
@@ -2856,12 +2861,48 @@ async function emModifierHeure(x, apres) {
       }
       envoiEnCours = false;
       if (!ok) return toast("Pas enregistré : la base refuse encore, il faut lancer le SQL 47 dans Supabase.");
-      fermer();
+      enregistre = true; fermer();
       toast(`Heure changée : ${hm(quand)}–${hm(fin)}${occ ? (portee === "tous" ? ", toutes les semaines" : ", ce jour-là seulement") : ""}.`
         + (envoi ? " Déjà mis dans reporting : corrige la durée dans Chiffres › Déclarer mes heures." : " Pense intelligent fait le même changement à sa prochaine ouverture."));
       if (apres) apres();
     };
-  });
+  }, () => { if (!enregistre && choix && choix.annule) choix.annule(); });
+}
+/* Emploi du temps en grille : un clic sur un RDV qu'on peut changer ouvre « Modifier l'heure » ;
+   maintenir le clic et glisser le déplace (par quarts d'heure, même jour), tirer sa poignée du bas change la fin.
+   Au lâcher, la fenêtre s'ouvre déjà remplie : Enregistrer (et pour une séance : ce jour-là ou toutes les semaines). */
+let emGlisseLe = 0;
+function emGlisser(el, ag, PX, apres) {
+  el.onpointerdown = e => {   // #contenu sert à toutes les pages : une seule écoute, remplacée à chaque affichage
+    if (e.button !== 0 || e.target.closest("button")) return;
+    const tu = e.target.closest(".em-gev.em-mod[data-em-ouvrir]"); if (!tu) return;
+    const x = ag.elements[Number(tu.dataset.emOuvrir)]; if (!x || !emHeureModifiable(x)) return;
+    e.preventDefault();
+    const etire = !!e.target.closest(".em-poignee"), f0 = x.fin > x.t ? x.fin : x.t + 36e5, Q = 9e5, y0 = e.clientY;
+    const j = new Date(x.t), deb = new Date(j.getFullYear(), j.getMonth(), j.getDate()).getTime(), finJ = deb + 864e5 - Q;
+    const lab = tu.querySelector("b"), lab0 = lab ? lab.innerHTML : "", top0 = tu.style.top, haut0 = tu.style.height, po = tu.querySelector(".em-poignee"), poTop0 = po ? po.style.top : "";
+    let bouge = false, q = x.t, f = f0;
+    const remettre = () => { tu.style.top = top0; tu.style.height = haut0; if (po) po.style.top = poTop0; if (lab) lab.innerHTML = lab0; tu.classList.remove("glisse"); };
+    const bouger = ev => {
+      const dy = ev.clientY - y0; if (!bouge && Math.abs(dy) < 5) return;
+      if (!bouge) { bouge = true; tu.classList.add("glisse"); }
+      const d = Math.round(dy / PX * 4) * Q;
+      if (etire) { q = x.t; f = Math.min(finJ, Math.max(x.t + Q, f0 + d)); }
+      else { q = x.t + d; f = f0 + d; if (q < deb) { f += deb - q; q = deb; } if (f > finJ) { q -= f - finJ; f = finJ; } }
+      if (etire) { const h = Math.max(22, (f - q) / 36e5 * PX - 2); tu.style.height = Math.max(h, parseFloat(haut0) || 0) + "px"; if (po) po.style.top = ((f - q) / 36e5 * PX - 7) + "px"; }
+      else tu.style.top = (parseFloat(top0) + (q - x.t) / 36e5 * PX) + "px";
+      if (lab) lab.textContent = `${hm(q)}–${hm(f)}`;
+    };
+    const lacher = ev => {
+      window.removeEventListener("pointermove", bouger); window.removeEventListener("pointerup", lacher); window.removeEventListener("pointercancel", lacher);
+      if (!bouge) return;
+      emGlisseLe = Date.now();
+      if (ev.type === "pointercancel") return remettre();   // le doigt a fait défiler la page : rien n'est changé
+      if (q === x.t && f === f0) return remettre();
+      emModifierHeure(x, apres, { quand: q, fin: f, annule: remettre });
+    };
+    window.addEventListener("pointermove", bouger); window.addEventListener("pointerup", lacher); window.addEventListener("pointercancel", lacher);
+  };
 }
 /* Arrêter une séance régulière à partir de ce jour : le téléphone met fin au créneau la veille (les séances d'avant restent).
    Une séance née d'un « Répéter chaque semaine » du pilote perd aussi sa demande. */
@@ -2990,7 +3031,8 @@ async function vueEmploi() {
       const tuiles = l.map(o => { const top = (minDe(o.t) - h0 * 60) / 60 * PX, haut = Math.max(22, (o.f - o.t) / 36e5 * PX - 2), pos = `top:${top}px;height:${haut}px;left:calc(${o.c * 100 / o.n}% + 2px);width:calc(${100 / o.n}% - 4px)`;
         if (o.a) return `<div class="em-gev ann" style="${pos}" title="Annulé sur le téléphone"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`;
         const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : x.hmod ? "nouvelle heure, en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
-        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}</div>`; }).join("");
+        const mod = emHeureModifiable(x), fv = x.fin > x.t ? x.fin : x.t + 36e5;
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" style="top:${Math.max(16, (fv - x.t) / 36e5 * PX - 7)}px" title="Tirer pour changer l'heure de fin"></span>` : ""}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
     return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
@@ -3005,18 +3047,21 @@ async function vueEmploi() {
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn primary" data-em-plus="1">${ico("plus")} RDV</button><button class="btn" id="em-maj">Actualiser</button></span></div>
-    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. « Modifier l'heure » change le début et la fin d'un RDV, même passé, ici et sur le téléphone. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
+    <p class="muted small" style="margin:6px 0 12px">${ico("portable")} Relié à Pense intelligent (reçu le ${heureFr(ag.recu)}). Clique une case vide ou « RDV » pour en ajouter un, le rond ${ico("repeter")} d'un RDV pour le répéter chaque semaine (olive = répété, reclique pour enlever). Ce que tu ajoutes ici arrive sur le téléphone à sa prochaine ouverture. « Modifier l'heure » change le début et la fin d'un RDV, même passé, ici et sur le téléphone : clique sur le RDV, ou maintiens le clic et fais-le glisser, ou tire le petit trait du bas pour changer la fin. Le jour venu, « Mettre dans reporting » sur un RDV client, « Mettre dans IK » sur un RDV hors prestation : une seule fois chacun. Un RDV personnel ne part jamais tout seul dans les IK.</p>
     ${emLegende()}
     ${emHeuresPb(ag, docRec).map(({ h, pb }) => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Heure pas changée sur le téléphone : ${esc(h.titre || "")}, ${esc(new Date(h.de).toLocaleDateString("fr-FR"))} à ${esc(hm(h.quand))}, ${esc(pb)}</span><button class="btn flat" data-em-hret="${esc(h.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
     ${enSemaine ? semaine() : grille([jourD])}`);
+  emGlisser(el, ag, PX, () => { if (onglet === "emploi") afficher("emploi"); });
   el.onclick = e => {
+    if (Date.now() - emGlisseLe < 400) return;   // fin d'un glisser, pas un clic
     const b = e.target.closest("button");
     if (!b) {
       const o = e.target.closest("[data-em-ouvrir]");
       if (o) { const x = ag.elements[Number(o.dataset.emOuvrir)]; if (!x) return;
+        if (o.classList.contains("em-mod") && emHeureModifiable(x)) return emModifierHeure(x, () => { if (onglet === "emploi") afficher("emploi"); });
         if (x.nv) return fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre))}</h2><p>${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)}${x.nv.chaque_semaine ? ", chaque semaine" : ""}</p><p class="muted small">Pas encore pris par Pense intelligent : il arrive à sa prochaine ouverture.</p><div class="row"><button class="btn" data-nv-ret="1">${ico("croix")} Retirer ce RDV</button><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => { f.querySelector("[data-nv-ret]").onclick = () => { fermer(); emRetirerNouveau(x.nv.id); }; });
         if (x.client) return ficheClient(x.client.id);
         return toast(sansEmoji(x.titre) + " · " + emHeure(x) + (x.detail ? " · " + sansEmoji(x.detail) : "") + " — à changer sur le téléphone");
