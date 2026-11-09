@@ -253,6 +253,13 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 .dm>summary::-webkit-details-marker{display:none}
 details.pli>summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-height:28px;cursor:pointer;list-style:none;font-weight:600;font-size:16px}
 details.pli>summary::-webkit-details-marker{display:none}
+.archives-discret{margin-top:22px}
+.archives-discret>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;list-style:none;font-size:13px;color:var(--muted);padding:4px 2px}
+.archives-discret>summary::-webkit-details-marker{display:none}
+.archives-discret>summary:hover{color:var(--ink)}
+.archives-discret>summary svg{width:14px;height:14px}
+.archives-discret[open]>summary{margin-bottom:8px}
+.archives-discret .ligne{font-size:14px}
 details.pli>summary::after{content:"▾";margin-left:auto;color:var(--muted);transition:transform .2s}
 details.pli:not([open])>summary::after{transform:rotate(-90deg)}
 details.pli[open]>summary{margin-bottom:10px}
@@ -3918,7 +3925,8 @@ async function vueIntervenantes() {
       ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
       <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>
-      ${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : `<button class="btn flat" data-archiver-presta="${p.id}" title="Il quitte la liste de l'équipe et son compte est bloqué. Tu peux le sortir des archives.">${ico("archive")} Archiver</button>`}</div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>
+      <span class="row" style="gap:4px">${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}
+      <button class="btn flat" data-archiver-presta="${p.id}" title="Il quitte la liste de l'équipe, son accès est coupé et son compte bloqué. Tu peux le sortir des archives.">${ico("archive")} Archiver</button></span></div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>
     ${archives.length ? archivesPrestaHtml(archives, retraits) : ""}`);
   el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
   el.onclick = async e => {
@@ -3944,7 +3952,7 @@ async function vueIntervenantes() {
 const RETRAIT_EN_COURS = { archiver: "compte bloqué dans 5 min", sortir: "sortie dans 5 min", supprimer: "suppression dans 5 min" };
 function archivesPrestaHtml(archives, retraits) {
   const ouvert = pliOuvert.archives || retraits.some(r => r.etat === "erreur");
-  return `<details class="card pli" data-pli="archives" style="margin-top:14px" ${ouvert ? "open" : ""}><summary>${ico("archive")} Archivés <span class="tag">${archives.length}</span></summary>
+  return `<details class="archives-discret" data-pli="archives" ${ouvert ? "open" : ""}><summary>${ico("archive")} Archivés (${archives.length})</summary>
     ${archives.map(p => { const r = retraits.find(x => x.profil_id === p.id), att = r && r.etat === "a_faire", err = r && r.etat === "erreur";
       return `<div class="ligne"><span style="min-width:0"><b>${esc(nomPers(p))}</b> <span class="muted small">archivé le ${jour(p.archive_le)}</span>
         ${att ? `<span class="tag">${RETRAIT_EN_COURS[r.action] || "en cours"}</span>` : ""}${err ? `<br><span class="err small">${esc(r.message || "Le pont n'a pas pu le faire")}</span>` : ""}</span>
@@ -3964,8 +3972,9 @@ async function actionArchivePresta(b, tous, retraits) {
   const leverErreur = async p => { const r = retraits.find(x => x.profil_id === p.id && x.etat === "erreur"); if (r) await maj(sb.from("comptes_a_retirer").delete().eq("id", r.id)); };   // la demande ratée laisse la place
   if (b.dataset.retraitReessai) { await maj(sb.from("comptes_a_retirer").update({ etat: "a_faire" }).eq("id", b.dataset.retraitReessai)); toast("Redemandé : le pont réessaie dans 5 minutes"); return afficher(); }
   if (b.dataset.archiverPresta) {
-    const p = qui(b.dataset.archiverPresta); if (!p || p.actif) return toast("Coupe d'abord son accès à l'appli, dans sa fiche");
-    if (!confirm(`Archiver ${nomPers(p)} ?\n\nIl quitte la liste de l'équipe et son compte est bloqué : il ne peut plus se connecter.\nRien n'est effacé : tu peux le sortir des archives.`)) return;
+    const p = qui(b.dataset.archiverPresta); if (!p) return;
+    if (!confirm(`Archiver ${nomPers(p)} ?\n\n${p.actif ? "Son accès à l'appli est coupé, il" : "Il"} quitte la liste de l'équipe et son compte est bloqué : il ne peut plus se connecter.\nRien n'est effacé : tu peux le sortir des archives.`)) return;
+    if (p.actif) await maj(sb.from("profils").update({ actif: false }).eq("id", p.id));   // la base n'archive qu'un accès coupé (SQL 51) : on le coupe d'abord
     return demandeRetrait(p, "archiver", "Archivé : son compte est bloqué dans 5 minutes");
   }
   if (b.dataset.sortirPresta) {
@@ -4099,7 +4108,7 @@ async function ficheIntervenante(id) {
         <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
         ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
         ${p.archive_le ? `<p style="margin-top:6px"><span class="tag off">${ico("archive")} archivé le ${jour(p.archive_le)}</span></p><p class="muted small" style="margin-top:4px">Accès coupé et compte bloqué. Pour le rouvrir : Presta › Archivés › Sortir des archives.</p>` : `<label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
-        <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici. Ensuite, Archiver sur sa ligne le range dans les archivés.</p>`}
+        <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici. Archiver sur sa ligne (à tout moment) coupe l'accès et le range dans les archivés.</p>`}
         <div class="row" style="margin-top:10px"><button class="btn primary" id="enr">Enregistrer</button>
           <button class="btn flat" id="nv-code" title="Lui envoie par mail un nouveau code : il devra rechoisir son mot de passe">${ico("mail")} Nouveau code d'accès</button></div>
         <h3>Liens</h3>
