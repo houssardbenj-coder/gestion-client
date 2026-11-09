@@ -239,6 +239,13 @@ li.is-done .tk-open .txt{text-decoration:line-through;color:var(--muted)}
 .dm{padding:0;margin-bottom:6px}
 .dm>summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;cursor:pointer;list-style:none}
 .dm>summary::-webkit-details-marker{display:none}
+details.pli>summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-height:28px;cursor:pointer;list-style:none;font-weight:600;font-size:16px}
+details.pli>summary::-webkit-details-marker{display:none}
+details.pli>summary::after{content:"▾";margin-left:auto;color:var(--muted);transition:transform .2s}
+details.pli:not([open])>summary::after{transform:rotate(-90deg)}
+details.pli[open]>summary{margin-bottom:10px}
+details.pli .pli-alerte{color:var(--warn-vif);display:inline-flex}
+details.pli .pli-ok{color:var(--go);display:inline-flex}
 .dm>summary::after{content:"▾";color:var(--muted);transition:transform .2s}
 .dm:not([open])>summary::after{transform:rotate(-90deg)}
 .dm-nom{flex:1 1 260px;min-width:0}
@@ -3565,6 +3572,7 @@ function papiersDe(p, pieces, docs) {
   const ok = liste.filter(x => docs.some(d => d.intervenante_id === p.id && d.piece_id === x.id && d.etat === "valide")).length;
   return { ok, total: liste.length, manque: ok < liste.length };
 }
+const pliOuvert = {};   // Papiers / Clients confiés : repliés par défaut, restent ouverts après une action
 async function ficheIntervenante(id) {
   const p = cacheProfils.find(x => x.id === id); if (!p) return;
   const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
@@ -3581,7 +3589,9 @@ async function ficheIntervenante(id) {
   const aSonNom = lignesASonNom(p);
   const total = pts.filter(x => x.depart).reduce((s, x) => s + (new Date(x.depart) - new Date(x.arrivee)) / 6e4, 0);
   const liste = piecesPour(p, pieces);
-  const champ = (k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
+  const etatPap = papiersDe(p, pieces, docs);
+  const aValider = docs.filter(d => d.piece_id && d.etat === "recu").length;
+  const champ =(k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn">${ico("cadenas")} gelé</span>` : ""}</h1>
       <span class="row">${p.actif ? `<button class="btn ${p.gele ? "go" : ""}" id="gel" title="Gelé : il consulte son appli, mais ne peut que modifier ses informations et envoyer ses papiers">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}<button class="btn flat" data-fermer>Fermer</button></span></div>
     <div class="deux">
@@ -3603,7 +3613,9 @@ async function ficheIntervenante(id) {
     </div>
     <section class="card"><h3 style="margin-top:0">Ses passages ${aide("Comme sa feuille d'heures, mais relié à son appli : ce que tu modifies ici change tout de suite dans son appli (marqué « corrigé par OIKOS »), et le pont réécrit la même ligne de sa feuille d'heures dans les 5 minutes.")}</h3>
       <div id="pp"></div></section>
-    <section class="card"><h3 style="margin-top:0">Papiers</h3>
+    <details class="card pli" data-pli="papiers" ${pliOuvert.papiers ? "open" : ""}><summary>${etatPap.manque ? `<span class="pli-alerte">${ico("alerte")}</span>` : `<span class="pli-ok">${ico("ok")}</span>`}Papiers
+        ${etatPap.manque ? `<span class="tag warn">${etatPap.total - etatPap.ok} manquant${etatPap.total - etatPap.ok > 1 ? "s" : ""}</span>` : `<span class="tag">complets</span>`}
+        ${aValider ? `<span class="tag">${aValider} à valider</span>` : ""}${props.length ? `<span class="tag">${props.length} trouvé${props.length > 1 ? "s" : ""} dans le Drive</span>` : ""}</summary>
       ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
         <span class="row">${!d ? `<span class="tag warn">pas envoyé</span>` : `<span class="tag ${d.etat === "refuse" ? "warn" : ""}">${{ recu: "reçu", valide: "✓ validé", refuse: "refusé" }[d.etat]}</span>
         <button class="btn" data-voir="${esc(lien(d))}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
@@ -3615,12 +3627,13 @@ async function ficheIntervenante(id) {
           <a href="${esc(x.drive_url)}" target="_blank" rel="noopener">${esc(x.nom_fichier)}</a><br><span class="muted small">${esc(x.raison || "")}${x.date_doc ? " · daté du " + new Date(x.date_doc).toLocaleDateString("fr-FR") : ""}</span>
           ${x.perime ? ` <span class="tag warn">périmé ?</span>` : ""}</span>
         <span class="row"><select data-choix style="max-width:230px"><option value="">— pas un papier demandé —</option>${liste.map(k => `<option value="${k.id}" ${k.id === x.piece_id ? "selected" : ""}>${esc(k.libelle)}</option>`).join("")}</select>
-          <button class="btn go" data-pok>Oui</button><button class="btn flat" data-pko>Non</button></span></div>`).join("")}` : ""}</section>
-    <section class="card"><h3 style="margin-top:0">Clients confiés</h3>
+          <button class="btn go" data-pok>Oui</button><button class="btn flat" data-pko>Non</button></span></div>`).join("")}` : ""}</details>
+    <details class="card pli" data-pli="clients" ${pliOuvert.clients ? "open" : ""}><summary>Clients confiés <span class="tag">${actives.length}</span>${aSonNom.length ? `<span class="tag warn">${aSonNom.length} sans accès</span>` : ""}</summary>
       ${aSonNom.length ? `<div class="ligne"><span style="min-width:0"><b>Notés à son nom, sans accès (${aSonNom.length})</b> ${aide("Son nom était seulement écrit sur ces clients, avant son compte. Tant que tu ne les ouvres pas, il ne les voit pas dans son appli.")}<br>${ENTREPRISES.map(([k, t]) => { const l = [...new Set(aSonNom.map(a => cacheClients.find(c => c.id === a.client_id)))].filter(c => dansEntreprise(c, k)); return l.length ? `<span class="muted small">${t} : ${l.map(c => esc(c.nom)).join(", ")}</span><br>` : ""; }).join("")}</span><button class="btn primary" data-ouvrir-clients>${ico("ouvert")} Lui ouvrir ces clients</button></div>` : ""}
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><button class="btn stop" data-retire="${a.id}">Retirer</button></div>`).join("") || `<p class="muted small">Aucun.</p>`}
-      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></section>`, (el, fermer) => {
+      <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></details>`, (el, fermer) => {
     const recharger = () => { fermer(); ficheIntervenante(id); };
+    el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
     el.style.maxWidth = "1120px";   // place pour le tableau des passages
     passagesPresta(el.querySelector("#pp"), p);
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
