@@ -82,6 +82,14 @@ label.f input,label.f select,label.f textarea{border:1px solid var(--line);borde
 label.f textarea{min-height:90px;resize:vertical}
 .chk{display:flex;align-items:center;gap:10px;font-size:17px;padding:6px 0}
 .chk input{width:24px;height:24px}
+.acts{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:15px}
+.acts label{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer}
+.acts input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.rq{font-size:13px;color:var(--muted)}
+.rq summary{cursor:pointer;list-style:none;display:inline-block;padding:2px 0}
+.rq summary::-webkit-details-marker{display:none}
+.rq[open] summary{display:none}
+.rq input{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:14px;background:var(--surface)}
 .err{color:var(--stop);font-weight:600;min-height:1.2em}
 .client-nom{font-weight:600;font-size:19px}
 .tag{display:inline-block;font-size:13px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--ink)}
@@ -1096,70 +1104,143 @@ function devinerClient(mots) {
   });
   return mieux && mieux.score >= .75 && mieux.score - second > .05 ? mieux.c.id : "";
 }
-function lireDate(t, aujourdhui) {
-  let m;
+/* Mois et activités écrits de toutes les façons : « octobre », « oct. », « sept 2026 », « le mois dernier » ; « ménage », « jardin », « brico »… */
+const RE_MOIS = /\b(janv(?:ier)?|jan|fevr?(?:ier)?|mars|avr(?:il)?|mai|juin|juil(?:let)?|aout|sept(?:embre)?|oct(?:obre)?|nov(?:embre)?|dec(?:embre)?)(?![a-z])\.?(?: (20\d\d))?(?! ?(?:h\b|heures?\b))/;
+const RE_MOIS_REL = /\b(?:le |du |au )?mois (?:dernier|passe|precedent)\b|\b(?:ce|du) mois(?:[- ]ci)?\b/;
+const numMois = w => w.startsWith("juin") ? 5 : w.startsWith("juil") ? 6 : ["jan", "fev", "mar", "avr", "mai", "", "", "aou", "sep", "oct", "nov", "dec"].indexOf(w.slice(0, 3));
+const RE_ACT = /\b(menages?|nettoyages?|repassage|jardin(?:age)?|tontes?|tailles?|haies?|debroussaill\w*|elagages?|brico(?:lage|les?)?|reparations?|montages?)\b/;
+const activiteDe = w => /^(menage|nettoyage|repassage)/.test(w) ? "Ménage" : /^(brico|repar|montage)/.test(w) ? "Bricolage" : "Jardinage";
+const MOTS_DATE = new Set(["tous", "toutes", "chaque", "er", "mois", "dernier", "passe", "precedent", "ci", "semaine", "semaines", "fois"]);
+/* Les mots qui peuvent être un nom de client (pas une date, une heure ou une activité) */
+const motsClient = t => t.replace(RE_ACT, " ").replace(new RegExp(RE_MOIS.source, "g"), " ").split(/[^a-z0-9]+/)
+  .filter(x => x.length >= 2 && !VIDES.has(x) && !MOTS_DATE.has(x) && !/^\d/.test(x) && !JOURS_FR.includes(x.replace(/s$/, "")));
+function lireDate(t, aujourdhui) {   // jours relatifs : hier, avant-hier, aujourd'hui, ce matin
   if (/avant[- ]?hier/.test(t)) return [ajouterJours(aujourdhui, -2), /avant[- ]?hier/];
   if (/\bhier\b/.test(t)) return [ajouterJours(aujourdhui, -1), /\bhier\b/];
   if (/aujourd ?'?hui/.test(t)) return [aujourdhui, /aujourd ?'?hui/];
   if (/\bce (matin|midi|soir)\b|\bcet apres ?-?midi\b/.test(t)) return [aujourdhui, /\bce (matin|midi|soir)\b|\bcet apres ?-?midi\b/];
-  if ((m = /\b(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?\b/.exec(t))) {
-    let a = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : aujourdhui.getFullYear(), d = new Date(a, +m[2] - 1, +m[1]);
-    if (!m[3] && d > aujourdhui) d = new Date(a - 1, +m[2] - 1, +m[1]);
-    return [d, m[0]];
-  }
-  if ((m = new RegExp("\\b(\\d{1,2}|1er) (" + MOIS_FR.join("|") + ")\\b").exec(t))) {
-    let d = new Date(aujourdhui.getFullYear(), MOIS_FR.indexOf(m[2]), parseInt(m[1]));
-    if (d > aujourdhui) d = new Date(aujourdhui.getFullYear() - 1, MOIS_FR.indexOf(m[2]), parseInt(m[1]));
-    return [d, m[0]];
-  }
-  if ((m = new RegExp("\\b(" + JOURS_FR.join("|") + ")\\b").exec(t))) {
-    const recul = (aujourdhui.getDay() - JOURS_FR.indexOf(m[1]) + 7) % 7;
-    return [ajouterJours(aujourdhui, -recul), m[0]];
-  }
-  if ((m = /\ble (\d{1,2})(?![\dh:.,])/.exec(t))) {
-    let d = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), +m[1]);
-    if (d > aujourdhui) d = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth() - 1, +m[1]);
-    return [d, m[0]];
-  }
   return [null, null];
 }
-function lireMorceau(brut, jourParDefaut) {
-  let t = " " + sansAcc(brut).replace(/[’']/g, " ").replace(/\s+/g, " ") + " ", m;
-  const l = { client_id: "", jour: "", debut: "", fin: "", minutes: 0, note: "" };
-  const [d, trouve] = lireDate(t, debutJour());
-  if (d) { l.jour = versLocal(d).slice(0, 10); t = t.replace(trouve, " "); } else l.jour = jourParDefaut;
+/* Un ou plusieurs jours dans un morceau : « 7 - 14 -21 -28 », « les 7, 14 et 21 octobre », « 7/10, 14/10 »,
+   « tous les mardis d'octobre », « du 3 au 7 », « lundi et jeudi », « hier »… ; ctx.mois = mois retenu pour la suite */
+function lireJours(t, ctx) {
+  const auj = debutJour(), jours = [];
+  let m, mois = null;
+  const moisVers = (a, mo) => { const d = new Date(a, mo, 1); return { a: d.getFullYear(), m: d.getMonth() }; };
+  if ((m = RE_MOIS_REL.exec(t))) { mois = /mois (dernier|passe|precedent)/.test(m[0]) ? moisVers(auj.getFullYear(), auj.getMonth() - 1) : moisVers(auj.getFullYear(), auj.getMonth()); t = t.replace(m[0], " "); }
+  else if ((m = RE_MOIS.exec(t))) {
+    const mo = numMois(m[1]); let a = m[2] ? +m[2] : auj.getFullYear();
+    if (!m[2] && new Date(a, mo, 1) > auj) a--;   // « décembre » en novembre = l'an dernier
+    mois = { a, m: mo }; t = t.replace(m[0], " ");
+  }
+  if (mois) ctx.mois = mois;
+  const M = mois || ctx.mois;
+  const jourDe = (a, mo, j) => { const d = new Date(a, mo, j); return d.getMonth() === ((mo % 12) + 12) % 12 ? d : null; };
+  // dans quel mois mettre des numéros seuls : le mois dit, sinon ce mois-ci, ou le précédent si un jour n'est pas encore arrivé
+  const placer = nums => {
+    const base = M || (Math.max(...nums) > auj.getDate() ? moisVers(auj.getFullYear(), auj.getMonth() - 1) : moisVers(auj.getFullYear(), auj.getMonth()));
+    nums.forEach(n => jours.push(jourDe(base.a, base.m, n)));   // jour impossible (31 septembre) : ligne à compléter
+  };
+  // « 7/14/21/28 » : une liste de jours, pas une date
+  t = t.replace(/\b\d{1,2}(?:\/\d{1,2})+\b/g, ch => { const p = ch.split("/").map(Number); return p.length > 3 || p[1] > 12 ? p.join(" ") : ch; });
+  // 7/10, 14/10/2026
+  const reDM = /\b(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?\b/g;
+  while ((m = reDM.exec(t))) {
+    if (+m[2] < 1 || +m[2] > 12) continue;
+    let a = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : auj.getFullYear(), d = jourDe(a, +m[2] - 1, +m[1]);
+    if (d && !m[3] && d > auj) d = jourDe(a - 1, +m[2] - 1, +m[1]);
+    if (d) jours.push(d);
+  }
+  if (jours.length) return { jours, t: t.replace(reDM, " "), mois };
+  t = t.replace(/(\d)[,.](?=\d)/g, "$1 ");   // « 7,14,21 » (les heures « 2,5h » sont déjà lues)
+  // jours de la semaine : « tous les mardis », « chaque jeudi », « lundi et jeudi »
+  const reJ = new RegExp("\\b(" + JOURS_FR.join("|") + ")(s?)\\b", "g"), semaine = [];
+  let tous = /\btou(?:s|tes) les\b|\bchaque\b/.test(t);
+  while ((m = reJ.exec(t))) { semaine.push(JOURS_FR.indexOf(m[1])); if (m[2]) tous = true; }
+  if (semaine.length) {
+    t = t.replace(reJ, " ").replace(/\btou(?:s|tes) les\b|\bchaque\b/g, " ");
+    if (tous || M) {   // tous ceux du mois, jusqu'à aujourd'hui
+      const base = M || moisVers(auj.getFullYear(), auj.getMonth());
+      for (let j = 1; j <= 31; j++) { const d = jourDe(base.a, base.m, j); if (d && d <= auj && semaine.includes(d.getDay())) jours.push(d); }
+    } else semaine.forEach(w => jours.push(ajouterJours(auj, -((auj.getDay() - w + 7) % 7))));
+    return { jours, t, mois };
+  }
+  // du 3 au 7
+  if ((m = /\bdu (1er|\d{1,2}) au (\d{1,2})\b/.exec(t))) {
+    const a = parseInt(m[1]), b = +m[2], nums = [];
+    for (let j = a; j <= b && b <= 31; j++) nums.push(j);
+    if (nums.length) { placer(nums); return { jours, t: t.replace(m[0], " "), mois }; }
+  }
+  // numéros de jours : « 7 - 14 -21 -28 », « les 7, 14 et 21 », « le 12 »
+  const reN = /(?<![\d:\/])\b(1er|\d{1,2})\b(?![\d:\/]| ?(?:h\b|heures?\b|min|mn\b))/g, nums = [];
+  while ((m = reN.exec(t))) { const n = parseInt(m[1]); if (n >= 1 && n <= 31) nums.push(n); }
+  if (nums.length >= 2 || (nums.length && (M || /\ble (1er|\d{1,2})\b/.test(t)))) {
+    placer(nums); return { jours, t: t.replace(reN, " "), mois };
+  }
+  const [d, trouve] = lireDate(t, auj);
+  if (d) { jours.push(d); t = t.replace(trouve, " "); }
+  return { jours, t, mois };
+}
+const normaliser = s => " " + sansAcc(s).replace(/[’']/g, " ").replace(/\s+/g, " ") + " ";
+function lireMorceau(brut, ctx) {
+  let t = normaliser(brut), m;
+  const l = { client_id: "", jours: [], debut: "", fin: "", minutes: 0, note: "", activite: "", actEnTete: false };
+  if ((m = RE_ACT.exec(t))) { l.activite = activiteDe(m[1]); l.actEnTete = !motsClient(t.slice(0, m.index)).length; t = t.replace(m[0], " "); }
   // créneau : 9h-12h, 9h30 à 12h, de 14 h à 16h30
   if ((m = /(?:de )?(\d{1,2}) ?[h:] ?(\d{2})? ?(?:-|a|au|jusqu a) ?(\d{1,2}) ?[h:]? ?(\d{2})?(?![\d])/.exec(t))) {
     const a = +m[1] * 60 + +(m[2] || 0), b = +m[3] * 60 + +(m[4] || 0);
     if (b > a && b <= 24 * 60) { l.debut = pad2(m[1]) + ":" + pad2(m[2] || 0); l.fin = pad2(m[3]) + ":" + pad2(m[4] || 0); l.minutes = b - a; t = t.replace(m[0], " "); }
   }
-  if (!l.minutes) {   // durée : 3h, 3h30, 2,5h, 45 min, trois heures et demie
+  if (!l.minutes) {   // durée : 3h, 3h30, 3h 30, 2,5h, 45 min, trois heures et demie
     if ((m = /(\d{1,2})[.,](\d{1,2}) ?h\b/.exec(t))) l.minutes = Math.round(parseFloat(m[1] + "." + m[2]) * 60);
-    else if ((m = /(\d{1,2}) ?h ?(\d{2})?(?!\d)/.exec(t))) l.minutes = +m[1] * 60 + +(m[2] || 0);
+    else if ((m = /(\d{1,2}) ?h(?:(\d{2})| (15|30|45)\b)?(?!\d)/.exec(t))) l.minutes = +m[1] * 60 + +(m[2] || m[3] || 0);
     else if ((m = /(\d{1,3}) ?(?:min|mn|minutes?)\b/.exec(t))) l.minutes = +m[1];
     else if ((m = new RegExp("\\b(" + Object.keys(NOMBRES).join("|") + ") heures?( et demie?| et quart)?").exec(t))) l.minutes = NOMBRES[m[1]] * 60 + (m[2] ? (/quart/.test(m[2]) ? 15 : 30) : 0);
     if (m) { t = t.replace(m[0], " "); if (/et demie?/.test(t) && !/et demie?|et quart/.test(m[0])) { l.minutes += 30; t = t.replace(/et demie?/, " "); } }
   }
-  const mots = t.split(/[^a-z0-9]+/).filter(x => x.length >= 2 && !VIDES.has(x) && !/^\d+$/.test(x));
-  l.client_id = devinerClient(mots);
+  const r = lireJours(t, ctx); t = r.t; l.jours = r.jours; l.mois = !!r.mois;
+  l.client_id = devinerClient(motsClient(t));
   l.lu = brut.trim();
   return l;
 }
+/* Découpe une ligne en passages : « , » « et » « ; » « puis » séparent deux clients,
+   mais « 7, 14 et 21 » ou « 2,5h » ou « 3h et demie » restent ensemble */
+function decouper(ligne) {
+  const suite = /^\s*(?:(?:le|les|et) )?(?:1er|\d{1,2}(?!\d| ?(?:h\b|heures?\b|min|mn\b|[.,]\d))|(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)s?\b)/i;
+  const sansClient = s => !motsClient(normaliser(s)).length;
+  const out = [];
+  ligne.split(/;| puis | ensuite /i).forEach(bloc => {
+    let prec = null;
+    bloc.split(/,(?!\d)|(?<!\d),| et (?!demi|quart)/i).map(s => s.trim()).filter(Boolean).forEach(p => {
+      const colle = prec !== null && suite.test(sansAcc(p)) && (sansClient(p) || sansClient(out[prec]));
+      if (colle) out[prec] += ", " + p; else { out.push(p); prec = out.length - 1; }
+    });
+  });
+  return out;
+}
+/* Toute la déclaration → une ligne par passage (plusieurs jours = plusieurs passages) */
 function lireDeclaration(texte) {
-  const lignes = [];
+  const lignes = [], ctx = { mois: null }, ymd = d => versLocal(d).slice(0, 10);
+  let joursSuite = null, actSuite = "";   // « Octobre » ou « 7 - 14 : » seuls sur une ligne valent pour les lignes suivantes
   texte.split(/\n+/).forEach(ligne => {
-    // virgule, point-virgule, « puis », « et » séparent les passages (mais pas « 2,5h » ni « 3h et demie »)
-    const morceaux = ligne.split(/,(?!\d)|(?<!\d),|;| puis | ensuite | et (?!demi|quart)/i).map(s => s.trim()).filter(Boolean);
-    let jourLigne = versLocal(debutJour()).slice(0, 10);   // « hier : Bibas 3h, Haddad 2h » : le jour vaut aussi pour les suivants
+    const morceaux = decouper(ligne);
+    let joursLigne = joursSuite || [debutJour()], actLigne = actSuite;
     morceaux.forEach(mc => {
-      const l = lireMorceau(mc, jourLigne);
-      jourLigne = l.jour;
-      if (l.client_id || l.minutes) lignes.push(l);
-      else if (lignes.length) lignes[lignes.length - 1].note = ((lignes[lignes.length - 1].note || "") + " " + mc).trim();   // reste = remarque
+      const l = lireMorceau(mc, ctx);
+      if (l.client_id || l.minutes) {
+        if (l.jours.length) joursLigne = l.jours;   // « hier : Bibas 3h, Haddad 2h » : le jour vaut aussi pour les suivants
+        if (l.activite && l.actEnTete) actLigne = l.activite;
+        const act = l.activite || actLigne || "Ménage";
+        (l.jours.length ? l.jours : joursLigne).forEach(d => lignes.push({ client_id: l.client_id, jour: d ? ymd(d) : "", debut: l.debut, fin: l.fin, minutes: l.minutes, note: "", activite: act, lu: l.lu }));
+      } else if (l.jours.length || l.activite || l.mois) {   // en-tête : un mois, des jours, une activité
+        if (l.jours.length) { joursLigne = l.jours; if (morceaux.length === 1) joursSuite = l.jours; }
+        if (l.activite) { actLigne = l.activite; if (morceaux.length === 1) actSuite = l.activite; }
+      } else if (lignes.length) lignes[lignes.length - 1].note = ((lignes[lignes.length - 1].note || "") + " " + mc).trim();   // reste = remarque
     });
   });
   return lignes;
 }
+
 /* Brouillon des lignes à vérifier : gardé sur le téléphone jusqu'à l'envoi */
 let brouillon = LS.get("brouillon") || [];
 const garderBrouillon = () => LS.set("brouillon", brouillon);
@@ -2163,11 +2244,12 @@ async function vueMois() {
         <label class="f">Heures<input name="heures" inputmode="decimal" value="${heuresSaisie(l.minutes)}" placeholder="ex. 3 ou 2,5"></label></div>
       <div class="grid2"><label class="f">Début (facultatif)<input name="debut" type="time" value="${l.debut || ""}"></label>
         <label class="f">Fin (facultatif)<input name="fin" type="time" value="${l.fin || ""}"></label></div>
-      <label class="f">Remarque (facultatif)<input name="note" value="${esc(l.note || "")}"></label></div>`;
+      <div class="acts">${ACTIVITES.map(a => `<label><input type="checkbox" name="activite" value="${a}" ${(l.activite || "Ménage") === a ? "checked" : ""}>${a}</label>`).join("")}</div>
+      <details class="rq" ${l.note ? "open" : ""}><summary>+ remarque</summary><input name="note" value="${esc(l.note || "")}" aria-label="Remarque"></details></div>`;
   contenu(`<h1>Reporting</h1>
     <div class="card" style="margin-top:10px">
       <label class="f" for="dire">Ce que tu as fait</label>
-      <textarea id="dire" rows="3" style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);font-size:17px;width:100%" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier"></textarea>
+      <textarea id="dire" rows="3" style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);font-size:17px;width:100%" placeholder="Ex. Bibas 3h ce matin, Haddad 9h-12h hier&#10;ou pour tout un mois : octobre Houssard 7 - 14 - 21 - 28 3h"></textarea>
       <button class="btn primary" id="verifier">Vérifier</button>
       <button class="btn flat" id="vide">${ico("plus")} Ajouter une ligne à la main</button></div>
     ${brouillon.length ? `<h2>À vérifier avant d'envoyer</h2><div class="stack" id="brouillon">${brouillon.map(carte).join("")}</div>
@@ -2200,6 +2282,11 @@ async function vueMois() {
     const c = e.target.closest("[data-cle]"); if (!c) return;
     const l = brouillon.find(x => x.cle === c.dataset.cle), n = e.target.name;
     if (n === "heures") l.minutes = minutesSaisie(e.target.value);
+    else if (n === "activite") {   // une seule case cochée : Ménage, Jardinage ou Bricolage
+      if (!e.target.checked) e.target.checked = true;
+      l.activite = e.target.value;
+      c.querySelectorAll("[name=activite]").forEach(x => { if (x !== e.target) x.checked = false; });
+    }
     else if (n) l[n] = e.target.value;
     if ((n === "debut" || n === "fin") && l.debut && l.fin) {
       const [ha, ma] = l.debut.split(":").map(Number), [hb, mb] = l.fin.split(":").map(Number), mn = hb * 60 + mb - ha * 60 - ma;
@@ -2237,12 +2324,13 @@ function versPassage(l) {
   const avecCreneau = !!(l.debut && l.fin);
   const a = new Date(l.jour + "T" + (avecCreneau ? l.debut : "12:00"));
   return { client_id: l.client_id, arrivee: a.toISOString(), depart: new Date(a.getTime() + l.minutes * 60000).toISOString(),
-    source: "declaration", creneau_connu: avecCreneau, note: (l.note || "").trim() || null };
+    source: "declaration", creneau_connu: avecCreneau, note: (l.note || "").trim() || null, activite: ACTIVITES.includes(l.activite) ? l.activite : "Ménage" };
 }
 function feuillePassage(id) {
   const p = (cache.mois || []).find(x => x.id === id); if (!p) return;
   feuille(`<h2 style="margin:0">${esc(nomClient(p.client_id))}</h2><p class="muted">${jourTxt(p.arrivee)}</p>
     <dl class="info card"><dt>${p.creneau_connu !== false ? "Horaires" : "Durée"}</dt><dd>${p.creneau_connu !== false ? heure(p.arrivee) + " → " + (p.depart ? heure(p.depart) : "?") + " · " : ""}<b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : "à compléter"}</b></dd>
+      <dt>Activité</dt><dd>${esc(p.activite || "Ménage")}</dd>
       ${p.note ? `<dt>Remarque</dt><dd>${esc(p.note)}</dd>` : ""}
       <dt>Rapport d'activité</dt><dd>${p.exporte_le ? "✓ écrit dans ta feuille d'heures" : "en attente (quelques minutes)"}</dd></dl>
     ${p.verrouille ? `<p class="muted small">Ce passage est validé par OIKOS : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : `<button class="btn" id="corr"><span class="ic">${ico("stylo")}</span>Corriger</button>`}
@@ -2260,15 +2348,16 @@ function corrigerPointage(id, retour) {
     <label class="f">Heures<input name="heures" inputmode="decimal" value="${p.depart ? heuresSaisie(minutesEntre(p.arrivee, p.depart)) : ""}"></label>
     <div class="grid2"><label class="f">Début (facultatif)<input name="debut" type="time" value="${avec ? versLocal(p.arrivee).slice(11) : ""}"></label>
     <label class="f">Fin (facultatif)<input name="fin" type="time" value="${avec && p.depart ? versLocal(p.depart).slice(11) : ""}"></label></div>
+    <div class="acts">${ACTIVITES.map(a => `<label><input type="radio" name="activite" value="${a}" ${(p.activite || "Ménage") === a ? "checked" : ""}>${a}</label>`).join("")}</div>
     <p class="err" id="err"></p>
     <button class="btn primary big" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
     el.querySelector("#fc").onsubmit = async e => {
       e.preventDefault(); const f = new FormData(e.target);
-      const l = { client_id: p.client_id, jour: f.get("jour"), debut: f.get("debut"), fin: f.get("fin"), minutes: minutesSaisie(f.get("heures")), note: p.note };
+      const l = { client_id: p.client_id, jour: f.get("jour"), debut: f.get("debut"), fin: f.get("fin"), minutes: minutesSaisie(f.get("heures")), note: p.note, activite: f.get("activite") };
       if (l.debut && l.fin) { const [ha, ma] = l.debut.split(":").map(Number), [hb, mb] = l.fin.split(":").map(Number); l.minutes = hb * 60 + mb - ha * 60 - ma; }
       if (!(l.minutes > 0)) { el.querySelector("#err").textContent = "Indique les heures, ou un début et une fin."; return; }
       const d = versPassage(l);
-      const { error } = await sb.from("pointages").update({ arrivee: d.arrivee, depart: d.depart, creneau_connu: d.creneau_connu, valide_par_intervenante: false }).eq("id", id);
+      const { error } = await sb.from("pointages").update({ arrivee: d.arrivee, depart: d.depart, creneau_connu: d.creneau_connu, activite: d.activite, valide_par_intervenante: false }).eq("id", id);
       if (error) return souci(error);
       fermer(); toast("Enregistré : " + heuresTxt(l.minutes)); accueil(retour || onglet);
     };
