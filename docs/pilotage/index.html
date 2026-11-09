@@ -538,6 +538,12 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .lg-table .lg-num{position:sticky;left:0;z-index:1;background:var(--sunk);color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;padding:2px 5px;text-align:right;border-top:1px solid var(--line);border-radius:0;min-width:34px}
 .lg-table thead .lg-num{z-index:3;background:var(--accent-soft);color:var(--accent-fort);font-weight:600;border-top:0}
 .lg-table .lg-num .btn{padding:2px}
+/* Petite croix à côté du numéro de ligne : discrète, plus franche au survol de la ligne */
+.lg-table .lg-num{white-space:nowrap}
+.lg-table .lg-suppr{border:0;background:none;padding:1px;margin-left:3px;cursor:pointer;color:var(--muted);opacity:.35;border-radius:5px;vertical-align:middle;line-height:0}
+.lg-table .lg-suppr .ico{width:12px;height:12px}
+.lg-table tbody tr:hover .lg-suppr,.lg-table .lg-suppr:focus-visible{opacity:1}
+.lg-table .lg-suppr:hover{color:var(--stop,#b3261e);background:var(--stop-soft)}
 .lg-table tbody tr:hover td{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
 .lg-table input.lg-c{border:1px solid transparent;border-radius:6px;background:transparent;padding:4px 3px;font-size:13px;color:var(--ink)}
 .lg-table input.lg-c:hover{border-color:var(--line);background:var(--surface)}
@@ -1380,7 +1386,7 @@ function lgCase(o, l, id, [c, titre, type, liste]) {
 }
 function lgRangee(o, l, id) {
   const nouvelle = String(id)[0] === "n";
-  return `<tr data-l="${esc(id)}" class="${nouvelle ? "lg-nouvelle" : lgArchivee(l) ? "lg-archivee" : ""}"><th scope="row" class="lg-num">${nouvelle ? `<button class="btn flat stop" data-lg-retirer="${esc(id)}" aria-label="Retirer cette nouvelle ligne" title="Retirer cette nouvelle ligne">${ico("croix")}</button>` : l.ligne}</th>${LG_COLONNES[o].map(k => lgCase(o, l, id, k)).join("")}</tr>`;
+  return `<tr data-l="${esc(id)}" class="${nouvelle ? "lg-nouvelle" : lgArchivee(l) ? "lg-archivee" : ""}"><th scope="row" class="lg-num">${nouvelle ? `<button class="btn flat stop" data-lg-retirer="${esc(id)}" aria-label="Retirer cette nouvelle ligne" title="Retirer cette nouvelle ligne">${ico("croix")}</button>` : `<span class="lg-n">${l.ligne}</span><button class="lg-suppr" data-lg-suppr="${l.ligne}" aria-label="Supprimer la ligne ${l.ligne}" title="Supprimer cette ligne partout (Excel, appli du presta, feuille d'heures)">${ico("croix")}</button>`}</th>${LG_COLONNES[o].map(k => lgCase(o, l, id, k)).join("")}</tr>`;
 }
 function lgDessiner() {
   const z = document.getElementById("lg-zone"); if (!z) return;
@@ -1469,6 +1475,53 @@ async function lgEnregistrer() {
     zoneMsg.innerHTML = `<div class="card lg-erreur"><b>${ico("alerte")} Pas enregistré.</b> ${esc(e.message || e)} <button class="btn" id="lg-relire" type="button">Relire l'Excel</button></div>`;
   }
 }
+/* Supprimer une ligne partout. L'Excel d'abord (le PC vide la ligne, sans décaler les autres : leurs formules restent justes),
+   puis, pour un service, le passage de l'appli qui lui correspond (même presta, même jour, même client, mêmes heures) :
+   il disparaît de l'appli du presta et du Reporting, et le Pont intervenantes retire sa ligne de la feuille d'heures.
+   Le programme des intervenants ne la réimporte pas : son journal garde les lignes déjà importées puis retirées. */
+const lgMots = s => norm(s).split(" ").filter(m => m.length > 2);
+async function lgPassagesDe(l) {
+  const mi = lgMots(l.intervenant), mc = lgMots(l.client);
+  if (!mi.length || !mc.length || !l.date) return [];
+  await chargerBase();
+  const presta = cacheProfils.filter(p => p.role === "intervenante" && mi.every(m => lgMots(nomPers(p)).includes(m)));
+  if (!presta.length) return [];
+  const j0 = new Date(l.date + "T00:00"), j1 = plusJours(j0, 1);
+  const pts = await q(sb.from("pointages").select("id,client_id,arrivee,depart,intervenante_id").in("intervenante_id", presta.map(p => p.id))
+    .gte("arrivee", j0.toISOString()).lt("arrivee", j1.toISOString()).not("depart", "is", null));
+  const memes = pts.filter(p => { const n = lgMots(nomClient(p.client_id)); return mc.some(m => n.includes(m))
+    && (l.heures == null || Math.abs((new Date(p.depart) - new Date(p.arrivee)) / 36e5 - l.heures) < 0.02); });
+  return memes.slice(0, 1);   // une ligne de l'Excel = un passage
+}
+async function lgSupprimer(o, num) {
+  const l = lgOrigine(o, num); if (!l.ligne) return;
+  if (Object.keys(lgModifs).some(k => k.startsWith(lgCle(o, num, "")))) return toast("Cette ligne a des changements pas enregistrés : enregistre-les ou annule d'abord.");
+  let passages = [];
+  if (o === "services") { try { passages = await lgPassagesDe(l); } catch (e) { return souci(e); } }
+  const jourFr = l.date ? new Date(l.date + "T12:00").toLocaleDateString("fr-FR") : "";
+  const quoi = o === "cours" ? `${l.prenom || "?"}${l.client ? " (" + l.client + ")" : ""}, ${lgTexte(l.heures)} h` : `${l.activite || ""} · ${l.client || "?"} · ${l.intervenant || "?"} · ${lgTexte(l.heures)} h`;
+  const m = [`Supprimer la ligne ${l.ligne} : ${jourFr} · ${quoi} ?`, "", "Sera supprimé :", "- la ligne dans l'Excel (copie de sécurité faite avant)"];
+  if (passages.length) m.push(`- le passage dans l'appli de ${nomInterv(passages[0].intervenante_id)} et dans le Reporting`, "- sa ligne dans sa feuille d'heures (par le pont, d'ici 5 minutes)");
+  else if (o === "services") m.push("", "Aucun passage correspondant dans l'appli : seule la ligne de l'Excel part.");
+  if (/\d/.test(l.facture || "")) m.push("", `Attention : déjà facturée au client (${l.facture}). La facture VosFactures ne change pas.`);
+  if (/\d/.test(l.facture_interv || "")) m.push("", `Attention : déjà dans l'autofacture du presta (${l.facture_interv}). Elle ne change pas.`);
+  if (/^ok$/i.test(l.statut || "")) m.push("", "Attention : cette ligne est marquée payée.");
+  if (!confirm(m.join("\n"))) return;
+  const zoneMsg = document.getElementById("lg-msg"); zoneMsg.innerHTML = "";
+  try { lgP = await pc("/lignes/supprimer", { version: lgP.version, onglet: o, ligne: l.ligne }, 90000); }
+  catch (e) {
+    zoneMsg.innerHTML = `<div class="card lg-erreur"><b>${ico("alerte")} Rien n'a été supprimé.</b> ${esc(e.message || e)} <button class="btn" id="lg-relire" type="button">Relire l'Excel</button></div>`;
+    return;
+  }
+  let suite = "";
+  if (passages.length) {
+    try { await q(sb.from("pointages").delete().in("id", passages.map(p => p.id))); suite = ", de l'appli du presta ; sa feuille d'heures suit d'ici 5 minutes"; }
+    catch (e) { suite = ". Mais le passage de l'appli n'a pas pu être supprimé (" + (e.message || e) + ") : fais-le dans sa fiche › Ses passages"; }
+  }
+  suiviP = null; chargerSuiviPc().catch(() => {});
+  toast(`Ligne ${l.ligne} supprimée de l'Excel${suite}.`);
+  lgEntete(); lgDessiner();
+}
 function lgEntete() {
   const e = document.getElementById("lg-entete"); if (!e) return;
   const o = lgOnglet, moisDispos = [...new Set(lgP[o].map(l => l.mois).filter(Boolean))].sort((a, b) => (b.slice(3) + b.slice(0, 2)).localeCompare(a.slice(3) + a.slice(0, 2)));
@@ -1522,6 +1575,7 @@ async function vueLignes() {
       const id = b.dataset.lgRetirer; lgNouvelles[lgOnglet] = lgNouvelles[lgOnglet].filter(x => x !== id);
       Object.keys(lgModifs).filter(k => k.startsWith(lgOnglet + "|" + id + "|")).forEach(k => delete lgModifs[k]); return lgDessiner();
     }
+    if (b.dataset.lgSuppr) return lgSupprimer(lgOnglet, b.dataset.lgSuppr);
     if (b.id === "lg-annuler") { lgModifs = {}; lgNouvelles = { cours: [], services: [] }; document.getElementById("lg-msg").innerHTML = ""; return lgDessiner(); }
     if (b.id === "lg-enregistrer") return lgEnregistrer();
     if (b.id === "lg-relire") { document.getElementById("lg-msg").innerHTML = ""; pc("/lignes", null, 30000).then(r => { lgP = r; lgEntete(); lgDessiner(); toast("Excel relu : tes changements restent à enregistrer"); }).catch(souci); }
