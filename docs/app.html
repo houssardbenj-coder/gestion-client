@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=37;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=38;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -886,7 +886,7 @@ function occSkip(c,s,day){
   if(st==="pause"&&!(c.pauseUntil&&day>=ymd(new Date(c.pauseUntil))))return "client en pause";
   if((c.absences||[]).some(a=>a.from&&day>=a.from&&day<=(a.to||a.from)))return "absent";
   if(c.skipHol){const v=vacOf(day);if(v)return "vacances ("+v+")"}
-  if(c.skipFer!==false){const f=ferieOf(day);if(f)return "férié ("+f+")"}
+  // Jours fériés : la séance a lieu comme d'habitude (12/11/2026, Benjamin travaille les jours fériés)
   return "";
 }
 function slotRuns(s,day){
@@ -944,7 +944,7 @@ function vacAuto(){if(vacTried||!db)return;const v=cfg.vacances;if(v&&Date.now()
 function vacHTML(){
   const v=cfg.vacances||{},zone=v.zone||"B",today=ymd(new Date());
   const next=vacPeriods().filter(p=>p[1]>today).slice(0,4);
-  return `<div class="section-label">Vacances scolaires</div><article class="card"><div class="pnote" style="padding-top:14px">Les clients cochés « Pas pendant les vacances scolaires » n'ont pas de séance pendant ces périodes. Les jours fériés sont sautés aussi (sauf si tu décoches pour un client).</div>
+  return `<div class="section-label">Vacances scolaires</div><article class="card"><div class="pnote" style="padding-top:14px">Les clients cochés « Pas pendant les vacances scolaires » n'ont pas de séance pendant ces périodes.</div>
   <div class="adv"><select id="vac-zone" style="width:auto;flex:1">${Object.entries(ZONES).map(([k,l])=>`<option value="${k}" ${zone===k?"selected":""}>Zone ${k} (${l}…)</option>`).join("")}</select><button class="iconbtn" data-vacup="1">↻ Mettre à jour</button></div>
   <div class="pnote">${next.map(p=>`<b>${esc(p[2])}</b> : ${esc(fmtD(dayTs(p[0])))} → ${esc(fmtD(addDays(dayTs(p[1]),-1)))}`).join("<br>")}${v.fetchedAt?`<br><small>Calendrier officiel téléchargé le ${esc(fmtD(v.fetchedAt))}.</small>`:""}</div></article>`;
 }
@@ -1831,7 +1831,7 @@ function openCustDetail(id){
 function occDetailHTML(c){
   const sl=slotsOf(c),today=ymd(new Date());const cur=sl.filter(s=>!s.until||s.until>=today);if(!cur.length)return "";
   const next=occList(Date.now(),Date.now()+70*864e5,true).filter(o=>o.c.id===c.id).slice(0,6);
-  const opts=[c.skipHol?"🏖 pas pendant les vacances scolaires":"",c.skipFer===false?"y compris les jours fériés":"🎌 pas les jours fériés"].filter(Boolean).join(" · ");
+  const opts=[c.skipHol?"🏖 pas pendant les vacances scolaires":""].filter(Boolean).join(" · ");
   const abs=(c.absences||[]).filter(a=>(a.to||a.from)>=today).map(a=>"✈ absent du "+fmtD(dayTs(a.from))+(a.to&&a.to!==a.from?" au "+fmtD(dayTs(a.to)):"")).join("<br>");
   return `<div class="dlab">Séances régulières</div><div>${cur.map(s=>"🔁 "+esc(slotText(s))+(s.from>today?" · à partir du "+esc(fmtD(dayTs(s.from))):"")+(s.until?" · jusqu'au "+esc(fmtD(dayTs(s.until))):"")).join("<br>")}<br><span class="status">${esc(opts)}</span>${abs?"<br>"+esc(abs).replace(/&lt;br&gt;/g,"<br>"):""}</div>
   <div class="occ-list">${next.map(o=>`<div class="day-row${o.why?" off":""}"><span>${esc(fmtDT(o.t))}</span><b>${o.why?esc(o.why):"prévue"}</b>${skips[o.key]?`<button class="iconbtn" data-unskip="${esc(o.key)}">↶ Rétablir</button>`:o.why?"":`<button class="iconbtn" data-agref="occ:${esc(o.key)}">Annuler / déplacer</button>`}</div>`).join("")}</div>`;
@@ -1882,7 +1882,6 @@ function slotEditor(d){
   return `<div class="field"><label>Séances régulières</label><div class="svc-list">${rows||`<span class="status" style="text-align:left">Aucune : ajoute le créneau habituel, il apparaîtra tout seul dans l'agenda chaque semaine.</span>`}</div>
    <button type="button" class="btn" id="cs-addslot">+ Ajouter une séance régulière</button>
    ${d.slots.length?`<label class="calopt"><input type="checkbox" id="cs-hol" ${d.skipHol?"checked":""}> 🏖 Pas pendant les vacances scolaires</label>
-   <label class="calopt"><input type="checkbox" id="cs-fer" ${d.skipFer!==false?"checked":""}> 🎌 Pas les jours fériés</label>
    ${NATIVE?`<label class="calopt"><input type="checkbox" id="cs-scal" ${d.slotCal!==false?"checked":""}> 📅 Mettre les séances dans mon agenda Google</label>`:""}
    <label style="margin-top:6px">Absences prévues (voyage, maladie…)</label><div class="svc-list">${abs}</div><button type="button" class="btn" id="cs-addabs">+ Ajouter une absence</button>`:""}</div>`;
 }

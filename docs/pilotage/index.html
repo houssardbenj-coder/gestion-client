@@ -3229,12 +3229,15 @@ const emHeure = x => x.jour_entier ? "Journée" : x.fin > x.t ? `${hm(x.t)}–${
 function emRecu(doc) {
   if (!doc) return null;
   const c = doc.contenu || {};
-  const elements = (Array.isArray(c.elements) ? c.elements : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { ...x, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; }).sort((a, b) => a.t - b.t);
+  // Jours fériés : la séance a lieu (12/11/2026). Un ancien téléphone (v37 et avant) l'envoie encore comme « sautée · férié » : on la remet en séance normale.
+  const estFerie = x => x && /f[ée]ri[ée]/i.test(String(x.why || ""));
+  const feriesRemis = (Array.isArray(c.masques) ? c.masques : []).filter(x => estFerie(x) && Number.isFinite(x.t)).map(x => ({ t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Séance"), detail: "", sorte: "occ", jour_entier: false, cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, ent: x.ent || "", occ: typeof x.occ === "string" ? x.occ : null, ref: null }));
+  const elements = (Array.isArray(c.elements) ? c.elements : []).concat(feriesRemis).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { ...x, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; }).sort((a, b) => a.t - b.t);
   // Séances annulées sur le téléphone (« Annulée cette fois ») : plus des rendez-vous, une ligne rouge « Presta annulée » à leur jour
   const annules = (Array.isArray(c.annules) ? c.annules : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Rendez-vous"), cle: typeof x.cle === "string" ? x.cle : null, ref: typeof x.ref === "string" && /^(occ|appt):/.test(x.ref) ? x.ref : null, nom: x.nom || null, annule: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
     .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);   // s'il est rétabli entre-temps, c'est le rendez-vous qui compte
   // Séances qui n'ont pas lieu pour une autre raison (vacances, férié, absent, client en pause ou archivé) : en gris avec la raison (Pense intelligent v36)
-  const masques = (Array.isArray(c.masques) ? c.masques : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Séance"), cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, occ: typeof x.occ === "string" ? x.occ : null, why: String(x.why || "n'a pas lieu"), masque: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
+  const masques = (Array.isArray(c.masques) ? c.masques : []).filter(x => x && Number.isFinite(x.t) && !estFerie(x)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Séance"), cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, occ: typeof x.occ === "string" ? x.occ : null, why: String(x.why || "n'a pas lieu"), masque: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
     .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);
   return { elements, annules, masques, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {}, version: Number(c.version_appli) || null };
 }
@@ -3244,7 +3247,6 @@ const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "HP",
 const EM_MSQ_AIDE = [[/archiv/, "Ce client est archivé dans Pense intelligent : ses séances ne s'affichent plus. Sur le téléphone, ouvre sa fiche et remets-le « Actif ». Un RDV ou un « Chaque semaine » posé depuis le pilote le remet actif tout seul."],
   [/pause/, "Ce client est en pause dans Pense intelligent. Sur le téléphone, ouvre sa fiche et remets-le « Actif » (ou mets une date de reprise)."],
   [/vacances/, "La fiche du client dit « Pas pendant les vacances scolaires ». Pour garder la séance, décoche-le dans sa fiche sur le téléphone."],
-  [/f.ri/, "Jour férié : la séance est sautée. Pour la garder, coche « y compris les jours fériés » dans la fiche du client sur le téléphone."],
   [/absent/, "Une absence est notée dans la fiche du client sur le téléphone pour ce jour-là."]];
 const emMsqAide = why => (EM_MSQ_AIDE.find(([r]) => r.test(norm(why))) || [null, "La séance n'a pas lieu ce jour-là sur le téléphone."])[1];
 function emFicheMasque(a) {
