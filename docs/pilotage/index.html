@@ -72,6 +72,9 @@ nav.onglets button[aria-current="page"]{background:var(--accent-soft);color:var(
 .tag.warn{background:var(--warn-soft);color:var(--warn)}
 .tag.off{background:var(--sunk);color:var(--muted)}
 .pastille{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--go);margin-left:6px;vertical-align:middle}
+.eq-point{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;flex:none}
+.eq-carte{border-left:5px solid var(--eq,var(--accent))}
+#rs .su-table th{white-space:normal}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 input[type=text],input[type=email],input[type=tel],input[type=password],input[type=number],select,textarea{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);width:100%}
 textarea{min-height:80px;resize:vertical}
@@ -880,11 +883,11 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["espace", "Appli client"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["espace", "Appli client"], ["intervenantes", "Presta"], ["reseau", "Réseau"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
 const MENU = [
   { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir", "emploi"], bulle: "b-avoir" },
   { k: "clients", t: "Clients", pages: ["clients", "dossiers", "espace"], bulle: "b-clients" },
-  { k: "equipe", t: "Équipe", pages: ["intervenantes", "planning", "reporting"] },
+  { k: "equipe", t: "Équipe", pages: ["intervenantes", "reseau", "planning", "reporting"] },
   { k: "messages", t: "Messages", pages: ["messages"], bulle: "b-messages" },
   { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi", "heures", "ik"] }];
 const groupeDe = o => MENU.find(m => m.pages.includes(o));
@@ -909,7 +912,7 @@ async function afficher(o) {
   document.getElementById("cherche-ouvrir").onclick = ouvrirRecherche;
   brancherSousMenu();
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi, espace: vueEspace })[onglet]();
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, reseau: vueReseau, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi, espace: vueEspace })[onglet]();
     const zoneSous = document.getElementById("sous-menu-zone"); if (zoneSous) zoneSous.innerHTML = sousMenu(); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
@@ -958,7 +961,11 @@ async function compteurAVoir() {
   } catch (e) {}
 }
 let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [], cachePropositions = [];
+let cacheEquipes = null, cacheSocietes = null;   // null : SQL 52 pas lancé (ou pas lisible)
 async function chargerBase() {
+  [cacheEquipes, cacheSocietes] = await Promise.all([
+    sb.from("equipes").select("*").order("cheffe_nom").then(r => r.error ? null : r.data || []),
+    sb.from("societes").select("*").order("nom").then(r => r.error ? null : r.data || [])]);
   [cacheProfils, cacheClients, cacheAttrib, cacheDemandes, cachePropositions] = await Promise.all([
     q(sb.from("profils").select("*").order("prenom")),
     q(sb.from("clients").select("*").order("nom")),
@@ -4696,7 +4703,7 @@ async function vueIntervenantes() {
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
       ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
-      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>
+      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span>${eqTag(p.equipe ? equipeDe(p.equipe) : null)}</span></button>
       <span class="row" style="gap:4px">${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}
       <button class="btn flat" data-archiver-presta="${p.id}" title="Il quitte la liste de l'équipe, son accès est coupé et son compte bloqué. Tu peux le sortir des archives.">${ico("archive")} Archiver</button></span></div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>
     ${archives.length ? archivesPrestaHtml(archives, retraits) : ""}`);
@@ -4877,6 +4884,7 @@ async function ficheIntervenante(id) {
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        ${cacheEquipes ? `<label class="f" style="margin-top:8px">Équipe ${aide("OIKOS en direct : il travaille pour OIKOS, sans cheffe. Équipe d'une cheffe : ses heures comptent pour elle dans Équipe › Réseau (part de la cheffe ou reversement à sa société).")}<select id="eqp"><option value="">OIKOS en direct</option>${cacheEquipes.filter(e => e.active || e.id === p.equipe).map(e => `<option value="${e.id}" ${e.id === p.equipe ? "selected" : ""}>Équipe de ${esc(e.cheffe_nom)} · ${esc(e.mode === "societe" ? nomSociete(e.societe) : "rattachée à OIKOS")}</option>`).join("")}</select></label>` : ""}
         <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
         ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
         ${p.archive_le ? `<p style="margin-top:6px"><span class="tag off">${ico("archive")} archivé le ${jour(p.archive_le)}</span></p><p class="muted small" style="margin-top:4px">Accès coupé et compte bloqué. Pour le rouvrir : Presta › Archivés › Sortir des archives.</p>` : `<label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
@@ -4932,7 +4940,8 @@ async function ficheIntervenante(id) {
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
       await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, ...(el.querySelector("#ac") ? { actif: el.querySelector("#ac").checked } : {}),
-        ...(el.querySelector("#fpo") ? { facture_par_oikos: el.querySelector("#fpo").checked } : {}) }).eq("id", id));
+        ...(el.querySelector("#fpo") ? { facture_par_oikos: el.querySelector("#fpo").checked } : {}),
+        ...(el.querySelector("#eqp") ? (v => ({ equipe: v || null, ...(v ? {} : { societe: "oikos" }) }))(el.querySelector("#eqp").value) : {}) }).eq("id", id));
       toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
     el.querySelector("#nv-code").onclick = async () => {
       if (!p.mdp_provisoire && !confirm(`${nomPers(p)} a déjà choisi son mot de passe. Il ne marchera plus : il devra en rechoisir un avec le nouveau code. Continuer ?`)) return;
@@ -4966,6 +4975,218 @@ async function ficheIntervenante(id) {
         await maj(sb.from("attributions").update({ fin: hier }).eq("id", b.dataset.retire)); toast("Client retiré"); recharger(); }
     };
   });
+}
+
+/* ===================== Réseau : cheffes, équipes et argent (SQL 52 + 54, gérant seul) =====================
+   Deux sortes de cheffes : RATTACHÉE (pas de société, son équipe est chez OIKOS, elle touche une part par heure)
+   et EN SOCIÉTÉ (sa SAS ; OIKOS garde sa commission par heure et verse le reste du prix HT à la société, qui paie ses presta).
+   Chaque presta est « OIKOS en direct » ou dans une équipe (profils.equipe) ; un client « apporté » par l'équipe (clients.apporte_par)
+   prend le taux « apportés », les autres le taux « confiés ». Les taux sont datés (equipes.taux) : un changement ne touche jamais les mois passés.
+   Le prix client (« Ce que rapporte ce client ») est lu comme TTC avec TVA 10 %. Les cours (Benjamin enseignement) restent hors réseau. */
+const TVA_SAP = 0.10;
+const EQ_COULEURS = ["#7a8450", "#b5532f", "#3f6c8a", "#8a5a9e", "#c08a2c", "#2f7d6b", "#a33b5c", "#5b6470"];
+const couleurSure = c => /^#[0-9a-fA-F]{6}$/.test(c || "") ? c : "#7a8450";
+const equipeDe = id => (cacheEquipes || []).find(e => e.id === id) || null;
+const MODES_EQUIPE = { rattachee: "Rattachée à OIKOS", societe: "En société" };
+const nomSociete = code => ((cacheSocietes || []).find(s => s.code === code) || {}).nom || code;
+const eqPoint = e => `<span class="eq-point" style="background:${couleurSure(e && e.couleur)}"></span>`;
+const eqTag = e => e ? `<span class="tag" title="${esc(MODES_EQUIPE[e.mode] || "")}">${eqPoint(e)}${esc(e.cheffe_nom)}</span>` : "";
+/* Le taux en vigueur ce jour-là (le dernier qui a commencé), avec la sorte de cheffe de cette période */
+function tauxEquipeAu(e, date) {
+  const l = ((e && e.taux) || []).filter(x => x.a_partir_du <= date).sort((x, y) => x.a_partir_du < y.a_partir_du ? -1 : 1);
+  const x = l.pop(); return x ? { apporte: +x.apporte || 0, confie: +x.confie || 0, mode: x.mode || e.mode, depuis: x.a_partir_du } : null;
+}
+const LIB_TAUX = { rattachee: ["Part de la cheffe", "par heure de son équipe"], societe: ["Commission d'OIKOS", "par heure (le reste du prix HT va à sa société)"] };
+const reseauMois = { m: null };
+/* Calcule le mois : une ligne par presta, rangée dans « OIKOS en direct » ou dans son équipe */
+async function calculReseau(m0, m1) {
+  const tarifs = await chargerTarifs();
+  if (tarifs === false) return { erreur: "Il faut d'abord lancer le SQL 50 (tarifs à l'heure des presta)." };
+  const pts = await q(sb.from("pointages").select("id,intervenante_id,client_id,arrivee,depart,activite").gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).not("depart", "is", null));
+  const enCours = (a, date) => (!a.debut || a.debut <= date) && (!a.fin || a.fin >= date);
+  const groupes = {}, cours = { h: 0 };
+  const groupe = e => { const k = e ? e.id : "direct"; return groupes[k] || (groupes[k] = { equipe: e, prestas: {} }); };
+  pts.forEach(x => {
+    const p = cacheProfils.find(k => k.id === x.intervenante_id); if (!p) return;
+    const date = ymd(new Date(x.arrivee)), c = cacheClients.find(k => k.id === x.client_id) || {};
+    const lignes = cacheAttrib.filter(a => a.client_id === x.client_id && a.intervenante_id === p.id);
+    const a = lignes.find(l => enCours(l, date) && !ligneDeMission(l)) || lignes.find(l => enCours(l, date)) || null;
+    const act = x.activite || (a && a.activite) || activitePrincipale(activitesClient(c));
+    const h = (new Date(x.depart) - new Date(x.arrivee)) / 36e5; if (!(h > 0)) return;
+    if (act === "Cours") { cours.h += h; return; }
+    const e = p.equipe ? equipeDe(p.equipe) : null, g = groupe(e);
+    const r = g.prestas[p.id] || (g.prestas[p.id] = { presta: p, h: 0, hc: 0, ht: 0, paye: 0, cheffe: 0, verser: 0, oikos: 0, apporte: 0, manque: new Set() });
+    r.h += h;
+    const t = tarifAu(tarifs, p.id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
+    const tx = e ? tauxEquipeAu(e, date) : null;
+    if (!(t.taux > 0)) r.manque.add("tarif du presta");
+    if (!prix) r.manque.add("prix client");
+    if (e && !tx) r.manque.add("taux de l'équipe");
+    if (!(t.taux > 0) || !prix || (e && !tx)) return;
+    const ht = h * prix / (1 + TVA_SAP), paye = h * t.taux;
+    r.hc += h; r.ht += ht; r.paye += paye;
+    if (!e) { r.oikos += ht - paye; return; }
+    const apporte = c.apporte_par === e.id || (c.societe && c.societe !== "oikos"), taux = apporte ? tx.apporte : tx.confie;
+    if (apporte) r.apporte += h;
+    (g.modes || (g.modes = new Set())).add(tx.mode);
+    if (tx.mode === "societe") { const com = h * taux; r.oikos += com; r.verser += ht - com; r.cheffe += ht - com - paye; }
+    else { const part = h * taux; r.cheffe += part; r.verser += part; r.oikos += ht - paye - part; }
+  });
+  return { groupes, cours };
+}
+async function vueReseau() {
+  await chargerBase();
+  if (cacheEquipes === null) { contenu(`<h1>Réseau</h1><p class="muted">Il faut d'abord lancer le SQL 52 (sociétés et équipes) et le SQL 54 (couleur et commission) dans Supabase.</p>`); return; }
+  const auj = new Date(), m0 = reseauMois.m || new Date(auj.getFullYear(), auj.getMonth(), 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque cheffe a son équipe de presta. Rattachée : pas de société, son équipe travaille pour OIKOS et elle touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. Un presta sans équipe est « OIKOS en direct ». Pour mettre un presta dans une équipe : sa fiche (Presta) › Réglages › Équipe.")}</h1>
+      <button class="btn primary" id="nv-cheffe">${ico("plus")} Nouvelle cheffe</button></div>
+    <div class="row" style="justify-content:space-between;margin:10px 0"><button class="btn" data-rm="-1" aria-label="Mois précédent">‹</button>
+      <b style="text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
+      <button class="btn" data-rm="1" aria-label="Mois suivant" ${m1 > auj ? "disabled" : ""}>›</button></div>
+    <div id="rs"><p class="muted small">Calcul…</p></div>`);
+  el.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.rm) { reseauMois.m = new Date(m0.getFullYear(), m0.getMonth() + +b.dataset.rm, 1); return afficher(); }
+    if (b.id === "nv-cheffe") return ficheCheffe(null);
+    if (b.dataset.eqModif) return ficheCheffe(equipeDe(b.dataset.eqModif));
+    if (b.dataset.eqClients) return clientsApportes(equipeDe(b.dataset.eqClients));
+    if (b.dataset.p) return ficheIntervenante(b.dataset.p);
+  };
+  const res = await calculReseau(m0, m1), zone = el.querySelector("#rs");
+  if (res.erreur) { zone.innerHTML = `<p class="muted">${esc(res.erreur)}</p>`; return; }
+  const somme = (rs, f) => rs.reduce((t, r) => t + r[f], 0);
+  const manqueHtml = r => r.manque.size ? `<br><span class="tag warn">${ico("alerte")} ${heures((r.h - r.hc) * 60)} pas comptée(s) : ${esc([...r.manque].join(", "))} manquant</span>` : "";
+  const prestaCell = r => `<button class="lien-pc" data-p="${r.presta.id}">${esc(nomPers(r.presta))}</button>${manqueHtml(r)}`;
+  const membres = e => cacheProfils.filter(p => p.role === "intervenante" && !p.archive_le && (e ? p.equipe === e.id : !p.equipe));
+  let totVerser = 0, totOikos = 0, totHt = 0, totH = 0;
+  const carteEquipe = e => {
+    const g = res.groupes[e.id], rs = g ? Object.values(g.prestas).sort((x, y) => norm(nomPers(x.presta)) < norm(nomPers(y.presta)) ? -1 : 1) : [];
+    const tx = tauxEquipeAu(e, ymd(new Date(Math.min(m1 - 864e5, Date.now())))), mode = tx ? tx.mode : e.mode, soc = mode === "societe";
+    const sans = membres(e).filter(p => !rs.some(r => r.presta.id === p.id));
+    totVerser += somme(rs, "verser"); totOikos += somme(rs, "oikos"); totHt += somme(rs, "ht"); totH += somme(rs, "h");
+    const modesMois = g && g.modes ? [...g.modes] : [mode];
+    const colonnes = modesMois.length > 1 ? ["Part de la cheffe ou garde sa société", "À verser"] : modesMois[0] === "societe" ? ["Garde sa société", "À verser à sa société"] : ["Part de la cheffe", "À lui verser"];
+    return `<section class="card eq-carte" style="--eq:${couleurSure(e.couleur)};margin-bottom:12px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start"><span style="min-width:0"><b style="font-size:17px">${eqPoint(e)}${esc(e.cheffe_nom)}</b> <span class="muted">· ${esc(e.nom)}</span>
+        <br><span class="tag">${MODES_EQUIPE[mode]}${soc ? " : " + esc(nomSociete(e.societe)) : ""}</span>${e.active ? "" : ` <span class="tag off">arrêtée</span>`}
+        <span class="muted small">${tx ? `${LIB_TAUX[mode][0]} : ${suEuros(tx.apporte)} clients apportés · ${suEuros(tx.confie)} clients confiés` : "taux à régler"}</span></span>
+        <span class="row"><button class="btn flat" data-eq-clients="${e.id}">Clients apportés</button><button class="btn" data-eq-modif="${e.id}">${ico("stylo")} Modifier</button></span></div>
+      ${rs.length ? `<div class="su-table" style="margin-top:8px"><table><thead><tr><th>Presta</th><th class="n">Heures</th><th class="n">Facturé HT</th><th class="n">Payé au presta</th><th class="n">${colonnes[0]}</th><th class="n">${colonnes[1]}</th><th class="n">Reste à OIKOS</th></tr></thead>
+        <tbody>${rs.map(r => `<tr><td>${prestaCell(r)}${r.apporte ? ` <span class="muted small">· ${heures(r.apporte * 60)} chez des clients apportés</span>` : ""}</td><td class="n">${heures(r.h * 60)}</td><td class="n">${suEuros(r.ht)}</td><td class="n">${suEuros(r.paye)}</td><td class="n">${suEuros(r.cheffe)}</td><td class="n"><b>${suEuros(r.verser)}</b></td><td class="n">${suEuros(r.oikos)}</td></tr>`).join("")}
+        <tr class="total"><td>Total</td><td class="n">${heures(somme(rs, "h") * 60)}</td><td class="n">${suEuros(somme(rs, "ht"))}</td><td class="n">${suEuros(somme(rs, "paye"))}</td><td class="n">${suEuros(somme(rs, "cheffe"))}</td><td class="n"><b>${suEuros(somme(rs, "verser"))}</b></td><td class="n">${suEuros(somme(rs, "oikos"))}</td></tr></tbody></table></div>`
+        : `<p class="muted small" style="margin:8px 0 0">Aucun passage terminé ce mois-ci.</p>`}
+      ${modesMois.length > 1 ? `<p class="muted small" style="margin:6px 0 0">Elle a changé de sorte ce mois-ci : chaque passage est compté avec la sorte et le taux de son jour.</p>` : ""}
+      ${modesMois.length === 1 && modesMois[0] === "societe" && rs.length ? `<p class="muted small" style="margin:6px 0 0">Sa société paie elle-même ses presta (${suEuros(somme(rs, "paye"))}) sur ce que tu lui verses.</p>` : ""}
+      ${sans.length ? `<p class="muted small" style="margin:6px 0 0">Aussi dans l'équipe : ${sans.map(p => esc(nomPers(p))).join(", ")}</p>` : membres(e).length ? "" : `<p class="muted small" style="margin:6px 0 0">Aucun presta dans l'équipe : ouvre la fiche d'un presta › Réglages › Équipe.</p>`}</section>`;
+  };
+  const direct = res.groupes.direct ? Object.values(res.groupes.direct.prestas).sort((x, y) => norm(nomPers(x.presta)) < norm(nomPers(y.presta)) ? -1 : 1) : [];
+  const actives = cacheEquipes.filter(e => e.active), arretees = cacheEquipes.filter(e => !e.active);
+  const cartes = actives.map(carteEquipe).join("") + arretees.filter(e => res.groupes[e.id]).map(carteEquipe).join("");
+  totOikos += somme(direct, "oikos"); totHt += somme(direct, "ht"); totH += somme(direct, "h");
+  const carteDirect = `<section class="card" style="margin-bottom:12px"><b style="font-size:17px">OIKOS en direct</b> <span class="muted small">· presta sans équipe</span>
+    ${direct.length ? `<div class="su-table" style="margin-top:8px"><table><thead><tr><th>Presta</th><th class="n">Heures</th><th class="n">Facturé HT</th><th class="n">Payé au presta</th><th class="n">Reste à OIKOS</th></tr></thead>
+      <tbody>${direct.map(r => `<tr><td>${prestaCell(r)}</td><td class="n">${heures(r.h * 60)}</td><td class="n">${suEuros(r.ht)}</td><td class="n">${suEuros(r.paye)}</td><td class="n"><b>${suEuros(r.oikos)}</b></td></tr>`).join("")}
+      <tr class="total"><td>Total</td><td class="n">${heures(somme(direct, "h") * 60)}</td><td class="n">${suEuros(somme(direct, "ht"))}</td><td class="n">${suEuros(somme(direct, "paye"))}</td><td class="n"><b>${suEuros(somme(direct, "oikos"))}</b></td></tr></tbody></table></div>`
+      : `<p class="muted small" style="margin:8px 0 0">Aucun passage terminé ce mois-ci.</p>`}</section>`;
+  zone.innerHTML = `<div class="su-chiffres" style="margin-bottom:12px">${[["Heures du réseau", heures(totH * 60)], ["Facturé HT", suEuros(totHt)], ["À verser aux cheffes et sociétés", suEuros(totVerser)], ["Reste à OIKOS", suEuros(totOikos)]].map(([n, v]) => `<div class="card"><span class="muted small">${n}</span><b>${v}</b></div>`).join("")}</div>
+    ${cartes || `<section class="card" style="margin-bottom:12px"><p class="muted" style="margin:0">Aucune cheffe pour l'instant : touche « Nouvelle cheffe ».</p></section>`}${carteDirect}
+    <p class="muted small">Facturé HT = heures × prix de l'heure du client (« Ce que rapporte ce client », lu comme TTC avec TVA ${Math.round(TVA_SAP * 100)} %), divisé par ${(1 + TVA_SAP).toLocaleString("fr-FR")}. Payé au presta = son tarif à l'heure du jour du passage.
+      Un presta est compté dans son équipe d'aujourd'hui. « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
+}
+/* Nouvelle cheffe / modifier : nom, structure, sorte, couleur, son compte presta éventuel, taux datés */
+function ficheCheffe(e) {
+  const neuf = !e, v = e || { mode: "rattachee", couleur: EQ_COULEURS[(cacheEquipes || []).length % EQ_COULEURS.length], active: true };
+  const auj = tfAujourdhui(), m1er = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const tx = e ? tauxEquipeAu(e, auj) : null;
+  const partenaires = (cacheSocietes || []).filter(s => s.genre === "partenaire");
+  const comptes = cacheProfils.filter(p => p.role === "intervenante" && !p.archive_le);
+  fenetre(`<h2 style="margin:0">${neuf ? "Nouvelle cheffe" : "Modifier " + esc(e.cheffe_nom)}</h2>
+    <form id="fc" style="display:grid;gap:10px;margin-top:10px">
+      <div class="deux"><label class="f">Prénom et nom de la cheffe<input name="cheffe_nom" required maxlength="120" autocomplete="off" value="${esc(v.cheffe_nom || "")}"></label>
+        <label class="f">Nom de la structure ou de l'équipe<input name="nom" required maxlength="120" autocomplete="off" placeholder="ex. Équipe Nadia" value="${esc(v.nom || "")}"></label></div>
+      <fieldset style="border:0;padding:0;margin:0;display:grid;gap:6px"><legend class="muted small" style="margin-bottom:4px">Sorte de cheffe</legend>
+        <label class="chk"><input type="radio" name="mode" value="rattachee" ${v.mode === "rattachee" ? "checked" : ""}>Rattachée à OIKOS : pas de société, son équipe travaille pour OIKOS, elle touche une part par heure</label>
+        <label class="chk"><input type="radio" name="mode" value="societe" ${v.mode === "societe" ? "checked" : ""}>En société : sa SAS reçoit le prix HT moins la commission d'OIKOS et paie ses presta</label></fieldset>
+      <div id="fc-soc" class="deux" ${v.mode === "societe" ? "" : "hidden"}><label class="f">Sa société<select name="societe"><option value="">— nouvelle société —</option>${partenaires.map(s => `<option value="${esc(s.code)}" ${s.code === v.societe ? "selected" : ""}>${esc(s.nom)}</option>`).join("")}</select></label>
+        <label class="f" id="fc-socnom">Nom de la nouvelle société<input name="societe_nom" maxlength="120" autocomplete="off" placeholder="ex. Nadia Services SAS"></label></div>
+      <div class="deux"><label class="f">Couleur<input type="color" name="couleur" value="${couleurSure(v.couleur)}" style="height:40px;padding:2px"></label>
+        <label class="f">Son compte, si elle est aussi presta (facultatif)<select name="cheffe"><option value="">— aucun —</option>${comptes.map(p => `<option value="${p.id}" ${p.id === v.cheffe ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label></div>
+      <div class="card" style="padding:10px"><b id="fc-taux-titre"></b> <span class="muted small" id="fc-taux-sous"></span>
+        <div class="deux" style="margin-top:6px"><label class="f">Clients qu'elle a apportés (€ HT / h)<input name="apporte" inputmode="decimal" placeholder="—" value="${tx ? esc(tfVirgule(tx.apporte)) : ""}"></label>
+          <label class="f">Clients d'OIKOS confiés (€ HT / h)<input name="confie" inputmode="decimal" placeholder="—" value="${tx ? esc(tfVirgule(tx.confie)) : ""}"></label></div>
+        <label class="f" style="margin-top:6px">À partir du<input type="date" name="depuis" value="${neuf ? m1er : auj}" ${neuf ? "" : `min="${auj}"`}></label>
+        <p class="muted small" style="margin:6px 0 0">${neuf ? "Le premier taux peut commencer dans le passé (par exemple le 1er du mois)." : "Un changement commence au plus tôt aujourd'hui : les mois passés ne bougent pas."}${tx ? ` En vigueur depuis le ${tfDateFr(tx.depuis)}.` : ""}</p></div>
+      ${neuf ? "" : `<label class="chk"><input type="checkbox" name="active" ${v.active ? "checked" : ""}>Équipe active (décocher si elle arrête : ses presta repassent en OIKOS direct à la main)</label>`}
+      <p class="err" id="fc-err"></p>
+      <div class="row"><button class="btn primary" type="submit">${neuf ? "Créer la cheffe" : "Enregistrer"}</button><button class="btn flat" type="button" data-fermer>Annuler</button></div>
+    </form>`, (el, fermer) => {
+    const f = el.querySelector("#fc"), err = el.querySelector("#fc-err");
+    let modeAffiche = f.mode.value;
+    const majVue = () => { const m = f.mode.value, s = m === "societe";
+      if (m !== modeAffiche) {   // les taux changent de sens (part de la cheffe / commission d'OIKOS) : on les réécrit
+        modeAffiche = m;
+        if (!neuf) { f.apporte.value = m === (tx ? tx.mode : v.mode) && tx ? tfVirgule(tx.apporte) : ""; f.confie.value = m === (tx ? tx.mode : v.mode) && tx ? tfVirgule(tx.confie) : ""; f.depuis.value = auj; }
+      }
+      el.querySelector("#fc-soc").hidden = !s; el.querySelector("#fc-socnom").hidden = !s || !!f.societe.value;
+      el.querySelector("#fc-taux-titre").textContent = LIB_TAUX[m][0]; el.querySelector("#fc-taux-sous").textContent = LIB_TAUX[m][1]; };
+    f.onchange = majVue; majVue();
+    f.onsubmit = async ev => {
+      ev.preventDefault(); err.textContent = "";
+      const net = t => t.trim().replace(/\s+/g, " "), mode = f.mode.value, apporte = tfNombre(f.apporte.value), confie = tfNombre(f.confie.value), depuis = f.depuis.value;
+      if (!net(f.cheffe_nom.value) || !net(f.nom.value)) { err.textContent = "Il manque le nom de la cheffe ou de la structure."; return; }
+      if (apporte === null || confie === null) { err.textContent = "Taux non reconnu : écris par exemple 3 ou 1,50."; return; }
+      if (!depuis) { err.textContent = "Choisis la date de début du taux."; return; }
+      const modeAvant = tx ? tx.mode : v.mode, tauxChange = neuf ? apporte !== "" || confie !== "" : (apporte !== "" || confie !== "") && (!tx || +apporte !== tx.apporte || +confie !== tx.confie || mode !== modeAvant);
+      if (!neuf && mode !== modeAvant && (apporte === "" || confie === "")) { err.textContent = "Elle change de sorte : écris ses deux nouveaux taux (ils commencent à la date choisie)."; return; }
+      if (!neuf && mode !== modeAvant && !tauxChange) { err.textContent = "Elle change de sorte : écris ses nouveaux taux (ils commencent à la date choisie)."; return; }
+      if (!neuf && tauxChange && depuis < tfAujourdhui()) { err.textContent = "Un nouveau taux commence au plus tôt aujourd'hui."; return; }
+      if (!neuf && mode !== v.mode && !confirm(mode === "societe" ? `${v.cheffe_nom} passe en société.\n\nSes presta passent dans sa société (c'est elle qui les paie). Ses clients restent à OIKOS : tu choisis ensuite lesquels la suivent.\nLes mois passés restent calculés comme avant.` : `${v.cheffe_nom} redevient rattachée à OIKOS.\n\nSes presta repassent chez OIKOS. Les mois passés restent calculés comme avant.`)) return;
+      let societe = "oikos";
+      if (mode === "societe") {
+        societe = f.societe.value;
+        if (!societe) {
+          const nomS = net(f.societe_nom.value); if (!nomS) { err.textContent = "Écris le nom de sa société, ou choisis-la dans la liste."; return; }
+          const base = nomS.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 34) || "societe";
+          societe = base.length < 2 ? base + "-x" : base;
+          for (let i = 2; (cacheSocietes || []).some(s => s.code === societe); i++) societe = base + "-" + i;
+          const { error } = await sb.from("societes").insert({ code: societe, nom: nomS, genre: "partenaire" });
+          if (error) { err.textContent = error.message; return; }
+        }
+      }
+      const fiche = { cheffe_nom: net(f.cheffe_nom.value), nom: net(f.nom.value), mode, societe, couleur: couleurSure(f.couleur.value), cheffe: f.cheffe.value || null, ...(neuf ? { debut: depuis } : { active: f.active.checked }) };
+      if (tauxChange) {
+        const garder = ((e && e.taux) || []).filter(x => x.a_partir_du < depuis || x.a_partir_du <= tfAujourdhui());   // un taux pas encore commencé à la même date ou après est remplacé
+        fiche.taux = [...garder.filter(x => x.a_partir_du !== depuis), { a_partir_du: depuis, apporte: apporte === "" ? 0 : apporte, confie: confie === "" ? 0 : confie, mode }];
+      }
+      const bouton = f.querySelector("[type=submit]"); bouton.disabled = true;
+      const { error } = await (neuf ? sb.from("equipes").insert(fiche) : sb.from("equipes").update(fiche).eq("id", e.id));
+      if (error) { bouton.disabled = false; err.textContent = error.code === "PGRST204" || error.code === "42703" ? "La base n'est pas encore prête : lance le SQL 54 dans Supabase." : error.message; return; }
+      toast(neuf ? "Cheffe créée : mets ses presta dans son équipe depuis leur fiche" : "Enregistré"); fermer(); await chargerBase(); afficher();
+    };
+  });
+}
+/* Clients apportés par une équipe : ceux qu'elle a trouvés prennent le taux « apportés » (et pourront la suivre si elle passe en société) */
+function clientsApportes(e) {
+  if (!e) return;
+  const ids = cacheProfils.filter(p => p.equipe === e.id).map(p => p.id);
+  const servis = new Set(cacheAttrib.filter(a => ids.includes(a.intervenante_id) && prestaEnCours(a)).map(a => a.client_id));
+  cacheClients.filter(c => c.apporte_par === e.id).forEach(c => servis.add(c.id));
+  const liste = [...servis].map(id => cacheClients.find(c => c.id === id)).filter(Boolean).sort((x, y) => norm(x.nom) < norm(y.nom) ? -1 : 1);
+  fenetre(`<h2 style="margin:0">${eqPoint(e)}Clients apportés par ${esc(e.cheffe_nom)}</h2>
+    <p class="muted small">Coche les clients qu'elle a trouvés elle-même. Les autres clients suivis par son équipe sont des clients d'OIKOS confiés.</p>
+    <div id="ca">${liste.map(c => { const autre = c.apporte_par && c.apporte_par !== e.id ? equipeDe(c.apporte_par) : null;
+      return `<label class="ligne chk"><span><input type="checkbox" data-c="${c.id}" ${c.apporte_par === e.id ? "checked" : ""} ${autre ? "disabled" : ""}> ${esc(c.nom)}</span>${autre ? `<span class="muted small">apporté par ${esc(autre.cheffe_nom)}</span>` : c.societe && c.societe !== "oikos" ? `<span class="tag">${esc(nomSociete(c.societe))}</span>` : ""}</label>`; }).join("") || `<p class="muted small">Aucun client suivi par son équipe pour l'instant.</p>`}</div>
+    <div class="row" style="margin-top:10px"><button class="btn flat" data-fermer>Fermer</button></div>`, (el, fermer) => {
+    el.querySelector("#ca").onchange = async ev => {
+      const x = ev.target.closest("[data-c]"); if (!x) return;
+      x.disabled = true;
+      const { error } = await sb.from("clients").update({ apporte_par: x.checked ? e.id : null }).eq("id", x.dataset.c);
+      x.disabled = false;
+      if (error) { x.checked = !x.checked; return toast(error.message); }
+      const c = cacheClients.find(k => k.id === x.dataset.c); if (c) c.apporte_par = x.checked ? e.id : null;
+      toast(x.checked ? "Noté : client apporté par " + e.cheffe_nom : "Noté : client d'OIKOS confié");
+    };
+  }, () => { if (onglet === "reseau") afficher(); });
 }
 
 /* Bénéfice du mois d'un presta (gérant seul) : chaque passage fini du mois choisi, au prix de l'heure facturé au client
@@ -5011,7 +5232,8 @@ async function beneficePresta(boite, p, attrib) {
   };
   const corps = bloc("OIKOS", "OIKOS") + bloc("BE", "Benjamin enseignement");
   boite.innerHTML = nav + (corps || `<p class="muted small" style="margin:0">Aucun passage terminé ce mois-ci.</p>`)
-    + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`;
+    + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`
+    + (p.equipe && equipeDe(p.equipe) ? `<p class="small" style="margin:6px 0 0">${eqPoint(equipeDe(p.equipe))}Dans l'équipe de <b>${esc(equipeDe(p.equipe).cheffe_nom)}</b> : la part de la cheffe et ce qui reste à OIKOS sont dans Équipe › Réseau (en HT).</p>` : "");
 }
 
 /* Factures du mois (SQL 49) : ce que le presta envoie depuis son appli, comparé à ses heures déclarées dans l'appli
