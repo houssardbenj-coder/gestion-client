@@ -545,6 +545,15 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .etat.partiel{background:var(--warn-vif)!important}.etat.aucune{background:var(--stop)!important}
 /* Messagerie */
 .ms-b{background:var(--surface);border-color:var(--line)}
+/* Appli client : rouge = nouvelle demande, ocre = à décider */
+.tag.ec-rouge{background:var(--stop);color:var(--stop-ink)}
+.ec-carte.ec-nouvelle{border-left:5px solid var(--stop)}
+.ec-carte.ec-decider{border-left:5px solid var(--warn-vif)}
+.ms-b small.ms-qui{margin:0 0 3px;font-weight:600;color:var(--ink)}
+.ms-b.ec-info{background:var(--info-soft);border-color:transparent;border-left:4px solid var(--info)}
+.ms-b.ec-info small.ms-qui{color:var(--info)}
+.ec-cat{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.ec-carte select{margin-left:6px}
 .ms-b.moi{background:var(--accent-soft)}
 .ms-pers[aria-current="true"]{box-shadow:inset 4px 0 0 var(--accent);border-radius:4px 10px 10px 4px}
 /* Chiffres : un filet de couleur par nature de montant */
@@ -777,11 +786,12 @@ function fenetre(html, brancher, quandFerme) {
 let moi = null, onglet = "jour";
 /* Après une actualisation (F5) : on revient sur la même page. Gardé pour cet onglet du navigateur seulement (sessionStorage). */
 const PAGE_CLE = "pilote-page", PLUS_TARD_CLE = "pilote-mfa-plus-tard";
-function retenirPage() { try { sessionStorage.setItem(PAGE_CLE, JSON.stringify({ onglet, sectionDevis, entreprise })); } catch (e) {} }
+function retenirPage() { try { sessionStorage.setItem(PAGE_CLE, JSON.stringify({ onglet, sectionDevis, entreprise, ecSection })); } catch (e) {} }
 function pageRetenue() {
   try { const p = JSON.parse(sessionStorage.getItem(PAGE_CLE) || "null"); if (!p || !ONGLETS.some(x => x[0] === p.onglet)) return null;
     if (p.sectionDevis === "ATTENTE" || p.sectionDevis === "PRESTA") sectionDevis = p.sectionDevis;
     if (ENTREPRISES.some(([k]) => k === p.entreprise)) entreprise = p.entreprise;
+    if (EC_SECTIONS.some(([k]) => k === p.ecSection)) ecSection = p.ecSection;
     return p.onglet; } catch (e) { return null; }
 }
 /* « Plus tard » sur la double authentification : retenu pour cet onglet, sinon chaque actualisation redemandait de l'activer */
@@ -870,10 +880,10 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["espace", "Appli client"], ["intervenantes", "Presta"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"]];
 const MENU = [
   { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir", "emploi"], bulle: "b-avoir" },
-  { k: "clients", t: "Clients", pages: ["clients", "dossiers"], bulle: "b-clients" },
+  { k: "clients", t: "Clients", pages: ["clients", "dossiers", "espace"], bulle: "b-clients" },
   { k: "equipe", t: "Équipe", pages: ["intervenantes", "planning", "reporting"] },
   { k: "messages", t: "Messages", pages: ["messages"], bulle: "b-messages" },
   { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi", "heures", "ik"] }];
@@ -899,7 +909,7 @@ async function afficher(o) {
   document.getElementById("cherche-ouvrir").onclick = ouvrirRecherche;
   brancherSousMenu();
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi })[onglet]();
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi, espace: vueEspace })[onglet]();
     const zoneSous = document.getElementById("sous-menu-zone"); if (zoneSous) zoneSous.innerHTML = sousMenu(); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
@@ -911,7 +921,7 @@ function sousMenu() {
   if (!g || g.pages.length < 2) return "";
   const bouton = (o, t, actif, plus = "") => `<button class="chip" data-sous="${o}" ${plus} aria-pressed="${actif}">${t}</button>`;
   const nbD = cacheDemandes.filter(enAttenteDevis).length, nbP = cacheDemandes.filter(d => d.etat === "en_cours").length;
-  if (g.k === "clients") return `<div class="sous-menu">${bouton("clients", "Clients", onglet === "clients" && !sectionDevis)}${bouton("clients", "Devis" + (nbD ? " (" + nbD + ")" : ""), onglet === "clients" && sectionDevis === "ATTENTE", 'data-section="ATTENTE"')}${bouton("clients", "Prestations en cours" + (nbP ? " (" + nbP + ")" : ""), onglet === "clients" && sectionDevis === "PRESTA", 'data-section="PRESTA"')}${bouton("dossiers", "Dossiers", onglet === "dossiers")}</div>`;
+  if (g.k === "clients") return `<div class="sous-menu">${bouton("clients", "Clients", onglet === "clients" && !sectionDevis)}${bouton("clients", "Devis" + (nbD ? " (" + nbD + ")" : ""), onglet === "clients" && sectionDevis === "ATTENTE", 'data-section="ATTENTE"')}${bouton("clients", "Prestations en cours" + (nbP ? " (" + nbP + ")" : ""), onglet === "clients" && sectionDevis === "PRESTA", 'data-section="PRESTA"')}${bouton("dossiers", "Dossiers", onglet === "dossiers")}${bouton("espace", "Appli client" + (ecNb ? " (" + ecNb + ")" : ""), onglet === "espace")}</div>`;
   return `<div class="sous-menu">${g.pages.map(o => bouton(o, nomPage(o), o === onglet)).join("")}</div>`;
 }
 function brancherSousMenu() {
@@ -944,7 +954,7 @@ async function compteurAVoir() {
     const t = (n.count || 0) + (d.count || 0) + (ta.count || 0) + (ph.count || 0) + (ju.count || 0) + (td.count || 0) + (rt.count || 0), e = document.getElementById("b-avoir"), ec = document.getElementById("b-clients");
     const aFaire = nbAFaire === null ? t : nbAFaire;   // même nombre que le titre d'Aujourd'hui, dès que la page a été calculée
     if (e) e.innerHTML = aFaire ? `<span class="bulle">${aFaire}</span>` : "";
-    const nc = (c.count || 0) + (dv.count || 0); if (ec) ec.innerHTML = nc ? `<span class="bulle">${nc}</span>` : "";
+    const nc = (c.count || 0) + (dv.count || 0) + (await espaceAttente()).total; if (ec) ec.innerHTML = nc ? `<span class="bulle">${nc}</span>` : "";
   } catch (e) {}
 }
 let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [], cachePropositions = [];
@@ -2086,6 +2096,10 @@ async function lignesDuJour() {
   const ids = cacheDemandes.filter(d => d.etat === "en_cours");
   const tachesMissions = ids.length ? await sb.from("taches").select("id,demande_id,fait_le").in("demande_id", ids.map(d => d.id)).then(r => r.data || []) : [];
   ids.filter(d => { const l = tachesMissions.filter(t => t.demande_id === d.id); return l.length && l.every(t => t.fait_le); }).forEach(d => faire.push({ icone: "drapeau", quoi: nomC(d) + " : prestation à finaliser", detail: detailDemande(d), action: "Voir la prestation", agir: () => ouvrirSection("PRESTA"), autres: [["Ouvrir le client", () => ficheClient(d.client_id, "devis")]] }));
+  const ecAtt = await espaceAttente();   // appli client (SQL 53) : zéro sans erreur si elle n'est pas installée
+  if (ecAtt.total) faire.push({ icone: "alerte", quoi: ecAtt.total + (ecAtt.total > 1 ? " demandes de clients dans l'appli" : " demande de client dans l'appli"),
+    detail: [[ecAtt.demandes, "demande de service", "demandes de service"], [ecAtt.modifs, "sur la feuille de route", "sur la feuille de route"], [ecAtt.messages, "message non lu", "messages non lus"], [ecAtt.urssaf, "formulaire URSSAF", "formulaires URSSAF"]].filter(x => x[0]).map(x => x[0] + " " + (x[0] > 1 ? x[2] : x[1])).join(" · "),
+    action: "Voir", agir: () => ecAller(ecAtt.demandes ? "demandes" : ecAtt.modifs ? "route" : ecAtt.messages ? "messages" : "urssaf", ""), autres: [] });
   if (nbMessages) faire.push({ icone: "bulle", quoi: nbMessages + (nbMessages > 1 ? " messages non lus" : " message non lu"), detail: "", action: "Lire", agir: () => afficher("messages"), autres: [] });
   docs.forEach(d => faire.push({ icone: "doc", quoi: d.libelle + " à vérifier", detail: nomInterv(d.intervenante_id) + " · " + jour(d.cree_le), action: "Voir le papier", agir: () => voirFichier(d.fichier),
     autres: [["Valider", async () => { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", d.id)); re(); }], ["Refuser", () => refuserDoc(d.id, re)]] }));
@@ -2309,6 +2323,591 @@ function tacheDepuisMessages(p, apres) {
   });
 }
 
+/* ===================== Appli client (SQL 53) =====================
+   Tout ce que les clients envoient depuis leur appli arrive ici : demandes de service, demandes sur la feuille de route, messages, formulaire de l'avance immédiate.
+   Le client ne décide de rien : chaque demande attend ton accord. Tant que le SQL 53 n'est pas lancé, la page le dit et le reste du pilote ne change pas. */
+let ecSection = "demandes", ecClient = "", ecQui = "", ecOuverte = "", ecMinuteur = null, ecNb = 0;
+const EC_SEAU = "espace-client";
+const EC_SECTIONS = [["demandes", "Demandes de service"], ["route", "Feuille de route"], ["messages", "Messages"], ["urssaf", "Avance immédiate"], ["comptes", "Clients qui ont l'appli"], ["partenaires", "Partenaires"], ["reglages", "Réglages"]];
+const EC_ETATS_DEMANDE = { nouvelle: "Nouvelle", vue: "Vue", en_cours: "En cours", traitee: "Traitée", refusee: "Refusée" };
+const EC_ETATS_MODIF = { en_attente: "En attente de ton accord", acceptee: "Acceptée", ajustee: "Acceptée avec ajustement", refusee: "Refusée" };
+const EC_GENRES_MODIF = { ajout: "Ajouter", retrait: "Retirer", changement: "Changer", autre: "Autre demande" };
+const EC_URSSAF = { a_faire: "À faire", envoye: "Formulaire envoyé", fait: "Inscrit", non_concerne: "Non concerné" };
+const EC_AVIS = { satisfait: "Satisfait, avis pas encore mis", pas_satisfait: "Pas satisfait", fait: "Avis mis", plus_tard: "Plus tard" };
+const EC_CATEGORIES = { contrat: "Contrat", juridique: "Juridique", feuille_signee: "Feuille signée", facture: "Facture", devis: "Devis", feuille_route: "Feuille de route", autre: "Autre" };
+const ecAbsent = e => !!e && /PGRST205|PGRST202|42P01|does not exist|schema cache/i.test((e.code || "") + " " + (e.message || ""));
+const ecQuand = d => d ? new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "jamais";
+const ecDate = d => d ? new Date(d).toLocaleDateString("fr-FR") : "—";
+/* Ce qui attend une réponse de ta part. Jamais d'erreur : sans le SQL 53, tout vaut zéro. */
+let ecPasInstalle = false;   // SQL 53 absent : on ne redemande plus à chaque page, seulement en ouvrant « Appli client »
+async function espaceAttente(forcer) {
+  if (ecPasInstalle && !forcer) return { demandes: 0, modifs: 0, messages: 0, urssaf: 0, total: 0, installe: false };
+  try {
+    const n = async r => { const x = await r; if (x.error) throw x.error; return x.count || 0; };
+    /* Messages : seulement ceux que le client t'écrit à toi (canal oikos) ; ce qu'il écrit à son intervenant ne t'attend pas.
+       Feuille de route : les anciennes demandes en attente + les consignes en texte libre qui attendent ton accord. */
+    const [demandes, anciennes, consignes, messages, urssaf] = await Promise.all([
+      n(sb.from("client_demandes").select("id", { count: "exact", head: true }).eq("etat", "nouvelle")),
+      n(sb.from("client_modifs_route").select("id", { count: "exact", head: true }).eq("etat", "en_attente")),
+      n(sb.from("client_consignes").select("id", { count: "exact", head: true }).eq("etat", "en_attente")),
+      n(sb.from("client_messages").select("id", { count: "exact", head: true }).eq("de", "client").eq("canal", "oikos").is("lu_le", null)),
+      n(sb.from("client_urssaf").select("id", { count: "exact", head: true }).in("etat", ["recu", "transmis"]))]);
+    const modifs = anciennes + consignes;
+    ecNb = demandes + modifs + messages + urssaf; ecPasInstalle = false;
+    return { demandes, modifs, messages, urssaf, total: ecNb, installe: true };
+  } catch (e) { ecNb = 0; if (ecAbsent(e)) ecPasInstalle = true; return { demandes: 0, modifs: 0, messages: 0, urssaf: 0, total: 0, installe: false, erreur: e }; }
+}
+const ecAller = (section, client) => { ecSection = section; if (client !== undefined) ecClient = client || ""; sectionDevis = null; afficher("espace"); };
+async function ecOuvrirFichier(chemin) {
+  const { data, error } = await sb.storage.from(EC_SEAU).createSignedUrl(chemin, 300);
+  if (error) return souci(error);
+  window.open(data.signedUrl, "_blank", "noopener");
+}
+const ecExt = f => ((f.name.match(/\.([A-Za-z0-9]{2,5})$/) || [, f.type === "application/pdf" ? "pdf" : "jpg"])[1]).toLowerCase();
+/* Une petite fenêtre pour écrire une réponse au client */
+function ecDemanderTexte(titre, libelle, depart, obligatoire, bouton, valider) {
+  fenetre(`<h2 style="margin:0">${esc(titre)}</h2>
+    <form id="ec-ft" style="display:grid;gap:10px;margin-top:10px">
+      <label class="f">${esc(libelle)}<textarea name="t" rows="4" maxlength="2000" ${obligatoire ? "required" : ""}>${esc(depart || "")}</textarea></label>
+      <div class="row" style="justify-content:flex-end"><button class="btn flat" type="button" data-fermer>Annuler</button><button class="btn primary" type="submit">${esc(bouton)}</button></div></form>`, (z, fermer) => {
+    z.querySelector("#ec-ft").onsubmit = async e => {
+      e.preventDefault(); const t = String(new FormData(e.target).get("t")).trim();
+      if (obligatoire && !t) return toast("Écris ta réponse");
+      (e.submitter || {}).disabled = true;
+      try { await valider(t || null); fermer(); } catch (x) { (e.submitter || {}).disabled = false; }
+    };
+  });
+}
+async function vueEspace() {
+  clearInterval(ecMinuteur);
+  await chargerBase();
+  const att = await espaceAttente(true);
+  if (!att.installe) {
+    contenu(`<h1>Appli client</h1><section class="card" style="margin-top:12px"><p><b>L'espace client n'est pas encore installé (SQL 53).</b></p>
+      <p class="muted" style="margin-top:6px">${ecAbsent(att.erreur) ? "Lance le fichier « 53 - espace client.sql » dans Supabase, puis recharge cette page." : esc((att.erreur && att.erreur.message) || "La base n'a pas répondu : réessaie dans un instant.")}</p></section>`);
+    return;
+  }
+  if (!EC_SECTIONS.some(s => s[0] === ecSection)) ecSection = "demandes";
+  const nb = { demandes: att.demandes, route: att.modifs, messages: att.messages, urssaf: att.urssaf };
+  const el = contenu(`<h1>Appli client</h1>
+    <p class="muted">Ce que tes clients envoient depuis leur appli. Rien ne se fait sans ton accord.</p>
+    <div class="chips" id="ec-chips" style="margin-top:12px">${EC_SECTIONS.map(([k, t]) => `<button class="chip" data-ec="${k}" aria-pressed="${k === ecSection}">${t}${nb[k] ? ` <span class="bulle">${nb[k]}</span>` : ""}</button>`).join("")}</div>
+    <div id="ec-corps" style="margin-top:12px"><p class="muted">Chargement…</p></div>`);
+  el.querySelector("#ec-chips").onclick = e => { const b = e.target.closest("[data-ec]"); if (b) { if (b.dataset.ec !== "comptes") ecClient = ""; ecAller(b.dataset.ec); } };
+  const corps = el.querySelector("#ec-corps"), re = () => afficher("espace");
+  try { await ({ demandes: ecDemandes, route: ecRoute, messages: ecMessages, urssaf: ecUrssaf, comptes: ecComptes, partenaires: ecPartenaires, reglages: ecReglages })[ecSection](corps, re); }
+  catch (e) { corps.innerHTML = `<p class="err">${esc(e.message || e)}</p>`; }
+}
+/* ---------- a. Demandes de service ---------- */
+async function ecDemandes(corps, re) {
+  const liste = await q(sb.from("client_demandes").select("*").order("cree_le", { ascending: false }).limit(300));
+  const rang = d => d.etat === "nouvelle" ? 0 : d.etat === "vue" ? 1 : d.etat === "en_cours" ? 2 : 3;
+  liste.sort((a, b) => rang(a) - rang(b) || b.cree_le.localeCompare(a.cree_le));
+  const ouverte = liste.find(d => d.id === ecOuverte);
+  let urls = {};
+  if (ouverte) {
+    const chemins = (ouverte.photos || []).filter(p => p && p.chemin && p.etat !== "refusee").map(p => p.chemin);
+    if (chemins.length) { const r = await sb.storage.from(EC_SEAU).createSignedUrls(chemins, 3600); if (!r.error) r.data.forEach(x => { if (x.signedUrl) urls[x.path] = x.signedUrl; }); }
+  }
+  const fini = d => d.etat === "traitee" || d.etat === "refusee";
+  const ligne = d => {
+    const o = d.id === ecOuverte, nouvelle = d.etat === "nouvelle", refusees = (d.photos || []).filter(p => p && p.etat === "refusee").length;
+    return `<section class="card ec-carte ${nouvelle ? "ec-nouvelle" : ""}" data-d="${d.id}" style="margin-top:10px">
+      <div class="ligne" style="border-top:0;padding-top:0;flex-wrap:wrap"><span style="min-width:0">
+          ${nouvelle ? `<span class="tag ec-rouge">Nouvelle demande</span> ` : `<span class="tag ${fini(d) ? "off" : ""}">${EC_ETATS_DEMANDE[d.etat]}</span> `}
+          <b>${esc(nomClient(d.client_id))}</b> <span class="muted small">· ${d.partenaire_id || d.partenaire_nom ? "Mise en relation : " + esc(d.partenaire_nom || "partenaire") : esc(d.activite)} · ${ecQuand(d.cree_le)}${(d.photos || []).length ? " · " + d.photos.length + " photo" + (d.photos.length > 1 ? "s" : "") : ""}</span>
+          ${o ? "" : `<br><span class="muted">${esc(String(d.texte).slice(0, 140))}${d.texte.length > 140 ? "…" : ""}</span>`}</span>
+        <span class="row" style="flex:none"><button class="btn ${nouvelle ? "primary" : ""}" data-ouvrir>${o ? "Replier" : "Ouvrir"}</button>
+          <button class="btn" data-repondre>Répondre</button>
+          ${d.demande_devis_id ? `<span class="tag">demande de devis créée</span>` : `<button class="btn" data-devis>En faire une demande de devis</button>`}
+          ${d.etat !== "en_cours" && !fini(d) ? `<button class="btn" data-encours>En cours</button>` : ""}
+          ${d.etat !== "traitee" ? `<button class="btn go" data-traitee>Traitée</button>` : ""}
+          ${d.etat !== "refusee" ? `<button class="btn flat stop" data-refuser>Refuser</button>` : ""}</span></div>
+      ${o ? `<p style="white-space:pre-wrap;margin-top:8px">${esc(d.texte)}</p>
+        ${d.souhait ? `<p class="muted small" style="margin-top:6px">Quand il aimerait : ${esc(d.souhait)}</p>` : ""}
+        ${Object.keys(urls).length ? `<div class="row" style="margin-top:8px">${(d.photos || []).filter(p => p && urls[p.chemin]).map(p => `<a href="${esc(urls[p.chemin])}" target="_blank" rel="noopener" title="${esc(p.nom || "Photo")}">${/\.pdf$/i.test(p.chemin) ? `<span class="btn">${ico("doc")} ${esc(p.nom || "Document")}</span>` : `<img src="${esc(urls[p.chemin])}" alt="${esc(p.nom || "Photo")}" style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">`}</a>`).join("")}</div>` : ""}
+        ${refusees ? `<p class="muted small" style="margin-top:6px">${refusees} fichier${refusees > 1 ? "s" : ""} refusé${refusees > 1 ? "s" : ""} par le contrôle : non affiché${refusees > 1 ? "s" : ""}.</p>` : ""}` : ""}
+      ${d.reponse ? `<p class="small" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft);white-space:pre-wrap"><b>Ta réponse :</b> ${esc(d.reponse)}</p>` : ""}</section>`;
+  };
+  corps.innerHTML = `<p class="muted small">Une demande arrive ici avec une marque rouge, et un mail part vers la boîte OIKOS. ${aide("Ouvrir une demande la marque comme vue. « Répondre » écrit un mot que le client lit dans son appli. « En faire une demande de devis » la fait entrer dans ton parcours habituel des devis (Clients › Devis).")}</p>
+    ${liste.length ? liste.map(ligne).join("") : `<p class="card muted" style="margin-top:10px">Aucune demande de service pour l'instant.</p>`}`;
+  corps.onclick = async e => {
+    const b = e.target.closest("button"), s = b && b.closest("[data-d]"); if (!s) return;
+    const d = liste.find(x => x.id === s.dataset.d), c = cacheClients.find(k => k.id === d.client_id);
+    const changer = async (v, message) => { await maj(sb.from("client_demandes").update(v).eq("id", d.id)); if (message) toast(message); re(); };
+    try {
+      if (b.hasAttribute("data-ouvrir")) {
+        ecOuverte = ecOuverte === d.id ? "" : d.id;
+        if (ecOuverte && d.etat === "nouvelle") await maj(sb.from("client_demandes").update({ etat: "vue", vue_le: new Date().toISOString() }).eq("id", d.id));
+        return re();
+      }
+      if (b.hasAttribute("data-repondre")) return ecDemanderTexte("Répondre à " + nomClient(d.client_id), "Ta réponse (le client la lit dans son appli)", d.reponse, true, "Enregistrer la réponse",
+        t => changer({ reponse: t, etat: d.etat === "nouvelle" ? "vue" : d.etat, vue_le: d.vue_le || new Date().toISOString() }, "Réponse enregistrée"));
+      if (b.hasAttribute("data-encours")) return changer({ etat: "en_cours", vue_le: d.vue_le || new Date().toISOString() }, "Demande en cours");
+      if (b.hasAttribute("data-traitee")) return changer({ etat: "traitee", decide_le: new Date().toISOString(), vue_le: d.vue_le || new Date().toISOString() }, "Demande traitée");
+      if (b.hasAttribute("data-refuser")) return ecDemanderTexte("Refuser la demande de " + nomClient(d.client_id), "Un mot pour le client (conseillé)", d.reponse, false, "Refuser la demande",
+        t => changer({ etat: "refusee", reponse: t || d.reponse || null, decide_le: new Date().toISOString(), vue_le: d.vue_le || new Date().toISOString() }, "Demande refusée"));
+      if (b.hasAttribute("data-devis")) {
+        if (!c) return toast("Client introuvable");
+        const titre = String(d.texte).split(/\r?\n/)[0].trim().slice(0, 60) || "Demande de l'appli client";
+        const depart = { titre, type_prestation: "one_shot", besoin: d.texte };
+        if (ACTIVITES_DEVIS.includes(d.activite)) depart.activite = d.activite;
+        return nouvelleDemande(c, () => ecAller("demandes"), depart, async nv => {
+          const r = await sb.from("client_demandes").update({ demande_devis_id: nv.id, etat: "en_cours", vue_le: d.vue_le || new Date().toISOString() }).eq("id", d.id);
+          if (r.error) souci(r.error);
+        });
+      }
+    } catch (x) {}
+  };
+}
+/* ---------- b. Feuille de route : ce qui attend ton accord, puis ce qui est parti tout seul ---------- */
+const EC_GENRES_CONSIGNE = { priorite: "En priorité", ajout: "En plus", autre: "Autre demande" };
+const ecJourConsigne = x => x.jour ? "pour le " + new Date(x.jour + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "au prochain passage";
+async function ecRoute(corps, re) {
+  const [consignes, liste] = await Promise.all([
+    q(sb.from("client_consignes").select("*").order("cree_le", { ascending: false }).limit(400)),
+    q(sb.from("client_modifs_route").select("*").order("cree_le", { ascending: false }).limit(300))]);
+  liste.sort((a, b) => (a.etat === "en_attente" ? 0 : 1) - (b.etat === "en_attente" ? 0 : 1) || b.cree_le.localeCompare(a.cree_le));
+  const attente = consignes.filter(x => x.etat === "en_attente"), directes = consignes.filter(x => x.etat === "ok"), refusees = consignes.filter(x => x.etat === "refusee");
+  const nomProfil = id => { const p = cacheProfils.find(x => x.id === id); return p ? nomPers(p) : "le presta"; };
+  const ligneDirecte = x => `<div class="ligne" style="flex-wrap:wrap"><span style="min-width:0"><span class="tag">${EC_GENRES_CONSIGNE[x.genre] || "Demande"}</span>${x.genre === "ajout" && !x.code ? ` <span class="tag warn">écrite par le client</span>` : ""} <b>${esc(nomClient(x.client_id))}</b> <span class="muted small">· ${esc(ecJourConsigne(x))} · demandé le ${ecQuand(x.cree_le)}</span><br>${esc(x.libelle)}${x.genre === "ajout" && !x.code && !x.fait_le ? ` <button class="btn flat" data-k-retirer="${x.id}">Retirer</button>` : ""}</span>
+      <span class="muted small" style="flex:none">${x.fait_le ? "Cochée par " + esc(nomProfil(x.fait_par)) + " le " + ecQuand(x.fait_le) : "Pas encore cochée"}</span></div>`;
+  corps.innerHTML = `<p class="muted small">Une priorité ou une tâche courante de la liste part toute seule sur la feuille du jour du presta. Seul le texte libre attend ton accord. ${aide("La liste des tâches courantes se règle dans Réglages. Les tâches habituelles du client ne changent jamais toutes seules : c'est toi qui modifies sa feuille de route.")}</p>
+    ${attente.length ? attente.map(x => `<section class="card ec-carte ec-decider" data-k="${x.id}" style="margin-top:10px">
+        <div class="ligne" style="border-top:0;padding-top:0;flex-wrap:wrap"><span style="min-width:0">
+            <span class="tag warn">En attente de ton accord</span> <b>${esc(nomClient(x.client_id))}</b> <span class="muted small">· ${esc(ecJourConsigne(x))} · ${ecQuand(x.cree_le)}</span>
+            <br><span style="white-space:pre-wrap">${esc(x.libelle)}</span></span>
+          <span class="row" style="flex:none"><button class="btn go" data-k-oui>Accepter</button><button class="btn" data-k-devis>En faire une demande de devis</button><button class="btn flat stop" data-k-non>Refuser</button>
+            <button class="btn" data-k-feuille>Ouvrir sa feuille de route</button></span></div></section>`).join("")
+      : `<p class="card muted" style="margin-top:10px">Aucune demande en texte libre n'attend ton accord.</p>`}
+    <details class="card" style="margin-top:10px"><summary><b>Parti tout seul chez le presta</b> <span class="muted small">(${directes.length}) : priorités et tâches courantes, pour information</span></summary>
+      <div style="margin-top:8px">${directes.length ? directes.slice(0, 150).map(ligneDirecte).join("") : `<p class="muted small">Rien pour l'instant.</p>`}</div></details>
+    ${refusees.length ? `<details class="card" style="margin-top:10px"><summary><b>Refusées</b> <span class="muted small">(${refusees.length})</span></summary>
+      <div style="margin-top:8px">${refusees.slice(0, 80).map(x => `<div class="ligne" style="flex-wrap:wrap"><span style="min-width:0"><b>${esc(nomClient(x.client_id))}</b> <span class="muted small">· ${esc(ecJourConsigne(x))} · ${ecQuand(x.cree_le)}</span><br>${esc(x.libelle)}${x.reponse ? `<br><span class="muted small">Ta réponse : ${esc(x.reponse)}</span>` : ""}</span>
+        <button class="btn flat" data-k-revoir="${x.id}" style="flex:none">Revoir la décision</button></div>`).join("")}</div></details>` : ""}
+    ${liste.length ? `<h2 style="margin:18px 0 0">Anciennes demandes de modification</h2>` + liste.map(m => { const att = m.etat === "en_attente";
+      return `<section class="card ec-carte ${att ? "ec-decider" : ""}" data-m="${m.id}" style="margin-top:10px">
+        <div class="ligne" style="border-top:0;padding-top:0;flex-wrap:wrap"><span style="min-width:0">
+            <span class="tag ${att ? "warn" : m.etat === "refusee" ? "off" : ""}">${EC_ETATS_MODIF[m.etat]}</span> <b>${esc(nomClient(m.client_id))}</b>
+            <span class="muted small">· ${EC_GENRES_MODIF[m.genre]}${m.tache_titre ? " « " + esc(m.tache_titre) + " »" : ""} · ${ecQuand(m.cree_le)}</span>
+            <br><span style="white-space:pre-wrap">${esc(m.texte)}</span></span>
+          <span class="row" style="flex:none">${att ? `<button class="btn go" data-accepter>Accepter</button><button class="btn" data-ajuster>Accepter en ajustant</button><button class="btn flat stop" data-refuser>Refuser</button>` : `<button class="btn flat" data-revoir>Revoir la décision</button>`}
+            <button class="btn" data-feuille>Ouvrir sa feuille de route</button></span></div>
+        ${m.reponse ? `<p class="small" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft);white-space:pre-wrap"><b>Ta réponse :</b> ${esc(m.reponse)}</p>` : ""}</section>`; }).join("") : ""}`;
+  corps.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const maintenant = () => new Date().toISOString();
+    const changerConsigne = async (id, v, message) => { await maj(sb.from("client_consignes").update(v).eq("id", id)); toast(message); re(); };
+    try {
+      if (b.dataset.kRetirer) { const motif = prompt("Retirer cette tâche de la feuille du presta. Un mot pour le client (facultatif) :", "Cette tâche sort de vos prestations habituelles."); if (motif === null) return;
+        return changerConsigne(b.dataset.kRetirer, { etat: "refusee", reponse: motif.trim() || null, decide_le: maintenant() }, "Tâche retirée : le presta ne la voit plus"); }
+      if (b.dataset.kRevoir) { if (confirm("Remettre cette demande en attente de ta décision ?")) return changerConsigne(b.dataset.kRevoir, { etat: "en_attente", decide_le: null, avis_le: maintenant() }, "Demande remise en attente"); return; }
+      const sk = b.closest("[data-k]");
+      if (sk) {
+        const x = attente.find(k => k.id === sk.dataset.k); if (!x) return; const qui = nomClient(x.client_id);
+        if (b.hasAttribute("data-k-feuille")) return ficheClient(x.client_id, "route");
+        if (b.hasAttribute("data-k-oui")) return changerConsigne(x.id, { etat: "ok", decide_le: maintenant(), avis_le: null }, "Acceptée : elle part sur la feuille du jour du presta");
+        if (b.hasAttribute("data-k-non")) return ecDemanderTexte("Refuser la demande de " + qui, "Pourquoi (conseillé : le client le lit dans son appli)", "", false, "Refuser",
+          t => changerConsigne(x.id, { etat: "refusee", reponse: t, decide_le: maintenant() }, "Demande refusée"));
+        if (b.hasAttribute("data-k-devis")) {
+          const c = cacheClients.find(k => k.id === x.client_id); if (!c) return toast("Client introuvable");
+          const depart = { titre: String(x.libelle).split(/\r?\n/)[0].trim().slice(0, 60) || "Demande de l'appli client", type_prestation: "one_shot", besoin: x.libelle };
+          return nouvelleDemande(c, () => ecAller("route"), depart, async () => {
+            const k = await sb.from("client_consignes").update({ etat: "refusee", reponse: "Traité par devis", decide_le: maintenant() }).eq("id", x.id);
+            if (k.error) souci(k.error);
+          });
+        }
+        return;
+      }
+      const s = b.closest("[data-m]"); if (!s) return;
+      const m = liste.find(x => x.id === s.dataset.m), qui = nomClient(m.client_id);
+      const decider = async (etat, reponse, message) => { await maj(sb.from("client_modifs_route").update({ etat, reponse, decide_le: etat === "en_attente" ? null : maintenant() }).eq("id", m.id)); toast(message); re(); };
+      if (b.hasAttribute("data-feuille")) return ficheClient(m.client_id, "route");
+      if (b.hasAttribute("data-accepter")) return ecDemanderTexte("Accepter la demande de " + qui, "Un mot pour le client (facultatif)", "", false, "Accepter",
+        t => decider("acceptee", t, "Demande acceptée : pense à modifier sa feuille de route"));
+      if (b.hasAttribute("data-ajuster")) return ecDemanderTexte("Accepter en ajustant", "Ce que tu proposes à la place (le client le lit dans son appli)", "", true, "Accepter avec cet ajustement",
+        t => decider("ajustee", t, "Demande acceptée avec ajustement : pense à modifier sa feuille de route"));
+      if (b.hasAttribute("data-refuser")) return ecDemanderTexte("Refuser la demande de " + qui, "Pourquoi (conseillé : le client le lit dans son appli)", "", false, "Refuser",
+        t => decider("refusee", t, "Demande refusée"));
+      if (b.hasAttribute("data-revoir")) { if (confirm("Remettre cette demande en attente de ta décision ?")) return decider("en_attente", m.reponse, "Demande remise en attente"); }
+    } catch (x) {}
+  };
+}
+/* ---------- c. Messages avec les clients ---------- */
+async function ecMessages(corps) {
+  const charger = () => q(sb.from("client_messages").select("id,client_id,de,canal,presta_id,texte,piece,piece_nom,piece_etat,cree_le,lu_le").order("cree_le", { ascending: false }).limit(3000));
+  let tous = await charger();
+  const comptes = await q(sb.from("comptes_clients").select("client_id,actif,lecture_seule"));
+  const dernier = id => tous.find(m => m.client_id === id);
+  /* Qui écrit : le client, toi (OIKOS) ou un presta. Ce que le client et son presta s'écrivent (canal presta) se lit ici, pour information :
+     ça ne compte pas dans tes non-lus et ce n'est pas toi qui le marques comme lu. */
+  const pourMoi = m => m.de === "client" && m.canal === "oikos";
+  const prenomPresta = id => { const p = cacheProfils.find(x => x.id === id); return p ? (p.prenom || nomPers(p)) : "son intervenant"; };
+  const nomPresta = id => { const p = cacheProfils.find(x => x.id === id); return p ? nomPers(p) : "Intervenant"; };
+  const auteur = m => m.de === "oikos" ? "Toi (OIKOS)" : m.de === "presta" ? nomPresta(m.presta_id) + ", intervenant" : nomClient(m.client_id) + (m.canal === "presta" ? " à " + prenomPresta(m.presta_id) : "");
+  const nonLus = id => tous.filter(m => m.client_id === id && pourMoi(m) && !m.lu_le).length;
+  const ids = [...new Set(comptes.map(k => k.client_id).concat(tous.map(m => m.client_id)))];
+  const gens = ids.map(id => ({ id, nom: nomClient(id), compte: comptes.find(k => k.client_id === id) })).sort((a, b) => {
+    const x = dernier(a.id), y = dernier(b.id);
+    return x && y ? y.cree_le.localeCompare(x.cree_le) : x ? -1 : y ? 1 : a.nom.localeCompare(b.nom, "fr");
+  });
+  if (ecQui && !gens.some(p => p.id === ecQui)) ecQui = "";
+  if (!ecQui && gens.length && innerWidth > 720) ecQui = gens[0].id;
+  corps.innerHTML = `<div class="ms-grille ${ecQui ? "ouverte" : ""}" id="ec-grille" style="margin-top:0">
+      <div class="card ms-liste" id="ec-liste"></div>
+      <section class="card ms-conv" id="ec-conv" style="padding:0"></section></div>`;
+  const liste = corps.querySelector("#ec-liste"), conv = corps.querySelector("#ec-conv"), grille = corps.querySelector("#ec-grille");
+  const apercu = m => (m.de === "oikos" ? "Toi : " : m.de === "presta" ? prenomPresta(m.presta_id) + " : " : m.canal === "presta" ? "À " + prenomPresta(m.presta_id) + " : " : "") + (m.texte || (m.piece ? "Pièce jointe" : ""));
+  const dessinerListe = () => {
+    liste.innerHTML = gens.map(p => { const m = dernier(p.id), n = nonLus(p.id);
+      return `<button class="ms-pers" data-qui="${p.id}" aria-current="${p.id === ecQui}"><span class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>${esc(p.nom)}</b>${n ? `<span class="bulle">${n}</span>` : ""}</span>
+        <span class="apercu">${m ? esc(apercu(m)) : "Aucun message"}</span></button>`; }).join("")
+      || `<p class="muted small" style="padding:10px">Aucun client n'a encore l'appli.</p>`;
+  };
+  const pieceHtml = m => {
+    if (!m.piece && !m.piece_etat) return "";
+    const nom = esc(m.piece_nom || "Pièce jointe");
+    if (m.de === "oikos" || m.piece_etat === "ok") return m.piece ? `<br><button class="btn" type="button" data-piece="${esc(m.piece)}">${ico("trombone")} ${nom}</button>` : "";
+    return `<br><span class="tag ${m.piece_etat === "refusee" ? "off" : "warn"}">${m.piece_etat === "refusee" ? "Pièce refusée par le contrôle" : "Pièce en cours de contrôle"} : ${nom}</span>`;
+  };
+  const dessinerFil = descendre => {
+    const f = conv.querySelector("#ec-fil"); if (!f) return;
+    const l = tous.filter(m => m.client_id === ecQui).reverse();
+    const lecteur = m => m.de !== "client" ? "le client" : m.canal === "presta" ? prenomPresta(m.presta_id) : "toi";
+    const marque = m => m.lu_le ? `<small class="ms-lu">${ico("ok")} Lu par ${esc(lecteur(m))} le ${msHeure(m.lu_le)}</small>` : m.de === "oikos" || m.canal === "presta" ? `<small>Pas encore lu${m.canal === "presta" ? " par " + esc(lecteur(m)) : ""}</small>` : "";
+    const memeConv = f.dataset.qui === ecQui, enBas = f.scrollHeight - f.scrollTop - f.clientHeight < 60, garde = f.scrollTop;
+    f.innerHTML = l.map(m => `<div class="ms-b ${m.de === "oikos" ? "moi" : ""} ${m.canal === "presta" ? "ec-info" : ""}"><small class="ms-qui">${esc(auteur(m))}${m.canal === "presta" ? ` <span class="tag">avec ${esc(prenomPresta(m.presta_id))}</span>` : ""}</small>${esc(m.texte)}${pieceHtml(m)}<small>${msHeure(m.cree_le)}</small>${marque(m)}</div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.<br>Écris le premier ci-dessous.</p>`;
+    f.dataset.qui = ecQui;
+    f.scrollTop = memeConv && !enBas && !descendre ? garde : f.scrollHeight;
+  };
+  const marquerLu = async () => {
+    if (document.hidden || !ecQui || !nonLus(ecQui)) return;
+    const { data, error } = await sb.from("client_messages").update({ lu_le: new Date().toISOString() }).eq("client_id", ecQui).eq("de", "client").eq("canal", "oikos").is("lu_le", null).select("id,lu_le");
+    if (!error) { (data || []).forEach(x => { const m = tous.find(y => y.id === x.id); if (m) m.lu_le = x.lu_le; }); dessinerListe(); dessinerFil(); compteurAVoir(); }
+  };
+  const dessinerConv = () => {
+    const p = gens.find(x => x.id === ecQui);
+    grille.classList.toggle("ouverte", !!p);
+    if (!p) { conv.innerHTML = `<p class="muted" style="padding:16px">Choisis un client.</p>`; return; }
+    const k = p.compte;
+    conv.innerHTML = `<div class="ms-tete"><span class="row"><button class="btn" id="ms-retour" aria-label="Retour à la liste">‹</button><b>${esc(p.nom)}</b>${!k ? `<span class="tag warn">pas de compte</span>` : !k.actif ? `<span class="tag warn">accès coupé</span>` : k.lecture_seule ? `<span class="tag warn">lecture seule : il lit mais ne répond pas</span>` : ""}</span>
+        <span class="row"><span class="muted small">En bleu-gris : ce que le client et son intervenant s'écrivent ${aide("Tu le lis pour information. Ta réponse part toujours comme un message d'OIKOS, que le client lit dans sa conversation avec OIKOS ; le presta ne la voit pas.")}</span><button class="btn" id="ec-fiche-client">Ouvrir sa fiche</button></span></div>
+      <div class="ms-fil" id="ec-fil"></div>
+      <form class="ms-form" id="ec-form" style="flex-wrap:wrap"><textarea id="ec-texte" rows="2" maxlength="4000" placeholder="Écrire à ${esc(p.nom)}…" aria-label="Message"></textarea><button class="btn primary" type="submit">Envoyer</button>
+        <label class="small muted" style="flex-basis:100%">Joindre un fichier (facultatif, 10 Mo au plus) <input type="file" id="ec-fichier" accept="application/pdf,image/*,.docx,.xlsx,.odt,.ods,.txt"></label></form>`;
+    dessinerFil();
+    const zone = conv.querySelector("#ec-texte"), fichier = conv.querySelector("#ec-fichier");
+    zone.onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) conv.querySelector("#ec-form").requestSubmit(); };
+    conv.querySelector("#ms-retour").onclick = () => { ecQui = ""; dessinerListe(); dessinerConv(); };
+    conv.querySelector("#ec-fiche-client").onclick = () => ficheClient(p.id);
+    conv.querySelector("#ec-form").onsubmit = async e => {
+      e.preventDefault(); const texte = zone.value.trim(), f = fichier.files[0];
+      if (!texte && !f) return toast("Écris un message ou joins un fichier");
+      if (f && f.size > 10 * 1024 * 1024) return toast("Fichier trop gros (10 Mo au plus)");
+      const b = e.submitter; if (b) b.disabled = true;
+      try {
+        const ligne = { client_id: p.id, texte };
+        if (f) {
+          ligne.piece = `${p.id}/messages/${nomFichier()}.${ecExt(f)}`; ligne.piece_nom = f.name.slice(0, 200);
+          const u = await sb.storage.from(EC_SEAU).upload(ligne.piece, f, { contentType: f.type || "application/octet-stream" });
+          if (u.error) throw u.error;
+        }
+        const { error } = await sb.from("client_messages").insert(ligne);
+        if (error) { if (ligne.piece) await sb.storage.from(EC_SEAU).remove([ligne.piece]); throw error; }
+        zone.value = ""; fichier.value = ""; tous = await charger(); dessinerListe(); dessinerFil(true);
+      } catch (x) { souci(x); }
+      if (b) b.disabled = false;
+    };
+    marquerLu();
+  };
+  conv.onclick = e => { const b = e.target.closest("[data-piece]"); if (b) ecOuvrirFichier(b.dataset.piece); };
+  liste.onclick = e => { const b = e.target.closest("[data-qui]"); if (!b) return; ecQui = b.dataset.qui; dessinerListe(); dessinerConv(); };
+  dessinerListe(); dessinerConv();
+  ecMinuteur = setInterval(async () => {
+    if (onglet !== "espace" || ecSection !== "messages" || !document.getElementById("ec-grille")) return clearInterval(ecMinuteur);
+    if (document.hidden) return;
+    try {
+      const n = await charger(), signe = l => l.map(m => m.id + (m.lu_le ? "l" : "") + (m.piece_etat || "")).join();
+      if (signe(n) === signe(tous)) return marquerLu();
+      tous = n; dessinerListe(); dessinerFil(); marquerLu();
+    } catch (e) {}
+  }, 15000);
+}
+/* ---------- d. Formulaires de l'avance immédiate ---------- */
+const ecIban = d => { const i = String((d && d.iban) || "").replace(/\s/g, ""), fin = i ? i.slice(-4) : String((d && d.iban_fin) || ""); return fin ? "•••• " + fin : "effacé après transmission"; };
+async function ecUrssaf(corps, re) {
+  const liste = await q(sb.from("client_urssaf").select("*").order("cree_le", { ascending: false }).limit(300));
+  const ETATS = { recu: "Reçu", transmis: "Transmis à la boîte OIKOS", inscrit: "Inscrit", a_corriger: "À corriger par le client" };
+  const attend = u => u.etat === "recu" || u.etat === "transmis";
+  liste.sort((a, b) => (attend(a) ? 0 : 1) - (attend(b) ? 0 : 1) || b.cree_le.localeCompare(a.cree_le));
+  corps.innerHTML = `<p class="muted small">Le formulaire rempli dans l'appli. L'IBAN reste masqué ici. ${aide("Le pont transmet le formulaire à la boîte OIKOS, où le programme Avance immédiate le reprend, puis efface l'IBAN et le BIC de la base. « Inscrit » range l'onglet dans l'appli du client. « À corriger » lui rouvre le formulaire avec ton mot.")}</p>
+    ${liste.length ? `<section class="card" style="margin-top:10px">${liste.map(u => { const d = u.donnees || {};
+      return `<div class="ligne" data-u="${u.id}" style="flex-wrap:wrap"><span style="min-width:0"><span class="tag ${attend(u) ? "warn" : u.etat === "inscrit" ? "" : "off"}">${ETATS[u.etat]}</span> <b>${esc(nomClient(u.client_id))}</b>
+          <span class="muted small">· ${ecQuand(u.cree_le)} · IBAN ${esc(ecIban(d))}</span>${u.note ? `<br><span class="small">Ton mot : ${esc(u.note)}</span>` : ""}</span>
+        <span class="row" style="flex:none"><button class="btn" data-detail>Détail</button>${u.etat !== "inscrit" ? `<button class="btn go" data-inscrit>Inscrit</button>` : ""}${u.etat !== "a_corriger" ? `<button class="btn" data-corriger>À corriger</button>` : ""}</span></div>`; }).join("")}</section>`
+      : `<p class="card muted" style="margin-top:10px">Aucun formulaire reçu.</p>`}`;
+  corps.onclick = async e => {
+    const b = e.target.closest("button"), l = b && b.closest("[data-u]"); if (!l) return;
+    const u = liste.find(x => x.id === l.dataset.u), d = u.donnees || {};
+    const compte = v => sb.from("comptes_clients").update(v).eq("client_id", u.client_id);
+    try {
+      if (b.hasAttribute("data-detail")) {
+        const CH = [["service", "Service"], ["civilite", "Civilité"], ["prenom", "Prénom"], ["nom", "Nom"], ["nom_naissance", "Nom de naissance"], ["email", "E-mail"], ["telephone", "Téléphone"], ["adresse", "Adresse"], ["code_postal", "Code postal"], ["ville", "Ville"], ["naissance", "Date de naissance"], ["commune_naissance", "Commune de naissance"], ["departement_naissance", "Département de naissance"], ["pays_naissance", "Pays de naissance"]];
+        return fenetre(`<h2 style="margin:0">Avance immédiate · ${esc(nomClient(u.client_id))}</h2>
+          <div style="margin-top:10px">${CH.filter(([k]) => d[k]).map(([k, t]) => `<div class="ligne"><span class="muted">${t}</span><b style="text-align:right">${esc(d[k])}</b></div>`).join("")}
+            <div class="ligne"><span class="muted">IBAN</span><b>${esc(ecIban(d))}</b></div>
+            <div class="ligne"><span class="muted">BIC</span><b>${d.bic ? "•••• " + esc(String(d.bic).slice(-3)) : "effacé après transmission"}</b></div></div>
+          <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn flat" data-fermer>Fermer</button></div>`);
+      }
+      if (b.hasAttribute("data-inscrit")) {
+        await maj(sb.from("client_urssaf").update({ etat: "inscrit" }).eq("id", u.id));
+        await maj(compte({ urssaf: "fait", urssaf_le: new Date().toISOString() }));
+        toast("Noté inscrit : l'onglet se range dans son appli"); return re();
+      }
+      if (b.hasAttribute("data-corriger")) return ecDemanderTexte("À corriger · " + nomClient(u.client_id), "Ce que le client doit corriger (il le lit dans son appli)", u.note, true, "Demander la correction", async t => {
+        await maj(sb.from("client_urssaf").update({ etat: "a_corriger", note: t }).eq("id", u.id));
+        await maj(compte({ urssaf: "a_faire" }));
+        toast("Le formulaire est rouvert dans son appli"); re();
+      });
+    } catch (x) {}
+  };
+}
+/* ---------- e. Clients qui ont l'appli ---------- */
+function ecInviter(clientId, re, renvoi) {
+  const c = cacheClients.find(k => k.id === clientId);
+  fenetre(`<h2 style="margin:0">${renvoi ? "Renvoyer un code" : "Inviter un client"} ${aide("Le pont crée le compte et envoie le mail depuis la boîte OIKOS, dans les 5 minutes : un lien, son e-mail et un code d'accès provisoire. Le client choisit ensuite son mot de passe.")}</h2>
+    <form id="ec-fi" style="display:grid;gap:10px;margin-top:10px">
+      ${c ? `<p><b>${esc(c.nom)}</b></p><input type="hidden" name="client_id" value="${c.id}">` : `<label class="f">Client<select name="client_id" required><option value="">— choisir —</option>${optionsClients(clientsEnCours().filter(k => !ecInvites.has(k.id)))}</select></label>`}
+      <label class="f">Son e-mail (obligatoire)<input type="email" name="email" required maxlength="200" autocomplete="off" value="${esc((c && c.email) || "")}"></label>
+      ${renvoi ? "" : `<fieldset style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0"><legend class="small" style="padding:0 6px">A-t-il déjà rempli le formulaire d'avance immédiate ? ${aide("Oui : le formulaire URSSAF ne lui sera jamais proposé dans son appli. Non : un onglet le lui propose, puis se range dès qu'il l'a envoyé.")}</legend>
+        <div class="row"><label class="chk"><input type="radio" name="urssaf_deja" value="oui" required>Oui, c'est déjà fait</label><label class="chk"><input type="radio" name="urssaf_deja" value="non" required>Non, pas encore</label></div></fieldset>`}
+      <div class="row" style="justify-content:flex-end"><button class="btn flat" type="button" data-fermer>Annuler</button><button class="btn primary" type="submit">${renvoi ? "Renvoyer un code" : "Envoyer l'invitation"}</button></div></form>`, (z, fermer) => {
+    const form = z.querySelector("#ec-fi"), choix = form.querySelector("select[name=client_id]");
+    if (choix) choix.onchange = () => { const k = cacheClients.find(x => x.id === choix.value); form.email.value = (k && k.email) || ""; };
+    form.onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(form), email = String(f.get("email")).trim().toLowerCase(), id = f.get("client_id");
+      if (!id) return toast("Choisis le client");
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast("E-mail incorrect");
+      if (!renvoi && !f.get("urssaf_deja")) return toast("Dis si le formulaire d'avance immédiate est déjà rempli");
+      (e.submitter || {}).disabled = true;
+      const { error } = await sb.from("clients_a_inviter").insert({ client_id: id, email, renvoi: !!renvoi, urssaf_deja: f.get("urssaf_deja") === "oui" });
+      if (error) { (e.submitter || {}).disabled = false; return /clients_a_inviter_un_seul|23505/.test((error.code || "") + error.message) ? toast("Une invitation attend déjà pour ce client") : souci(error); }
+      toast(renvoi ? "Nouveau code demandé : le mail part dans les 5 minutes" : "Invitation déposée : le mail part dans les 5 minutes"); fermer(); re();
+    };
+  });
+}
+let ecInvites = new Set();
+async function ecDocuments(c) {
+  const dessiner = async z => {
+    const docs = await q(sb.from("client_documents").select("*").eq("client_id", c.id).order("cree_le", { ascending: false }));
+    z.querySelector("#ec-docs").innerHTML = docs.length ? docs.map(d => `<div class="ligne" data-doc="${d.id}" style="flex-wrap:wrap"><span style="min-width:0"><span class="tag">${EC_CATEGORIES[d.categorie] || "Autre"}</span> <b>${esc(d.titre)}</b>
+        <span class="muted small">${d.date_doc ? "· " + ecDate(d.date_doc + "T12:00") : ""}${d.a_copier && !d.chemin ? " · copie depuis le Drive en attente du pont" : ""}${!d.chemin && !d.lien && !d.a_copier ? " · sans fichier" : ""}</span></span>
+      <span class="row" style="flex:none"><label class="chk small"><input type="checkbox" data-visible ${d.visible ? "checked" : ""}>Visible par le client</label>
+        ${d.chemin || d.lien ? `<button class="btn" data-voir>Voir</button>` : ""}<button class="btn flat stop" data-sup>Supprimer</button></span></div>`).join("")
+      : `<p class="muted">Aucun document montré à ce client.</p>`;
+    z.querySelector("#ec-docs").onchange = async e => { const l = e.target.closest("[data-doc]"); if (!l || !e.target.hasAttribute("data-visible")) return;
+      try { await maj(sb.from("client_documents").update({ visible: e.target.checked }).eq("id", l.dataset.doc)); toast(e.target.checked ? "Visible par le client" : "Caché au client"); } catch (x) { e.target.checked = !e.target.checked; } };
+    z.querySelector("#ec-docs").onclick = async e => {
+      const b = e.target.closest("button"), l = b && b.closest("[data-doc]"); if (!l) return;
+      const d = docs.find(x => x.id === l.dataset.doc);
+      if (b.hasAttribute("data-voir")) return d.chemin ? ecOuvrirFichier(d.chemin) : window.open(d.lien, "_blank", "noopener");
+      if (b.hasAttribute("data-sup")) { if (!confirm("Supprimer « " + d.titre + " » de l'appli du client ? L'original dans le Drive ne bouge pas.")) return;
+        try { if (d.chemin) { const s = await sb.storage.from(EC_SEAU).remove([d.chemin]); if (s.error) return souci(s.error); }
+          await maj(sb.from("client_documents").delete().eq("id", d.id)); toast("Document retiré"); dessiner(z); } catch (x) {} }
+    };
+  };
+  fenetre(`<div class="row" style="justify-content:space-between"><h2 style="margin:0">Documents montrés à ${esc(c.nom)} ${aide("Le client ne voit que ce qui est listé ici et coché « Visible ». Les factures VosFactures d'OIKOS arrivent toutes seules par le pont. Rien d'autre du dossier n'est montré.")}</h2><button class="btn flat" data-fermer>Fermer</button></div>
+    <form id="ec-fd" class="card" style="display:grid;gap:8px;margin-top:10px">
+      <div class="deux"><label class="f">Catégorie<select name="categorie">${Object.entries(EC_CATEGORIES).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+        <label class="f">Titre<input type="text" name="titre" required maxlength="200" placeholder="Ex. contrat signé le 3 mars"></label></div>
+      <div class="deux"><label class="f">Date du document (facultatif)<input type="date" name="date_doc"></label>
+        <label class="f">Fichier (PDF ou photo, 10 Mo au plus)<input type="file" name="fichier" required accept="application/pdf,image/*,.docx,.xlsx,.odt,.ods,.txt"></label></div>
+      <div><button class="btn primary" type="submit">Ajouter un document</button></div></form>
+    <section class="card" id="ec-docs" style="margin-top:12px"><p class="muted">Chargement…</p></section>`, z => {
+    dessiner(z).catch(souci);
+    z.querySelector("#ec-fd").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), fic = f.get("fichier"), titre = String(f.get("titre")).trim();
+      if (!titre) return toast("Le titre est obligatoire");
+      if (!fic || !fic.size) return toast("Choisis le fichier");
+      if (fic.size > 10 * 1024 * 1024) return toast("Fichier trop gros (10 Mo au plus)");
+      (e.submitter || {}).disabled = true;
+      const chemin = `${c.id}/documents/${crypto.randomUUID()}.${ecExt(fic)}`;
+      try {
+        const u = await sb.storage.from(EC_SEAU).upload(chemin, fic, { contentType: fic.type || "application/octet-stream" });
+        if (u.error) throw u.error;
+        const i = await sb.from("client_documents").insert({ client_id: c.id, categorie: f.get("categorie"), titre, date_doc: f.get("date_doc") || null, chemin, visible: true });
+        if (i.error) { await sb.storage.from(EC_SEAU).remove([chemin]); throw i.error; }
+        e.target.reset(); toast("Document ajouté : le client le voit dans son appli"); await dessiner(z);
+      } catch (x) { souci(x); }
+      (e.submitter || {}).disabled = false;
+    };
+  });
+}
+async function ecComptes(corps, re) {
+  const hier = new Date(Date.now() - 864e5).toISOString();
+  const [comptes, codes, invitations, refus] = await Promise.all([
+    q(sb.from("comptes_clients").select("*").order("cree_le", { ascending: false })),
+    q(sb.from("codes_clients").select("compte_id,code,cree_le")),
+    q(sb.from("clients_a_inviter").select("*").order("cree_le", { ascending: false }).limit(200)),
+    q(sb.from("client_refus").select("client_id").gte("cree_le", hier))]);
+  ecInvites = new Set(comptes.map(k => k.client_id).concat(invitations.filter(i => i.etat === "a_faire").map(i => i.client_id)));
+  const suivi = invitations.filter(i => i.etat !== "envoye");
+  const visibles = ecClient ? comptes.filter(k => k.client_id === ecClient) : comptes;
+  const cible = ecClient && cacheClients.find(c => c.id === ecClient);
+  const menu = (k, nom, choix) => `<select data-champ="${nom}" aria-label="${nom}">${Object.entries(choix).map(([v, t]) => `<option value="${v}" ${k[nom] === v ? "selected" : ""}>${t}</option>`).join("")}</select>`;
+  const carte = k => {
+    const code = codes.find(x => x.compte_id === k.id), nbRefus = refus.filter(r => r.client_id === k.client_id).length, pause = k.pause_jusqu && new Date(k.pause_jusqu) > new Date();
+    return `<section class="card ec-carte ${!k.actif || pause ? "ec-decider" : ""}" data-k="${k.id}" style="margin-top:10px">
+      <div class="ligne" style="border-top:0;padding-top:0;flex-wrap:wrap"><span style="min-width:0"><b>${esc(nomClient(k.client_id))}</b> <span class="muted small">· ${esc(k.email)}</span>
+          ${!k.actif ? ` <span class="tag warn">accès coupé</span>` : ""}${k.lecture_seule ? ` <span class="tag warn">lecture seule</span>` : ""}${pause ? ` <span class="tag ec-rouge">en pause jusqu'au ${ecQuand(k.pause_jusqu)}</span>` : ""}${nbRefus ? ` <span class="tag warn">${nbRefus} refus en 24 h</span>` : ""}
+          <br><span class="muted small">Invité le ${ecDate(k.invite_le)} · première connexion : ${k.premiere_connexion_le ? ecQuand(k.premiere_connexion_le) : "pas encore"} · dernière ouverture : ${ecQuand(k.vu_le)}</span></span>
+        <span class="row" style="flex:none">${pause ? `<button class="btn primary" data-pause>Lever la pause</button>` : ""}<button class="btn" data-docs>Ses documents</button><button class="btn" data-fiche>Sa fiche</button><button class="btn" data-code>Renvoyer un code</button></span></div>
+      <div class="row" style="margin-top:8px;gap:14px;align-items:center">
+        <label class="small">Avance immédiate ${menu(k, "urssaf", EC_URSSAF)}</label>
+        <span class="small">Avis Google : <b>${k.avis ? EC_AVIS[k.avis] : "pas encore proposé"}</b>${k.avis_le ? " (" + ecDate(k.avis_le) + ")" : ""} ${k.avis === "fait" ? "" : `<button class="btn flat" data-avis>Avis déjà mis</button>`}</span></div>
+      <div class="row" style="margin-top:6px;gap:14px">
+        <label class="chk small"><input type="checkbox" data-case="actif" ${k.actif ? "checked" : ""}>Accès ouvert</label>
+        <label class="chk small"><input type="checkbox" data-case="lecture_seule" ${k.lecture_seule ? "checked" : ""}>Lecture seule ${aide("Il consulte tout, mais n'envoie plus ni message, ni demande, ni fichier.")}</label>
+        <label class="chk small"><input type="checkbox" data-case="voir_presta" ${k.voir_presta ? "checked" : ""}>Voit son presta référent</label>
+        <label class="chk small"><input type="checkbox" data-case="voir_tel_presta" ${k.voir_tel_presta ? "checked" : ""}>Voit le téléphone du presta</label>
+        <label class="chk small"><input type="checkbox" data-case="voir_heures" ${k.voir_heures !== false ? "checked" : ""}>Voit son relevé d'heures ${aide("Les passages déclarés par le presta dans son appli, mois par mois.")}</label>
+        <label class="chk small"><input type="checkbox" data-case="voir_agenda" ${k.voir_agenda !== false ? "checked" : ""}>Voit ses rendez-vous ${aide("Les passages planifiés dans la plateforme, avec la mention que l'horaire est indicatif.")}</label></div>
+      ${code ? `<p class="small" style="margin-top:8px">Code d'accès provisoire (pas encore utilisé, du ${ecDate(code.cree_le)}) : <code>${esc(code.code)}</code> <button class="btn flat" data-copier>Copier</button></p>` : k.mdp_provisoire ? `<p class="muted small" style="margin-top:8px">Il n'a pas encore choisi son mot de passe.</p>` : ""}</section>`;
+  };
+  corps.innerHTML = `<div class="row" style="justify-content:space-between"><span class="muted small">${comptes.length} client${comptes.length > 1 ? "s ont" : " a"} un compte. ${aide("Le référent montré au client est le presta que tu lui as attribué dans le pilote (ligne avec une date de début, en cours). Sans attribution, il ne voit personne.")}</span>
+      <span class="row">${ecClient ? `<button class="chip" id="ec-tous">Voir tous les clients</button>` : ""}<button class="btn primary" id="ec-inviter">${ico("plus")} Inviter un client</button></span></div>
+    ${cible && !visibles.length ? `<section class="card ec-decider" style="margin-top:10px"><b>${esc(cible.nom)}</b> n'a pas encore l'appli${invitations.some(i => i.client_id === cible.id && i.etat === "a_faire") ? " : son invitation part dans les 5 minutes." : `. <button class="btn primary" id="ec-inviter-cible">Inviter ${esc(cible.nom)}</button>`}</section>` : ""}
+    ${suivi.length ? `<section class="card" style="margin-top:10px"><h2 style="margin-top:0">Invitations en cours</h2>${suivi.map(i => `<div class="ligne" data-inv="${i.id}"><span style="min-width:0"><span class="tag ${i.etat === "erreur" ? "ec-rouge" : "warn"}">${i.etat === "erreur" ? "Erreur" : "En attente du pont"}</span> <b>${esc(nomClient(i.client_id))}</b> <span class="muted small">· ${esc(i.email)} · ${ecQuand(i.cree_le)}${i.renvoi ? " · nouveau code" : ""}</span>${i.message ? `<br><span class="small err">${esc(i.message)}</span>` : ""}</span>
+        <span class="row" style="flex:none">${i.etat === "erreur" ? `<button class="btn" data-reessayer>Réessayer</button>` : ""}<button class="btn flat stop" data-retirer>Retirer</button></span></div>`).join("")}</section>` : ""}
+    ${visibles.map(carte).join("") || (cible ? "" : `<p class="card muted" style="margin-top:10px">Aucun client n'a encore l'appli. Commence par « Inviter un client ».</p>`)}`;
+  const tous = corps.querySelector("#ec-tous"); if (tous) tous.onclick = () => ecAller("comptes", "");
+  corps.querySelector("#ec-inviter").onclick = () => ecInviter(null, re);
+  const ic = corps.querySelector("#ec-inviter-cible"); if (ic) ic.onclick = () => ecInviter(cible.id, re);
+  corps.onchange = async e => {
+    const s = e.target.closest("[data-k]"); if (!s) return;
+    const k = comptes.find(x => x.id === s.dataset.k), t = e.target;
+    try {
+      if (t.dataset.champ) { const v = { [t.dataset.champ]: t.value }; if (t.dataset.champ === "urssaf") v.urssaf_le = new Date().toISOString();
+        await maj(sb.from("comptes_clients").update(v).eq("id", k.id)); toast("Enregistré"); }
+      if (t.dataset.case) {
+        if (t.dataset.case === "actif" && !t.checked && !confirm("Couper l'accès de " + nomClient(k.client_id) + " à son appli ?")) { t.checked = true; return; }
+        await maj(sb.from("comptes_clients").update({ [t.dataset.case]: t.checked }).eq("id", k.id)); toast("Enregistré"); if (t.dataset.case === "actif" || t.dataset.case === "lecture_seule") re();
+      }
+    } catch (x) { re(); }
+  };
+  corps.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const inv = b.closest("[data-inv]"), s = b.closest("[data-k]");
+    try {
+      if (inv) { const i = invitations.find(x => x.id === inv.dataset.inv);
+        if (b.hasAttribute("data-reessayer")) { await maj(sb.from("clients_a_inviter").update({ etat: "a_faire", message: null }).eq("id", i.id)); toast("Nouvel essai dans les 5 minutes"); return re(); }
+        if (b.hasAttribute("data-retirer")) { await maj(sb.from("clients_a_inviter").delete().eq("id", i.id)); return re(); }
+      }
+      if (!s) return;
+      const k = comptes.find(x => x.id === s.dataset.k), c = cacheClients.find(x => x.id === k.client_id);
+      if (b.hasAttribute("data-pause")) { await maj(sb.from("comptes_clients").update({ pause_jusqu: null }).eq("id", k.id)); toast("Pause levée"); return re(); }
+      if (b.hasAttribute("data-docs")) return c ? ecDocuments(c) : toast("Client introuvable");
+      if (b.hasAttribute("data-fiche")) return ficheClient(k.client_id);
+      if (b.hasAttribute("data-avis")) { await maj(sb.from("comptes_clients").update({ avis: "fait", avis_le: new Date().toISOString() }).eq("id", k.id)); toast("Noté : l'avis ne lui sera plus proposé"); return re(); }
+      if (b.hasAttribute("data-copier")) { const code = codes.find(x => x.compte_id === k.id); try { await navigator.clipboard.writeText(code.code); toast("Code copié"); } catch (x) { toast("Copie impossible : sélectionne le code à la main"); } return; }
+      if (b.hasAttribute("data-code")) { if (invitations.some(i => i.client_id === k.client_id && i.etat === "a_faire")) return toast("Une demande attend déjà pour ce client");
+        if (!confirm("Envoyer un nouveau code d'accès à " + k.email + " ? Son mot de passe actuel ne marchera plus.")) return;
+        await maj(sb.from("clients_a_inviter").insert({ client_id: k.client_id, email: k.email, renvoi: true })); toast("Nouveau code demandé : le mail part dans les 5 minutes"); return re(); }
+    } catch (x) {}
+  };
+}
+/* ---------- f. Réglages de l'espace client ---------- */
+async function ecReglages(corps, re) {
+  const r = (await q(sb.from("espace_client_reglages").select("*").eq("id", 1).maybeSingle())) || {};
+  const catalogue = await q(sb.from("consignes_catalogue").select("*").order("activite").order("ordre").order("libelle"));
+  const N = [["messages_heure", "Messages par heure", "Au-delà, l'envoi est refusé avec un message calme : « réessayez un peu plus tard »."], ["messages_jour", "Messages par jour", "Sur 24 heures glissantes."],
+    ["demandes_jour", "Demandes de service par jour", "Sur 24 heures glissantes."], ["demandes_mois", "Demandes de service par mois", "Sur 30 jours glissants."],
+    ["modifs_semaine", "Demandes sur la feuille de route par semaine", "Sur 7 jours glissants."], ["urssaf_mois", "Envois du formulaire URSSAF par mois", "Sur 30 jours glissants."],
+    ["consignes_jour", "Priorités et tâches du jour par jour", "Ce que le client coche sur sa feuille de route (priorités, tâches courantes, texte libre), sur 24 heures."],
+    ["fichiers_jour", "Fichiers par jour", "Photos et pièces jointes, sur 24 heures."], ["refus_avant_pause", "Refus avant la pause", "Nombre de refus en 24 heures qui met le compte en pause tout seul."],
+    ["pause_heures", "Durée de la pause (heures)", "Pendant la pause, le client consulte mais n'envoie plus rien. Tu peux la lever dans « Clients qui ont l'appli »."]];
+  corps.innerHTML = `<form id="ec-fr" class="card" style="display:grid;gap:12px;max-width:760px">
+      <label class="f">Lien pour laisser un avis Google ${aide("Le lien « Demander des avis » de ta fiche Google. Il n'est proposé qu'au client qui se dit satisfait et qui n'a pas encore mis d'avis. Vide : l'avis n'est jamais proposé.")}<input type="url" name="lien_avis_google" maxlength="500" placeholder="https://g.page/r/…/review" value="${esc(r.lien_avis_google || "")}"></label>
+      <h2 style="margin:6px 0 0">Garde-fous ${aide("Pour qu'un client ne puisse pas te saturer. Chaque nombre est une limite par client.")}</h2>
+      <div class="deux">${N.map(([k, t, a]) => `<label class="f">${t} ${aide(a)}<input type="number" name="${k}" min="1" step="1" required value="${esc(r[k] ?? "")}"></label>`).join("")}</div>
+      <div><button class="btn primary" type="submit">Enregistrer</button></div></form>
+    <section class="card" style="margin-top:14px" id="ec-cat"><h2 style="margin:0">Tâches courantes que le client peut ajouter sans ton accord ${aide("Le client les coche pour un passage : elles partent toutes seules sur la feuille du jour du presta. Il ne voit que celles de ses activités. Tout le reste (texte libre) attend ton accord dans Feuille de route.")}</h2>
+      <div class="ec-cat" style="margin-top:10px">${["Ménage", "Jardinage", "Bricolage"].map(a => `<div><b>${a}</b>
+        ${catalogue.filter(x => x.activite === a).map(x => `<div class="ligne" data-cat="${esc(x.code)}" style="padding:4px 0"><label class="chk small" style="min-width:0"><input type="checkbox" data-cat-actif ${x.actif ? "checked" : ""}>${esc(x.libelle)}</label><button class="btn flat" type="button" data-cat-sup aria-label="Supprimer ${esc(x.libelle)}">${ico("croix")}</button></div>`).join("") || `<p class="muted small">Aucune.</p>`}
+        <form class="row" data-cat-ajout="${a}" style="margin-top:6px;flex-wrap:nowrap"><input type="text" name="libelle" maxlength="80" required placeholder="Nouvelle tâche" aria-label="Nouvelle tâche courante, ${a}" style="min-width:0;flex:1"><button class="btn" type="submit">Ajouter</button></form></div>`).join("")}</div></section>`;
+  const zoneCat = corps.querySelector("#ec-cat");
+  zoneCat.onchange = async e => { const c = e.target.closest("[data-cat-actif]"); if (!c) return;
+    try { await maj(sb.from("consignes_catalogue").update({ actif: c.checked }).eq("code", c.closest("[data-cat]").dataset.cat)); toast(c.checked ? "Proposée aux clients" : "Plus proposée aux clients"); } catch (x) { c.checked = !c.checked; } };
+  zoneCat.onclick = async e => { const b = e.target.closest("[data-cat-sup]"); if (!b) return; const x = catalogue.find(k => k.code === b.closest("[data-cat]").dataset.cat);
+    if (!x || !confirm("Supprimer « " + x.libelle + " » de la liste ? Les demandes déjà faites restent.")) return;
+    try { await maj(sb.from("consignes_catalogue").delete().eq("code", x.code)); toast("Tâche retirée de la liste"); re(); } catch (y) {} };
+  zoneCat.onsubmit = async e => { const f = e.target.closest("[data-cat-ajout]"); if (!f) return; e.preventDefault();
+    const libelle = String(new FormData(f).get("libelle")).trim(); if (!libelle) return;
+    let code = norm(libelle).replace(/ /g, "-").slice(0, 36); if (code.length < 2) return toast("Écris un nom de tâche avec des lettres");
+    if (catalogue.some(x => x.code === code)) { let i = 2; while (catalogue.some(x => x.code === code + "-" + i)) i++; code += "-" + i; }
+    const ordre = Math.max(0, ...catalogue.filter(x => x.activite === f.dataset.catAjout).map(x => x.ordre || 0)) + 1;
+    try { await maj(sb.from("consignes_catalogue").insert({ code, activite: f.dataset.catAjout, libelle: libelle.slice(0, 80), ordre })); toast("Tâche ajoutée à la liste"); re(); } catch (y) {} };
+  corps.querySelector("#ec-fr").onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(e.target), lien = String(f.get("lien_avis_google")).trim(), v = { lien_avis_google: lien || null };
+    if (lien && !/^https:\/\//.test(lien)) return toast("Le lien doit commencer par https://");
+    for (const [k] of N) { v[k] = Math.round(Number(f.get(k))); if (!(v[k] >= 1)) return toast("Chaque nombre doit valoir au moins 1"); }
+    try { await maj(sb.from("espace_client_reglages").update(v).eq("id", 1)); toast("Réglages enregistrés"); re(); } catch (x) {}
+  };
+}
+/* ---------- Partenaires : les entreprises du réseau, montrées au client sans aucune coordonnée ---------- */
+const EC_COORDONNEES = /(\d[\s.\-]?){9,}|@|https?:|www\.|\.(fr|com|net|org|eu)\b/i;
+async function ecPartenaires(corps, re) {
+  const liste = await q(sb.from("partenaires").select("*").order("ordre").order("metier").order("nom_affiche"));
+  const demandes = await q(sb.from("client_demandes").select("partenaire_id").not("partenaire_id", "is", null));
+  const nb = id => demandes.filter(d => d.partenaire_id === id).length;
+  corps.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:10px"><p class="muted" style="margin:0;max-width:70ch">Le client voit seulement le nom affiché, le métier et la description. Jamais de téléphone, d'e-mail ni de site : la base les refuse. Sa demande de mise en relation arrive dans « Demandes de service », et c'est toi qui fais le lien.</p>
+      <button class="btn primary" id="ec-part-nv">${ico("plus")} Ajouter un partenaire</button></div>
+    ${liste.length ? liste.map(x => `<div class="card ec-carte" data-part="${x.id}" style="margin-bottom:8px;${x.actif ? "" : "opacity:.6"}"><div class="row" style="justify-content:space-between;align-items:flex-start">
+        <span style="min-width:0"><b>${esc(x.nom_affiche)}</b> <span class="tag">${esc(x.metier)}</span>${x.actif ? "" : ` <span class="tag warn">masqué</span>`}${nb(x.id) ? ` <span class="muted small">· ${nb(x.id)} mise${nb(x.id) > 1 ? "s" : ""} en relation demandée${nb(x.id) > 1 ? "s" : ""}</span>` : ""}
+          ${x.description ? `<br><span class="muted small">${esc(x.description)}</span>` : ""}
+          <br><span class="small">Pour toi seul : <b>${esc(x.nom)}</b>${x.contact ? " · " + esc(x.contact) : ""}${x.conditions ? " · " + esc(x.conditions) : ""}</span></span>
+        <span class="row" style="flex:none"><button class="btn" data-part-mod>Modifier</button><button class="btn" data-part-actif>${x.actif ? "Masquer" : "Montrer"}</button><button class="btn flat" data-part-sup>Supprimer</button></span></div></div>`).join("")
+      : `<section class="card"><p class="muted">Aucun partenaire pour l'instant. La section « Nos partenaires » n'apparaît pas dans l'appli des clients tant qu'il n'y en a pas.</p></section>`}`;
+  const fiche = x => fenetre(`<h2 style="margin:0">${x ? "Modifier le partenaire" : "Nouveau partenaire"}</h2>
+    <form id="ec-fp" style="display:grid;gap:10px;margin-top:10px">
+      <b class="small">Ce que voit le client ${aide("Ni téléphone, ni e-mail, ni site. Évite aussi le vrai nom de l'entreprise : avec lui, le client la retrouve sur internet et passe en direct.")}</b>
+      <div class="deux"><label class="f">Nom affiché<input type="text" name="nom_affiche" required maxlength="80" placeholder="Électricien partenaire" value="${esc(x ? x.nom_affiche : "")}"></label>
+        <label class="f">Métier<input type="text" name="metier" required maxlength="60" placeholder="Électricité" value="${esc(x ? x.metier : "")}"></label></div>
+      <label class="f">Description<textarea name="description" rows="3" maxlength="600" placeholder="Ce qu'il fait, dans quel secteur">${esc(x ? x.description || "" : "")}</textarea></label>
+      <b class="small" style="margin-top:6px">Pour toi seul</b>
+      <label class="f">Vrai nom de l'entreprise<input type="text" name="nom" required maxlength="120" value="${esc(x ? x.nom : "")}"></label>
+      <label class="f">Contact (téléphone, e-mail, interlocuteur)<input type="text" name="contact" maxlength="500" value="${esc(x ? x.contact || "" : "")}"></label>
+      <label class="f">Conditions (commission, accord signé…)<input type="text" name="conditions" maxlength="1000" value="${esc(x ? x.conditions || "" : "")}"></label>
+      <div class="row" style="justify-content:flex-end"><button class="btn flat" type="button" data-fermer>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div></form>`, (z, fermer) => {
+    z.querySelector("#ec-fp").onsubmit = async e => {
+      e.preventDefault(); const f = new FormData(e.target), v = {};
+      ["nom_affiche", "metier", "description", "nom", "contact", "conditions"].forEach(k => v[k] = String(f.get(k) || "").trim() || null);
+      const montre = [v.nom_affiche, v.metier, v.description || ""].join(" ");
+      if (EC_COORDONNEES.test(montre)) return toast("Retire le téléphone, l'e-mail ou le site de ce que voit le client");
+      if (v.nom && norm(montre).includes(norm(v.nom)) && !confirm("Le vrai nom de l'entreprise apparaît dans ce que voit le client : il pourra la retrouver et passer en direct. Enregistrer quand même ?")) return;
+      const { error } = x ? await sb.from("partenaires").update(v).eq("id", x.id) : await sb.from("partenaires").insert(v);
+      if (error) return /partenaire_sans_coordonnees/.test(error.message || "") ? toast("La base refuse : pas de téléphone, d'e-mail ni de site dans ce que voit le client") : souci(error);
+      toast("Partenaire enregistré"); fermer(); re();
+    };
+  });
+  corps.querySelector("#ec-part-nv").onclick = () => fiche(null);
+  corps.onclick = async e => {
+    const carte = e.target.closest("[data-part]"); if (!carte) return; const x = liste.find(k => k.id === carte.dataset.part); if (!x) return;
+    if (e.target.closest("[data-part-mod]")) return fiche(x);
+    if (e.target.closest("[data-part-actif]")) { const { error } = await sb.from("partenaires").update({ actif: !x.actif }).eq("id", x.id); if (error) return souci(error); return re(); }
+    if (e.target.closest("[data-part-sup]")) { if (!confirm("Supprimer « " + x.nom_affiche + " » ? Les demandes déjà reçues restent.")) return;
+      const { error } = await sb.from("partenaires").delete().eq("id", x.id); if (error) return souci(error); toast("Partenaire supprimé"); re(); }
+  };
+}
+/* Fiche client : le bouton « Appli client » dit où il en est */
+async function ecBoutonFiche(bouton, c) {
+  try {
+    const { data: k, error } = await sb.from("comptes_clients").select("invite_le,premiere_connexion_le,vu_le,actif").eq("client_id", c.id).maybeSingle();
+    if (error) throw error;
+    bouton.textContent = !k ? "Appli client : pas invité" : !k.actif ? "Appli client : accès coupé" : k.vu_le ? "Appli client : ouverte le " + ecDate(k.vu_le) : "Appli client : invité le " + ecDate(k.invite_le);
+  } catch (e) { bouton.textContent = "Appli client"; if (ecAbsent(e)) bouton.title = "L'espace client n'est pas encore installé (SQL 53)"; }
+}
+
 /* ===================== Vue d'ensemble (ancien « Tout voir ») ===================== */
 async function vueAVoir() {
   await chargerBase();
@@ -2342,8 +2941,10 @@ async function vueAVoir() {
   const facturesRecues = await sb.from("factures_mois").select("*").eq("etat", "envoyee").order("mois").then(r => r.error ? [] : r.data);   // SQL 49
   const papiersRecus = docs.filter(d => !d.facture_mois);   // une facture du mois se contrôle dans la fiche du presta
   /* Vue d'ensemble : chaque sujet a sa ligne, même à zéro, pour que rien ne reste caché. Le bouton est sur la ligne. */
+  const ecAtt = await espaceAttente();
   const VE = [
     ["À décider par toi", [
+      ["alerte", "Demandes des clients dans l'appli", "Demandes de service, feuille de route, messages et formulaires URSSAF", ecAtt.total, "Voir", 'data-o="espace"'],
       ["bulle", "Messages non lus", "Ce que les presta t'ont écrit", nbMessages, "Lire", 'data-o="messages"'],
       ["telecharger", "Clients à traiter", "Nouveaux clients VosFactures ou extraction, dans la zone tampon", tampon.length, "Traiter", 'data-o="clients"'],
       ["stylo", "Devis signés", "Ordre de mission à transmettre au presta", signes.length, "Transmettre", 'data-dsection="ATTENTE"'],
@@ -4779,11 +5380,13 @@ function ficheClient(id, ong = "ensemble") {
       ${c.dossier_drive ? `${boutonsIA(c)}
         <a class="btn" href="https://drive.google.com/drive/folders/${esc(c.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Son dossier Drive</a>` : ""}
       <button class="btn" type="button" id="dos-jur">${ico("cadenas")} Dossier juridique</button>
+      <button class="btn" type="button" id="ec-fiche">Appli client</button>
       <button class="btn flat" data-fermer>Fermer</button></span></div>
     <div class="row" id="fiche-choix" style="margin:8px 0">${casesActivites(c)}${casesEntreprise(c)}
       ${c.etat === "prospect" ? `<button class="btn go" type="button" id="devenu-client">✓ Devenu client</button>` : ""}</div>
     <nav class="onglets" id="dos-ong">${DOS_ONGLETS.map(([k, t]) => `<button data-dos="${k}">${t}</button>`).join("")}</nav>
-    <div id="dos-corps"></div>`, el => {
+    <div id="dos-corps"></div>`, (el, fermerFiche) => {
+    const ecB = el.querySelector("#ec-fiche"); ecBoutonFiche(ecB, c); ecB.onclick = () => { fermerFiche(); ecAller("comptes", c.id); };
     el.querySelectorAll("[data-ia]").forEach(b => b.onclick = () => choisirCompteIA(b.dataset.ia, b.dataset.iaNom));
     const corps = el.querySelector("#dos-corps");
     const aller = async o => {
@@ -6261,6 +6864,9 @@ async function envoyerPhoto(f, d) {
 async function dosJuridique(c, corps, re) {
   const liste = await q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("date_evt", { ascending: false, nullsFirst: false }).order("cree_le", { ascending: false }));
   const dans7 = ymd(plusJours(new Date(), 7));
+  /* Pièces montrées au client dans son appli (SQL 53) : rien tant que tu ne cliques pas « Montrer au client ». Sans le SQL 53, les boutons n'apparaissent pas. */
+  let montres = null; try { montres = await q(sb.from("client_documents").select("id,drive_id,chemin").eq("client_id", c.id).not("drive_id", "is", null)); } catch (e) { montres = null; }
+  const montre = x => montres && x.drive_id ? montres.find(d => d.drive_id === x.drive_id) : null;
   /* Accès au sous-dossier Juridique du Drive : la base ne garde que le dossier du client (dossier_drive), pas l'identifiant de son sous-dossier Juridique.
      On ouvre donc le dossier du client, où Juridique est à un clic. */
   corps.innerHTML = `<p class="muted small" style="margin-bottom:8px">${ico("cadenas")} Visible par toi seul, jamais par les intervenants. Les pièces sont rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Juridique).</p>
@@ -6280,7 +6886,7 @@ async function dosJuridique(c, corps, re) {
         ${x.fichier && !x.drive_url ? ` <span class="tag warn">pas encore rangée dans le Drive</span>` : ""}
         ${x.echeance ? ` <span class="tag ${!x.traite && x.echeance <= dans7 ? "warn" : x.traite ? "off" : ""}">${x.traite ? "✓ traité" : "rappel le " + new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span>` : ""}
         ${x.texte ? `<br><span style="white-space:pre-wrap">${esc(x.texte)}</span>` : ""}</span>
-      <span class="row" style="flex:none">${x.drive_url || x.fichier ? `<button class="btn" data-jvoir>${ico("trombone")} Pièce</button>` : ""}${x.echeance && !x.traite ? `<button class="btn go" data-jok>Fait</button>` : ""}<button class="btn flat stop" data-jsup>Supprimer</button></span></div>`).join("")
+      <span class="row" style="flex:none">${x.drive_url || x.fichier ? `<button class="btn" data-jvoir>${ico("trombone")} Pièce</button>` : ""}${montres && x.drive_id ? (montre(x) ? `<span class="tag">visible dans son appli</span><button class="btn flat" data-jcacher>Ne plus montrer</button>` : `<button class="btn" data-jmontrer>Montrer au client</button>`) : ""}${x.echeance && !x.traite ? `<button class="btn go" data-jok>Fait</button>` : ""}<button class="btn flat stop" data-jsup>Supprimer</button></span></div>`).join("")
       : `<p class="muted">Rien dans le volet juridique.</p>`}</section>`;
   corps.querySelector("#fj").onsubmit = async e => {
     e.preventDefault(); const f = new FormData(e.target), fic = f.get("fichier");
@@ -6306,6 +6912,12 @@ async function dosJuridique(c, corps, re) {
       const j = y || x;
       return j.drive_url ? window.open(j.drive_url, "_blank", "noopener") : j.fichier ? ouvrirStockage(j.fichier) : toast("Pièce introuvable : recharge le dossier");
     }
+    if (b.hasAttribute("data-jmontrer")) { if (!confirm("Montrer « " + x.titre + " » à " + c.nom + " dans son appli ? Seule la pièce est copiée, jamais ta note.")) return;
+      await maj(sb.from("client_documents").insert({ client_id: c.id, categorie: x.type === "contrat" ? "contrat" : "juridique", titre: x.titre, date_doc: x.date_evt || null, drive_id: x.drive_id, a_copier: true, visible: true }));
+      toast("Le pont copie la pièce : visible dans son appli dans les 5 minutes"); return re(); }
+    if (b.hasAttribute("data-jcacher")) { const d = montre(x); if (!d) return re();
+      if (d.chemin) { const s = await sb.storage.from(EC_SEAU).remove([d.chemin]); if (s.error) return souci(s.error); }
+      await maj(sb.from("client_documents").delete().eq("id", d.id)); toast("Le client ne voit plus cette pièce"); return re(); }
     if (b.hasAttribute("data-jok")) { await maj(sb.from("client_juridique").update({ traite: true }).eq("id", x.id)); compteurAVoir(); re(); }
     if (b.hasAttribute("data-jsup")) { if (!confirm("Supprimer « " + x.titre + " » ? La pièce part aussi à la corbeille du Drive.")) return;
       await maj(sb.from("client_juridique").update({ supprime_le: new Date().toISOString() }).eq("id", x.id)); re(); }

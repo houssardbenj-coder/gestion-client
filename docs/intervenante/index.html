@@ -340,7 +340,7 @@ a.lien.muted{color:var(--muted)}
 /* Compte gelé : les actions disparaissent, il ne reste que la consultation, Moi et Mes papiers. La base refuse le reste (SQL 30). */
 .gel-bandeau{margin:12px 16px 0;padding:12px 14px;border-radius:14px;background:var(--warn-soft);color:var(--warn)}
 .gel-bandeau .btn{margin-top:8px;width:100%}
-body.gele :is(#ms-form,#route-proposer,#declarer,[data-decl],#ajout-tache,button[data-coche],[data-ajout-route],#ajout-route,#ajout-photo,#fnote,#pr-oui,#pr-non,#creer,#ajout,#commenter,#suppr,#ajout-rdv,#annule,[data-c],[data-annule],#corr,#valider,#brouillon,#envoyer,#envoyer + p,h2:has(+ #brouillon),.card:has(> #dire),#ft [type=submit]){display:none!important}
+body.gele :is(#ms-form,[data-ec-coche],#route-proposer,#declarer,[data-decl],#ajout-tache,button[data-coche],[data-ajout-route],#ajout-route,#ajout-photo,#fnote,#pr-oui,#pr-non,#creer,#ajout,#commenter,#suppr,#ajout-rdv,#annule,[data-c],[data-annule],#corr,#valider,#brouillon,#envoyer,#envoyer + p,h2:has(+ #brouillon),.card:has(> #dire),#ft [type=submit]){display:none!important}
 body.gele #ft{pointer-events:none}
 .alerte-mission{display:block;width:100%;text-align:left;border:0;border-radius:14px;background:#D0342C;color:#fff;padding:14px 16px;margin-bottom:14px;font-size:17px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgb(208 52 44 / .35)}
 .alerte-mission small{display:block;font-size:13px;font-weight:400;margin-top:2px}
@@ -517,6 +517,23 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .ms-b small{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
 .ms-b small.ms-lu{margin-top:1px;color:var(--ink)}
 .ms-vide{margin:auto;text-align:center;color:var(--muted)}
+.ms-convs{display:flex;flex-direction:column;padding:4px 16px}
+.ms-conv{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 0;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer}
+.ms-conv:first-child{border-top:0}
+.ms-conv .qui{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ms-conv .apercu{color:var(--muted);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms-conv .nb{flex:none;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#D0342C;color:#fff;font-size:13px;line-height:22px;font-weight:600;text-align:center}
+.ms-retour{align-self:flex-start;min-height:40px;padding:0 4px;margin-bottom:4px}
+.ec-bloc{border-color:var(--warn);gap:8px}
+.ec-bloc .ec-ligne{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 0;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer}
+.ec-bloc .ec-ligne:first-of-type{border-top:0}
+.ec-ligne .rond{flex:none;width:34px;height:34px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center}
+.ec-ligne .rond svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.ec-ligne[aria-pressed="true"] .rond{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ec-ligne[aria-pressed="true"] .quoi b{text-decoration:line-through;opacity:.7}
+.ec-ligne .quoi{flex:1;min-width:0;display:flex;flex-direction:column}
+.ec-ligne .quoi small{font-size:12px;color:var(--warn);font-weight:600;letter-spacing:.02em}
+.ec-marque{align-self:flex-start;border:0;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:14px;min-height:40px;padding:0 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
 .ms-form{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
 .ms-form textarea{flex:1;min-width:0;resize:vertical}
 .entete-droite{display:flex;align-items:center;gap:10px}
@@ -1007,20 +1024,49 @@ async function accueil(o) {
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
 
 /* ---------- Messages avec OIKOS (SQL 39) ---------- */
-const nbMessagesNonLus = () => sb.from("messages").select("id", { count: "exact", head: true }).eq("intervenante_id", moi.id).eq("de_gerant", true).is("lu_le", null).then(r => r.count || 0);
+const nbNonLusOikos = () => sb.from("messages").select("id", { count: "exact", head: true }).eq("intervenante_id", moi.id).eq("de_gerant", true).is("lu_le", null).then(r => r.count || 0);
+/* Le compteur additionne OIKOS et les clients qui ont écrit depuis leur appli */
+const nbMessagesNonLus = async () => (await nbNonLusOikos()) + (await ecNonLus().catch(() => 0));
 async function majBadgeMessages() {
   const n = await nbMessagesNonLus().catch(() => 0), b = document.getElementById("ouvrir-messages"); if (!b) return;
   const v = b.querySelector(".nav-badge"); if (v) v.remove();
   if (n) b.insertAdjacentHTML("beforeend", `<span class="nav-badge">${n}</span>`);
 }
-let msMinuteur = null;
+let msMinuteur = null, msConv = null;   // msConv : null = la liste, "oikos", ou l'id d'un client
+const msHeure = d => new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+/* Sans client joignable par l'appli (ou tant que l'espace client n'est pas installé), l'écran reste la conversation avec OIKOS, comme avant */
 async function vueMessages() {
+  clearInterval(msMinuteur);
+  const convs = await ecConversations();
+  if (!convs.length) { msConv = null; return vueMessagesOikos(false); }
+  if (msConv === "oikos") return vueMessagesOikos(true);
+  const c = msConv && convs.find(x => x.id === msConv);
+  if (c) return vueMessagesClient(c);
+  msConv = null;
+  const [dernier, nb] = await Promise.all([
+    sb.from("messages").select("de_gerant,texte").eq("intervenante_id", moi.id).order("cree_le", { ascending: false }).limit(1).then(r => (r.data || [])[0]),
+    nbNonLusOikos().catch(() => 0)]);
+  const ligne = (id, nom, apercu, n) => `<button class="ms-conv" type="button" data-conv="${id}"><span class="qui"><b>${esc(nom)}</b><span class="apercu">${esc(apercu)}</span></span>${n ? `<span class="nb">${n}</span>` : ""}<span class="muted" aria-hidden="true">${ico("chevron")}</span></button>`;
+  contenu(`<h1>Messages</h1><p class="muted" style="margin-bottom:10px">Tes échanges avec OIKOS et avec tes clients qui ont l'appli.</p>
+    <div class="card ms-convs" id="ms-convs">${ligne("oikos", "OIKOS", dernier ? (dernier.de_gerant ? "" : "Toi : ") + dernier.texte : "Aucun message", nb)}
+      ${convs.map(x => ligne(x.id, x.nom, x.dernier ? (x.dernier.de === "presta" ? "Toi : " : "") + (x.dernier.texte || "Pièce jointe") : "Aucun message pour l'instant", x.nonLus)).join("")}</div>`);
+  document.getElementById("ms-convs").onclick = e => { const b = e.target.closest("[data-conv]"); if (!b) return; vibre(5); msConv = b.dataset.conv; accueil("messages"); };
+  msMinuteur = setInterval(async () => {
+    if (onglet !== "messages" || !document.getElementById("ms-convs")) return clearInterval(msMinuteur);
+    if (document.hidden) return;
+    try { const n = await ecConversations(), signe = l => l.map(x => x.id + ":" + x.nonLus + ":" + (x.dernier ? x.dernier.id : "")).join(); if (signe(n) !== signe(convs)) accueil("messages"); else majBadgeMessages(); } catch (e) {}
+  }, 15000);
+}
+const msRetour = avec => avec ? `<button class="btn flat ms-retour" type="button" id="ms-retour">‹ Toutes les conversations</button>` : "";
+const msBrancherRetour = () => { const b = document.getElementById("ms-retour"); if (b) b.onclick = () => { msConv = null; accueil("messages"); }; };
+async function vueMessagesOikos(avecRetour) {
   clearInterval(msMinuteur);
   const charger = async () => { const { data, error } = await sb.from("messages").select("id,de_gerant,texte,cree_le,lu_le").eq("intervenante_id", moi.id).order("cree_le", { ascending: false }).limit(300); if (error) throw error; return data.reverse(); };
   let l = await charger();
-  contenu(`<h1>Messages</h1><p class="muted" style="margin-bottom:10px">Tes échanges avec OIKOS.</p>
+  contenu(`${msRetour(avecRetour)}<h1>${avecRetour ? "OIKOS" : "Messages"}</h1><p class="muted" style="margin-bottom:10px">Tes échanges avec OIKOS.</p>
     <div class="card ms-fil" id="ms-fil"></div>
     <form class="ms-form" id="ms-form"><textarea id="ms-texte" rows="2" maxlength="4000" required placeholder="Écrire à OIKOS…" aria-label="Message"></textarea><button class="btn primary" type="submit">Envoyer</button></form>`);
+  msBrancherRetour();
   const fil = document.getElementById("ms-fil"), zone = document.getElementById("ms-texte");
   const heure = d => new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const dessiner = (descendre) => {
@@ -1056,6 +1102,112 @@ async function vueMessages() {
       l = n; dessiner(); marquerLu();
     } catch (e) {}
   }, 15000);
+}
+
+/* ---------- Espace client (SQL 53) : les clients qui ont l'appli écrivent à leur intervenant, et ajoutent des demandes à la feuille du jour ---------- */
+/* Tant que le SQL 53 n'est pas lancé, tout ceci reste muet : la première réponse « table ou fonction absente » est retenue pour la session. */
+let ecAbsent = false, ecAppli = null, ecAppliLe = 0;
+const ecManque = e => !!e && (["PGRST205", "PGRST202", "PGRST204", "42P01", "42883", "42703"].includes(e.code) || e.status === 404 || /does not exist|could not find|not found/i.test(e.message || ""));
+async function ecLire(requete, vide = []) {
+  if (ecAbsent || !moi) return vide;
+  const { data, error } = await requete();
+  if (error) { if (ecManque(error)) ecAbsent = true; return vide; }
+  return data || vide;
+}
+/* Lesquels de mes clients ont l'appli (gardé 5 minutes) */
+async function ecClientsAvecAppli() {
+  if (ecAppli && Date.now() - ecAppliLe < 3e5) return ecAppli;
+  const l = await ecLire(() => sb.rpc("mes_clients_avec_appli"));
+  ecAppli = new Set((l || []).map(x => typeof x === "string" ? x : x && (x.mes_clients_avec_appli || x.client_id)).filter(Boolean)); ecAppliLe = Date.now();
+  return ecAppli;
+}
+async function ecNonLus() {
+  if (ecAbsent || !moi) return 0;
+  const { count, error } = await sb.from("client_messages").select("id", { count: "exact", head: true }).eq("canal", "presta").eq("presta_id", moi.id).eq("de", "client").is("lu_le", null);
+  if (error) { if (ecManque(error)) ecAbsent = true; return 0; }
+  return count || 0;
+}
+/* Une conversation par client confié qui a l'appli, ou qui a déjà écrit */
+async function ecConversations() {
+  const [avec, msgs] = await Promise.all([ecClientsAvecAppli(), ecLire(() => sb.from("client_messages").select("id,client_id,de,texte,cree_le,lu_le").eq("canal", "presta").eq("presta_id", moi.id).order("cree_le", { ascending: false }).limit(500))]);
+  if (ecAbsent) return [];
+  const ids = new Set([...avec, ...msgs.map(m => m.client_id)]);
+  return clients.filter(c => ids.has(c.id)).map(c => { const l = msgs.filter(m => m.client_id === c.id);
+    return { id: c.id, nom: c.nom, appli: avec.has(c.id), dernier: l[0] || null, nonLus: l.filter(m => m.de === "client" && !m.lu_le).length }; })
+    .sort((a, b) => a.dernier && b.dernier ? b.dernier.cree_le.localeCompare(a.dernier.cree_le) : a.dernier ? -1 : b.dernier ? 1 : a.nom.localeCompare(b.nom, "fr"));
+}
+async function vueMessagesClient(conv) {
+  clearInterval(msMinuteur);
+  const charger = async () => { const { data, error } = await sb.from("client_messages").select("id,de,texte,piece,cree_le,lu_le").eq("canal", "presta").eq("presta_id", moi.id).eq("client_id", conv.id).order("cree_le", { ascending: false }).limit(300); if (error) throw error; return data.reverse(); };
+  let l = await charger();
+  contenu(`${msRetour(true)}<h1>${esc(conv.nom)}</h1><p class="muted small" style="margin-bottom:10px">Ton client t'écrit depuis son appli. OIKOS voit aussi ces messages.${conv.appli ? "" : " Ce client n'a plus l'appli : tu peux relire, plus écrire."}</p>
+    <div class="card ms-fil" id="ms-fil"></div>
+    ${conv.appli ? `<form class="ms-form" id="ms-form"><textarea id="ms-texte" rows="2" maxlength="4000" required placeholder="Écrire à ${esc(conv.nom)}…" aria-label="Message"></textarea><button class="btn primary" type="submit">Envoyer</button></form>` : ""}`);
+  msBrancherRetour();
+  const fil = document.getElementById("ms-fil"), zone = document.getElementById("ms-texte");
+  const dessiner = (descendre) => {
+    const marque = m => m.de === "presta" ? (m.lu_le ? `<small class="ms-lu">${ico("ok")} Lu le ${msHeure(m.lu_le)}</small>` : `<small>Pas encore lu</small>`) : "";
+    const piece = m => m.piece ? `<small>${ico("doc")} Pièce jointe envoyée à OIKOS</small>` : "";
+    const premier = !fil.children.length, enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 60, garde = fil.scrollTop;
+    fil.innerHTML = l.map(m => `<div class="ms-b ${m.de === "presta" ? "moi" : ""}"><small style="margin:0 0 2px">${m.de === "presta" ? "Toi" : m.de === "oikos" ? "OIKOS" : esc(conv.nom)}</small>${esc(m.texte)}${piece(m)}<small>${msHeure(m.cree_le)}</small>${marque(m)}</div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.</p>`;
+    fil.scrollTop = !premier && !enBas && !descendre ? garde : fil.scrollHeight;
+  };
+  const marquerLu = async () => {
+    if (document.hidden || !l.some(m => m.de === "client" && !m.lu_le)) return;   // appli cachée : personne ne lit encore
+    const { data, error } = await sb.from("client_messages").update({ lu_le: new Date().toISOString() }).eq("canal", "presta").eq("presta_id", moi.id).eq("client_id", conv.id).eq("de", "client").is("lu_le", null).select("id,lu_le");
+    if (error) return;
+    (data || []).forEach(x => { const m = l.find(y => y.id === x.id); if (m) m.lu_le = x.lu_le; });
+    if (document.getElementById("ms-fil") === fil) dessiner();
+    majBadgeMessages();
+  };
+  dessiner(); marquerLu();
+  const form = document.getElementById("ms-form");
+  if (form) form.onsubmit = async e => {
+    e.preventDefault(); const texte = zone.value.trim(); if (!texte) return;
+    const b = e.submitter; if (b) b.disabled = true;
+    const { error } = await sb.from("client_messages").insert({ client_id: conv.id, canal: "presta", presta_id: moi.id, texte });
+    if (b) b.disabled = false;
+    if (error) return error.code === "42501" && /[àéèêç]| /.test(error.message || "") && !/row-level|policy/i.test(error.message) ? toast(error.message) : /row-level|policy/i.test(error.message || "") ? toast("Ce client n'a pas l'appli, ou il ne t'est plus confié.") : souci(error);
+    zone.value = ""; vibre(5); l = await charger(); dessiner(true);
+  };
+  msMinuteur = setInterval(async () => {
+    if (onglet !== "messages" || !document.getElementById("ms-fil")) return clearInterval(msMinuteur);
+    if (document.hidden) return;
+    try {
+      const n = await charger(), signe = x => x.map(m => m.id + (m.lu_le ? "l" : "")).join();
+      if (signe(n) === signe(l)) return marquerLu();
+      l = n; dessiner(); marquerLu();
+    } catch (e) {}
+  }, 15000);
+}
+/* Ce que le client a demandé pour ses passages : validé par la base (liste fermée) ou par OIKOS (demande libre). Le presta ne fait que cocher. */
+const EC_GENRES = { priorite: "À faire en priorité", ajout: "En plus aujourd'hui", autre: "En plus aujourd'hui" };
+async function ecConsignes(clientId) {
+  const l = await ecLire(() => sb.from("client_consignes").select("id,client_id,jour,genre,tache_id,libelle,fait_le,cree_le").eq("client_id", clientId).eq("etat", "ok").order("cree_le").limit(200));
+  const auj = ymdTxt(new Date()), j0 = debutJour().getTime();
+  const vivantes = l.filter(k => !k.fait_le || new Date(k.fait_le).getTime() >= j0);
+  return { jour: vivantes.filter(k => !k.jour || k.jour === auj || (k.jour < auj && !k.fait_le && k.jour >= ymdTxt(new Date(j0 - 7 * 864e5)))),
+           plusTard: vivantes.filter(k => k.jour && k.jour > auj && !k.fait_le) };
+}
+function ecBlocConsignes(cs) {
+  if (!cs.jour.length && !cs.plusTard.length) return "";
+  const ordre = { priorite: 0, ajout: 1, autre: 1 }, l = cs.jour.slice().sort((a, b) => ordre[a.genre] - ordre[b.genre]);
+  const parJour = {}; cs.plusTard.forEach(k => (parJour[k.jour] = parJour[k.jour] || []).push(k));
+  return `<div class="card ec-bloc"><b><span class="ic">${ico("personne")}</span> Demandé par le client</b>
+    ${l.length ? `<span class="muted small">Dans la limite du temps prévu : les priorités passent d'abord. Coche ce que tu as fait.</span>
+      ${l.map(k => `<button class="ec-ligne" type="button" data-ec-coche="${k.id}" aria-pressed="${!!k.fait_le}"><span class="rond">${k.fait_le ? COCHE : ""}</span><span class="quoi"><small>${EC_GENRES[k.genre] || "Demande"}</small><b>${esc(k.libelle)}</b></span></button>`).join("")}`
+      : `<span class="muted small">Rien pour aujourd'hui.</span>`}
+    ${Object.keys(parJour).sort().map(j => `<details><summary class="muted small">Pour le ${jourTxt(j + "T12:00")} : ${parJour[j].length} demande${parJour[j].length > 1 ? "s" : ""}</summary>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${parJour[j].map(k => `<span class="small"><b>${k.genre === "priorite" ? "Priorité" : "En plus"} :</b> ${esc(k.libelle)}</span>`).join("")}</div></details>`).join("")}</div>`;
+}
+/* Aujourd'hui : sur chaque passage, la marque « Le client a ajouté n demande(s) », qui ouvre la feuille de route */
+async function ecMarquesDuJour() {
+  const boutons = [...document.querySelectorAll("#contenu [data-route]")]; if (!boutons.length || ecAbsent) return;
+  const auj = ymdTxt(new Date());
+  const l = await ecLire(() => sb.from("client_consignes").select("client_id,jour").eq("etat", "ok").is("fait_le", null).or("jour.is.null,jour.lte." + auj).limit(500));
+  const nb = {}; l.forEach(k => { nb[k.client_id] = (nb[k.client_id] || 0) + 1; });
+  boutons.forEach(b => { const n = nb[b.dataset.route]; if (!n || !b.isConnected || b.parentElement.querySelector(".ec-marque")) return;
+    b.insertAdjacentHTML("beforebegin", `<button class="ec-marque" type="button" data-route="${b.dataset.route}" data-min="${b.dataset.min || 0}">${ico("personne")} Le client a ajouté ${n} demande${n > 1 ? "s" : ""}</button>`); });
 }
 
 /* ---------- Aujourd'hui : son planning du jour, et ce qui reste à déclarer ---------- */
@@ -1106,6 +1258,7 @@ async function vueJour() {
   };
   document.getElementById("declarer").onclick = () => accueil("mois");
   document.getElementById("voir-agenda").onclick = () => accueil("agenda");
+  ecMarquesDuJour().catch(() => {});   // ce que le client a ajouté pour aujourd'hui, sans ralentir l'écran
   chargerTaches().then(taches => {   // sa liste À faire, sans ralentir l'écran
     const b = document.getElementById("bloc-taches"); if (!b) return;
     const afaire = taches.filter(t => !t.fait_le), montrees = afaire.slice(0, 5), nbProp = taches.filter(propositionOuverte).length;
@@ -1758,6 +1911,7 @@ function ficheClient(id) {
       <dt>Clé</dt><dd>${esc(c.cle || "—")}</dd>
       <dt>Consignes</dt><dd>${esc(c.consignes || "—")}</dd>
     </dl>
+    <div id="ec-ecrire"></div>
     <div id="infos-oikos"></div>
     <h2 style="margin:6px 0 0">Photos</h2>
     <div class="card"><div class="photos" id="photos-client"><p class="muted small">Chargement…</p></div>
@@ -1768,6 +1922,9 @@ function ficheClient(id) {
     el.querySelector("#ouvrir-route").onclick = () => { fermer(); feuilleRoute(id, 0); };
     el.querySelector("#ajout-route").onclick = () => { fermer(); ajouterTacheRoute(id); };
     infosOikos(el.querySelector("#infos-oikos"), id);
+    ecClientsAvecAppli().then(avec => { const z = el.querySelector("#ec-ecrire"); if (!z || !z.isConnected || !avec.has(id)) return;
+      z.innerHTML = `<button class="btn doux" type="button" style="width:100%"><span class="ic">${ico("bulle")}</span>Écrire au client dans son appli</button>`;
+      z.firstChild.onclick = () => { fermer(); msConv = id; accueil("messages"); }; }).catch(() => {});
     const zone = el.querySelector("#photos-client");
     photosClient(zone, id);
     el.querySelector("#ajout-photo").onclick = () => ajouterPhoto(id, () => photosClient(zone, id));
@@ -1818,20 +1975,23 @@ async function feuilleRoute(clientId, minPassage) {
   let fermer = null;
   const afficher = async () => {
     const j0 = debutJour().toISOString();
-    const [tr, cr] = await Promise.all([
+    const [tr, cr, cs] = await Promise.all([
       sb.from("route_taches").select("*").eq("client_id", clientId).eq("actif", true).eq("termine", false),
-      sb.from("route_coches").select("*").eq("client_id", clientId).gte("fait_le", j0)]);
+      sb.from("route_coches").select("*").eq("client_id", clientId).gte("fait_le", j0),
+      ecConsignes(clientId).catch(() => ({ jour: [], plusTard: [] }))]);
     if (tr.error) { souci(tr.error); return ""; }
+    /* Les tâches habituelles que le client veut voir faites d'abord aujourd'hui */
+    const prio = new Set(cs.jour.filter(k => k.genre === "priorite" && !k.fait_le && k.tache_id).map(k => k.tache_id));
     const coches = cr.data || [], budget = minPassage || c.temps_semaine_min || 0;
     const liste = tr.data.map(t => ({ t, ...pointsTache(t, c.meteo), retardJ: retardRoute(t, c.meteo), coche: coches.filter(k => k.tache_id === t.id).sort((a, b) => b.fait_le.localeCompare(a.fait_le))[0] }))
-      .sort((a, b) => b.points - a.points || b.t.priorite - a.t.priorite);
-    const actives = liste.filter(o => o.coche || o.etat === "à faire" || o.etat === "bientôt");
+      .sort((a, b) => prio.has(b.t.id) - prio.has(a.t.id) || b.points - a.points || b.t.priorite - a.t.priorite);
+    const actives = liste.filter(o => o.coche || o.etat === "à faire" || o.etat === "bientôt" || prio.has(o.t.id));
     let cumul = 0;
     actives.forEach(o => { o.auProgramme = !budget || cumul < budget; cumul += o.t.duree_min || 0; });
     const reste = liste.filter(o => !actives.includes(o));
     const aFaire = actives.filter(o => !o.coche), enRetard = aFaire.filter(o => o.retardJ), rappels = aFaire.filter(o => +o.t.frequence_jours >= 30);
     const tempsDu = aFaire.reduce((s, o) => s + (o.t.duree_min || 0), 0), tempsRetard = enRetard.reduce((s, o) => s + (o.t.duree_min || 0), 0), plusLong = Math.max(0, ...enRetard.map(o => o.retardJ));
-    const tagEtat = o => o.coche ? "" : o.retardJ ? `<span class="tag warn" style="flex:none">En retard</span>` : o.etat === "à faire" ? `<span class="tag warn" style="flex:none">À faire</span>` : `<span class="tag" style="flex:none">Bientôt</span>`;
+    const tagEtat = o => o.coche ? "" : prio.has(o.t.id) ? `<span class="tag warn" style="flex:none">Priorité du client</span>` : o.retardJ ? `<span class="tag warn" style="flex:none">En retard</span>` : o.etat === "à faire" ? `<span class="tag warn" style="flex:none">À faire</span>` : `<span class="tag" style="flex:none">Bientôt</span>`;
     const ligne = o => `<div class="card" data-rt="${o.t.id}" style="gap:6px;${o.coche ? "opacity:.75" : ""}">
         <div class="row" style="justify-content:space-between;flex-wrap:nowrap;align-items:flex-start"><span style="min-width:0"><b>${esc(o.t.titre)}</b>${o.t.detail ? `<br><span class="muted small">${esc(o.t.detail)}</span>` : ""}</span>
           ${tagEtat(o)}</div>
@@ -1841,6 +2001,7 @@ async function feuilleRoute(clientId, minPassage) {
     const alertes = (c.meteo && c.meteo.alertes) || [];
     return `<h2 style="margin:0">${ico("route")} ${esc(c.nom || "Client")}</h2>
       <p class="muted small">Classées par priorité du moment. Les durées sont indicatives : fais au mieux, coche ce que tu as fait.</p>
+      ${ecBlocConsignes(cs)}
       ${alertes.length ? `<p class="tag warn" style="padding:8px 12px;border-radius:12px">${alertes.map(a => ico("alerte") + " " + esc(a.texte)).join("<br>")}</p>` : ""}
       ${budget ? `<p><b>Temps prévu : ≈ ${heuresTxt(budget)}</b></p>` : ""}
       ${enRetard.length ? `<div class="card" style="border-color:var(--warn);gap:4px"><b><span class="ic">${ico("alerte")}</span> Plus à faire que d'habitude</b><span class="small">${enRetard.length} tâche${enRetard.length > 1 ? "s ont" : " a"} sauté ${enRetard.length > 1 ? "leur" : "son"} tour : aucune coche depuis ${depuisTxt(plusLong)} (par exemple une absence sans remplaçant).${tempsRetard ? " Cela représente ≈ " + heuresTxt(tempsRetard) + " de travail en retard, sans doute un peu plus car le lieu a attendu." : ""}${budget && tempsDu > budget ? " Tout faire demanderait ≈ " + heuresTxt(tempsDu) + " : commence par le haut de la liste, le reste passera au prochain passage." : ""}</span></div>` : ""}
@@ -1854,6 +2015,14 @@ async function feuilleRoute(clientId, minPassage) {
   const brancher = el => {
     el.onclick = async e => {
       if (e.target.closest("#route-proposer")) { e.preventDefault(); if (fermer) fermer(); return ajouterTacheRoute(clientId); }
+      const k = e.target.closest("[data-ec-coche]");
+      if (k) {   // la coche change tout de suite à l'écran, puis la base confirme
+        const fait = k.getAttribute("aria-pressed") !== "true";
+        k.setAttribute("aria-pressed", fait); k.querySelector(".rond").innerHTML = fait ? COCHE : ""; vibre(5);
+        const { error } = await sb.from("client_consignes").update({ fait_le: fait ? new Date().toISOString() : null }).eq("id", k.dataset.ecCoche);
+        if (error) souci(error);
+        return redessiner(el);
+      }
       const a = e.target.closest("[data-annule]");
       if (a) { const { error } = await sb.from("route_coches").delete().eq("id", a.dataset.annule); if (error) return souci(error); toast("Coche annulée"); return redessiner(el); }
       const b = e.target.closest("[data-c]"); if (!b) return;

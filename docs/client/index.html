@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F7F5EE">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<title>OIKOS Espace client</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone-192.png">
+<link rel="apple-touch-icon" href="icone-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<style>
+/* Espace client OIKOS : même charte que l'appli des intervenants (Lumière le jour, Nuit d'olive en mode sombre).
+   Le client ne lit et n'écrit que par les fonctions de la base (SQL 53) : aucune table n'est lue en direct. */
+:root{
+  --bg:#F7F5EE; --surface:#FFFFFF; --sunk:#EDEAE0; --ink:#23241F; --muted:#5A5B52; --line:#DAD7CA;
+  --accent:#525A44; --accent-ink:#FFFFFF; --accent-soft:#E7E8DA;
+  --go:#3E7D3A; --stop:#A8432B; --stop-soft:#FBE3DE; --warn:#8A5A0E; --warn-soft:#F4E9CC;
+  --carte:#FFFFFF; --carte-bord:transparent; --ombre:0 1px 2px rgb(35 36 31 / .05),0 14px 32px rgb(35 36 31 / .07); --ombre-btn:0 10px 26px rgb(82 90 68 / .26);
+  --bouton:#F0EEE4; --mono:#D6D9CC; --tri:transparent; --trait:transparent; --bulle-moi:#525A44; --bulle-moi-ink:#FFFFFF;
+  --titre:Fraunces,"Cormorant Garamond",Georgia,serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1B1D15; --surface:#26291F; --sunk:#14160F; --ink:#F3F1E7; --muted:#BDBEAE; --line:#3D4033;
+  --accent:#C9D4AA; --accent-ink:#1B1D15; --accent-soft:#363A2B;
+  --go:#7CC26F; --stop:#E9775F; --stop-soft:#43231A; --warn:#E0B458; --warn-soft:#3A3115;
+  --carte:rgb(243 241 231 / .075); --carte-bord:rgb(243 241 231 / .16); --ombre:0 24px 50px rgb(0 0 0 / .28); --ombre-btn:none;
+  --bouton:rgb(243 241 231 / .08); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --bulle-moi:#C9D4AA; --bulle-moi-ink:#1B1D15; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#1B1D15; --surface:#26291F; --sunk:#14160F; --ink:#F3F1E7; --muted:#BDBEAE; --line:#3D4033;
+  --accent:#C9D4AA; --accent-ink:#1B1D15; --accent-soft:#363A2B;
+  --go:#7CC26F; --stop:#E9775F; --stop-soft:#43231A; --warn:#E0B458; --warn-soft:#3A3115;
+  --carte:rgb(243 241 231 / .075); --carte-bord:rgb(243 241 231 / .16); --ombre:0 24px 50px rgb(0 0 0 / .28); --ombre-btn:none;
+  --bouton:rgb(243 241 231 / .08); --mono:#5C6349; --tri:#2B2E21; --trait:rgb(243 241 231 / .22); --bulle-moi:#C9D4AA; --bulle-moi-ink:#1B1D15; color-scheme:dark }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 "Inter Tight",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent;overflow-wrap:anywhere}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#app{max-width:560px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column}
+.page{flex:1;padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 104px);display:flex;flex-direction:column;gap:14px}
+.page.solo{padding:calc(env(safe-area-inset-top,0px) + 28px) 20px calc(env(safe-area-inset-bottom,0px) + 28px);justify-content:center;gap:18px}
+h1{font-family:var(--titre);font-weight:500;font-size:28px;line-height:1.15;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h2{font-family:var(--titre);font-weight:500;font-size:20px;line-height:1.2;margin:0;text-wrap:balance}
+h3{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 0}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.ico{width:1.15em;height:1.15em;vertical-align:-.2em;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.fond{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.fond svg{position:absolute;inset:-10%;width:120%;height:120%}
+.fond .t1{fill:var(--tri)} .fond .t2{fill:none;stroke:var(--trait);stroke-width:.14}
+/* Marque */
+.tuile{flex:none;background:#F7F5EE;border:1px solid var(--line);border-radius:24px;object-fit:contain;width:112px;height:112px;padding:8px}
+.marque-acc{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.marque-nom{font-family:var(--titre);font-size:22px;line-height:1.15;font-weight:500}
+.marque-sous{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.entete{position:sticky;top:0;z-index:9;display:flex;align-items:center;justify-content:space-between;gap:10px;background:color-mix(in srgb,var(--bg) 84%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 10px}
+.entete-marque{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;letter-spacing:.2em}
+.entete-marque small{display:block;font-size:11px;font-weight:500;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.mono{width:30px;height:28px;flex:none}
+.mono path:first-child{fill:var(--mono)} .mono path:last-child{fill:none;stroke:var(--ink);stroke-width:1.3;stroke-linejoin:round}
+.compte-btn{border:0;background:var(--bouton);border-radius:999px;min-height:44px;padding:0 14px;display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;cursor:pointer}
+/* Blocs */
+.card{background:var(--carte);border:1px solid var(--carte-bord);border-radius:22px;box-shadow:var(--ombre);padding:18px 18px;display:flex;flex-direction:column;gap:10px}
+.card.note{background:var(--warn-soft);box-shadow:none;border-color:transparent}
+.card.alerte{background:var(--stop-soft);box-shadow:none;border-color:transparent}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.entre{justify-content:space-between}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:12px 18px;border-radius:16px;border:1px solid transparent;background:var(--bouton);font-weight:500;font-size:16px;cursor:pointer;text-decoration:none;color:var(--ink);text-align:center;transition:transform .14s,opacity .2s}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-radius:999px;box-shadow:var(--ombre-btn);font-weight:600}
+.btn.contour{background:transparent;border-color:var(--accent);color:var(--accent)}
+.btn.flat{background:transparent;color:var(--accent);min-height:44px;font-size:15px}
+.btn.petit{min-height:44px;padding:8px 14px;font-size:15px}
+.btn.stop{background:transparent;color:var(--stop)}
+.btn:disabled{opacity:.5}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:15px;color:var(--muted)}
+label.f input,label.f select,label.f textarea{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--surface);color:var(--ink);font-size:17px;width:100%}
+label.f textarea{min-height:110px;resize:vertical}
+.deux{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;align-items:flex-start;gap:10px;font-size:15px;padding:6px 0}
+.chk input{width:24px;height:24px;flex:none;margin-top:1px;accent-color:var(--accent)}
+.err{color:var(--stop);font-weight:600;min-height:1.2em}
+.tag{display:inline-block;font-size:13px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--accent-soft);color:var(--ink);white-space:nowrap}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.ok{background:color-mix(in srgb,var(--go) 16%,transparent);color:var(--go)}
+.tag.non{background:var(--stop-soft);color:var(--stop)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;min-height:44px;padding:6px 16px;font-size:15px;font-weight:500;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:14px;padding:4px;gap:4px}
+.seg button{border:0;background:none;border-radius:10px;min-height:44px;padding:8px;font-weight:500;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgb(0 0 0 / .15)}
+.ligne{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+.ligne:first-child{border-top:0;padding-top:0}
+.ligne:last-child{padding-bottom:0}
+.corps{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.rond{width:40px;height:40px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px}
+.doc{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;text-align:left;padding:12px 0;border-top:1px solid var(--line);cursor:pointer;min-height:56px}
+.doc:first-child{border-top:0}
+.doc b{font-weight:500}
+.mini{flex:none;width:52px;height:66px;border-radius:8px;background:var(--sunk);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:20px}
+.mini img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;background:#fff}
+.galerie{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.carte-doc{border:0;padding:0;background:var(--carte);border:1px solid var(--carte-bord);border-radius:18px;box-shadow:var(--ombre);overflow:hidden;cursor:pointer;text-align:left;display:flex;flex-direction:column}
+.carte-doc .vignette{aspect-ratio:3/4;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:34px;color:var(--muted);overflow:hidden}
+.carte-doc .vignette img,.carte-doc .vignette canvas{width:100%;height:100%;object-fit:cover;object-position:top;display:block;background:#fff}
+.carte-doc .legende{padding:10px 12px 12px;display:flex;flex-direction:column;gap:2px}
+.carte-doc .legende b{font-weight:500;line-height:1.3}
+.apercu{display:flex;flex-direction:column;gap:10px;align-items:center;background:var(--sunk);border-radius:14px;padding:10px;min-height:160px;justify-content:center}
+.apercu img,.apercu canvas{max-width:100%;height:auto;border-radius:6px;background:#fff;box-shadow:0 1px 6px rgb(0 0 0 / .18)}
+details.mois{border-top:1px solid var(--line);padding:12px 0}
+details.mois:first-of-type{border-top:0;padding-top:0}
+details.mois summary{display:flex;justify-content:space-between;gap:10px;cursor:pointer;min-height:44px;align-items:center;list-style:none;font-weight:500}
+details.mois summary::-webkit-details-marker{display:none}
+details.mois .passage{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:15px}
+.rdv{display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.rdv:first-child{border-top:0;padding-top:0} .rdv:last-child{padding-bottom:0}
+.rdv .jour{flex:none;width:54px;height:58px;border-radius:14px;background:var(--accent-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.rdv .jour b{font-family:var(--titre);font-size:22px;font-weight:500} .rdv .jour small{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.rdv.passe{opacity:.55}
+.tache{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.tache:first-child{border-top:0;padding-top:0} .tache:last-child{padding-bottom:0}
+.etoile{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;min-height:44px;padding:0 14px;display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500;cursor:pointer;color:var(--muted)}
+.etoile[aria-pressed="true"]{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.etoile[aria-pressed="true"] .ico{fill:currentColor}
+.ajout-ligne{display:flex;gap:8px;align-items:center}
+.ajout-ligne input{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:11px 14px;background:var(--surface);font-size:16px;min-height:44px}
+.resume{display:flex;flex-direction:column;gap:8px}
+.resume .item{display:flex;align-items:center;gap:10px;background:var(--sunk);border-radius:14px;padding:6px 6px 6px 14px;min-height:48px}
+.resume .item.prio{background:var(--warn-soft)}
+.resume .item .corps b{font-weight:500}
+.resume .item button{border:0;background:none;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);flex:none}
+.defile{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none} .defile::-webkit-scrollbar{display:none}
+.defile .chip{flex:none;white-space:nowrap}
+.conv{position:relative}
+.conv .badge{position:static;margin-left:6px;display:inline-block;vertical-align:middle}
+.bulle .de{display:block;font-size:12px;font-weight:600;letter-spacing:.02em;margin-bottom:2px;color:var(--accent)}
+.reponse{border-left:3px solid var(--accent);padding:2px 0 2px 12px;white-space:pre-wrap}
+.pre{white-space:pre-wrap}
+/* Navigation */
+.nav{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--surface) 92%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
+.nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(var(--n,5),1fr)}
+.nav button{position:relative;border:0;background:none;padding:9px 2px 10px;min-height:58px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer}
+.nav button .ico{width:24px;height:24px}
+.nav button[aria-current="page"]{color:var(--accent)}
+.nav button[aria-current="page"]::before{content:"";position:absolute;top:5px;width:46px;height:30px;border-radius:999px;background:var(--accent-soft);z-index:-1}
+.badge{position:absolute;top:3px;left:calc(50% + 7px);min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:var(--stop);color:#fff;font-size:12px;line-height:19px;font-weight:600}
+/* Messages */
+.fil{display:flex;flex-direction:column;gap:8px}
+.bulle{max-width:86%;padding:10px 14px;border-radius:18px 18px 18px 6px;background:var(--surface);border:1px solid var(--line);align-self:flex-start;white-space:pre-wrap}
+.bulle.moi{align-self:flex-end;background:var(--bulle-moi);color:var(--bulle-moi-ink);border-color:transparent;border-radius:18px 18px 6px 18px}
+.bulle small{display:block;font-size:12px;opacity:.75;margin-top:3px;white-space:normal}
+.bulle .piece{display:flex;align-items:center;gap:8px;border:0;background:color-mix(in srgb,currentColor 12%,transparent);color:inherit;border-radius:12px;padding:8px 10px;margin-top:4px;cursor:pointer;min-height:44px;text-align:left;width:100%}
+.ecrire{position:sticky;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);display:flex;gap:8px;align-items:flex-end;background:var(--bg);padding:8px 0 4px;margin-top:auto}
+.ecrire textarea{flex:1;border:1px solid var(--line);border-radius:20px;padding:12px 14px;background:var(--surface);min-height:48px;max-height:160px;resize:none;font-size:16px}
+.ecrire .rondbtn{width:48px;height:48px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;background:var(--bouton);font-size:20px}
+.ecrire .rondbtn.envoi{background:var(--accent);color:var(--accent-ink)}
+.jointe{display:flex;align-items:center;gap:8px;font-size:14px;background:var(--accent-soft);border-radius:12px;padding:6px 6px 6px 12px}
+.jointe button{border:0;background:none;min-width:44px;min-height:44px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.vignettes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.vignettes figure{margin:0;position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;background:var(--sunk)}
+.vignettes img{width:100%;height:100%;object-fit:cover;display:block}
+.vignettes figure button{position:absolute;top:4px;right:4px;width:36px;height:36px;border-radius:50%;border:0;background:rgb(0 0 0 / .6);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.vignettes .ajout{border:1px dashed var(--line);border-radius:14px;aspect-ratio:1;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);cursor:pointer}
+/* Feuille du bas */
+.voile{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:20;display:flex;align-items:flex-end;justify-content:center;animation:fondu .2s backwards}
+.feuille{background:var(--bg);width:100%;max-width:560px;max-height:92dvh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom,0px) + 20px);display:flex;flex-direction:column;gap:12px;animation:monte .3s cubic-bezier(.2,.8,.2,1) backwards}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:14px;z-index:30;max-width:calc(100vw - 32px);font-weight:500;text-align:center}
+.charge{display:flex;justify-content:center;padding:44px 0}
+.charge svg{width:38px;height:34px;overflow:visible}
+.charge path{fill:none;stroke:var(--accent);stroke-width:1.2;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:32 68;animation:trace 1.3s linear infinite}
+@keyframes fondu{from{opacity:0}}
+@keyframes monte{from{transform:translateY(40px);opacity:0}}
+@keyframes trace{to{stroke-dashoffset:-100}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="fond" aria-hidden="true"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><path class="t1" d="M50 12 92 84H8Z"/><path class="t2" d="M44 20 86 70 16 88Z"/></svg></div>
+<div id="app"><div class="charge"><svg viewBox="0 0 20 18" aria-label="Chargement"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" integrity="sha384-2zrRDgDHSYB/GN3nFW3fsZXoxEhKIr3N2h63Tc6DEOB9JJdFIu8xMJT2Cph/gBil" crossorigin="anonymous"></script>
+<script>
+/* ===================== Réglages ===================== */
+/* Adresse et clé PUBLIQUE du projet (faites pour être dans l'appli : la base protège les données elle-même) */
+const SB_URL = "https://nzxphozupnmqyikitwhv.supabase.co";
+const SB_CLE = "sb_publishable_lBCpThUu95LiYhyYy2VZfA_0NZRFE1q";
+const TEL_OIKOS = "07 81 00 56 03";
+const SEAU = "espace-client";
+const POIDS_MAX = 10 * 1024 * 1024;
+const PHOTOS_MAX = 6;
+const ACTIVITES = ["Ménage", "Jardinage", "Bricolage", "Cours", "Autre"];
+const sb = window.supabase.createClient(SB_URL, SB_CLE, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "oikos-client-session" } });
+
+/* ===================== Outils ===================== */
+const app = document.getElementById("app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ICONES = { agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", horloge: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2", lien: "M9 15l6-6M10.5 6.5l1.2-1.2a4 4 0 0 1 5.7 5.7l-1.2 1.2M13.5 17.5l-1.2 1.2a4 4 0 0 1-5.7-5.7l1.2-1.2", accueil: "M4 11 12 4l8 7v9h-5v-6H9v6H4z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", trombone: "M20 11.5 12.5 19a5 5 0 0 1-7-7L13 4.5a3.5 3.5 0 0 1 5 5L10.5 17a2 2 0 0 1-3-3L14 7.5", envoi: "M21 3 3 10.5l7.5 3L13.5 21z", croix: "M6 6l12 12M18 6 6 18", chevron: "M9 6l6 6-6 6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", etoile: "M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.8z", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", sortie: "M14 4H5v16h9M10 12h10M16 8l4 4-4 4", sablier: "M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", ecran: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM12 8v8M8 12h8" };
+const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[n]}"/></svg>`;
+const MONO = `<svg class="mono" viewBox="0 0 30 28" aria-hidden="true"><path d="M17 3 28 26H6Z"/><path d="M9 2 28 21 2 26Z"/></svg>`;
+const CHARGE = `<div class="charge"><svg viewBox="0 0 20 18" aria-label="Chargement"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div>`;
+const LS = {
+  get(k) { try { return JSON.parse(localStorage.getItem("oikos-client-" + k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem("oikos-client-" + k, JSON.stringify(v)); } catch (e) {} },
+  vider() { try { Object.keys(localStorage).filter(k => k.startsWith("oikos-client-") && k !== "oikos-client-session").forEach(k => localStorage.removeItem(k)); } catch (e) {} }
+};
+let tt; function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 4200); }
+const reseau = e => !navigator.onLine || /fetch|network|réseau/i.test(String(e && (e.message || e)));
+const refuse = e => !!e && (e.code === "42501" || /acces_refuse|banned/i.test(e.message || ""));
+const pad2 = n => String(n).padStart(2, "0");
+const jourFr = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const jourCourt = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+const quandFr = d => { d = new Date(d); return jourCourt(d) + " à " + d.getHours() + "h" + pad2(d.getMinutes()); };
+const chiffres = t => String(t || "").replace(/[^\d+]/g, "");
+/* Ce que la base répond quand un envoi n'est pas pris */
+const MOTIFS = {
+  consigne: "Vous avez déjà beaucoup modifié la feuille de route aujourd'hui. Réessayez demain, ou écrivez à OIKOS.",
+  quota: "Vous avez déjà envoyé plusieurs demandes récemment. Pour que nous puissions bien vous répondre, réessayez un peu plus tard.",
+  pause: "Les envois sont en pause pour le moment. Pour une urgence, appelez OIKOS au " + TEL_OIKOS + ".",
+  lecture_seule: "Votre espace est en consultation seule. Pour toute question, appelez OIKOS au " + TEL_OIKOS + ".",
+  fichier: "Le fichier joint n'a pas pu être pris en compte. Réessayez avec une photo ou un PDF.",
+  vide: "Écrivez votre message avant de l'envoyer.", trop_long: "Votre message est trop long.", texte: "Décrivez votre demande en quelques mots.",
+  photos: "Six photos au maximum.", invalide: "Cette demande n'a pas pu être enregistrée.", incomplet: "Il manque une information, ou l'IBAN n'est pas reconnu.", acces: "Votre accès n'est plus ouvert."
+};
+const motif = m => MOTIFS[m] || "L'envoi n'a pas abouti. Réessayez dans un instant.";
+function feuille(html, brancher) {
+  const v = document.createElement("div"); v.className = "voile";
+  v.innerHTML = `<div class="feuille" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(v);
+  const fermer = () => v.remove();
+  v.addEventListener("click", e => { if (e.target === v || e.target.closest("[data-fermer]")) fermer(); });
+  if (brancher) brancher(v.querySelector(".feuille"), fermer);
+  return fermer;
+}
+function page(html, solo) { app.innerHTML = `<main class="page${solo ? " solo" : ""}">${html}</main>`; window.scrollTo(0, 0); }
+/* Appel d'une fonction de la base. Rend { ok, motif } ; un accès coupé ramène à l'écran de fin. */
+async function appel(nom, args) {
+  const { data, error } = await sb.rpc(nom, args || {});
+  if (error) { if (refuse(error)) { await sortir(); ecranFin(); return { ok: false, coupe: true }; } return { ok: false, erreur: reseau(error) ? "Pas de réseau : réessayez dans un instant." : "L'envoi n'a pas abouti. Réessayez dans un instant." }; }
+  if (data && data.ok === false) return { ok: false, erreur: motif(data.motif) };
+  return { ok: true, data };
+}
+
+/* ===================== Accès ===================== */
+let D = null, onglet = "accueil", minuteur = null;
+async function sortir() { clearInterval(minuteur); D = null; LS.vider(); try { await sb.auth.signOut(); } catch (e) {} }
+async function demarrer() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return ecranCode();
+  suite();
+}
+async function charger() {
+  const { data, error } = await sb.rpc("client_ouverture");
+  if (error) {
+    if (refuse(error)) { await sortir(); ecranFin(); return false; }
+    if (reseau(error)) { if (!D) ecranHorsLigne(); return false; }
+    if (!D) ecranHorsLigne("Le service ne répond pas pour le moment.");
+    return false;
+  }
+  D = data; return true;
+}
+async function suite() {
+  if (!(await charger())) return;
+  if (D.compte.mdp_provisoire) return ecranNouveauMdp(true);
+  clearInterval(minuteur);
+  minuteur = setInterval(async () => { if (document.hidden || !D || document.querySelector(".voile")) return; if (saisieEnCours()) return; if (await charger()) dessiner(true); }, onglet === "messages" ? 25000 : 60000);
+  accueil(new URLSearchParams(location.search).get("onglet") || "accueil");
+}
+const LOGO = `<div class="marque-acc"><img class="tuile" src="logo-oikos.png" alt=""><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace client</div></div>`;
+function ecranCode(message) {
+  page(`${LOGO}
+    <h1>Bienvenue</h1>
+    <p class="muted">Cet espace est réservé aux clients d'OIKOS. Entrez votre e-mail et le code d'accès reçu par mail, ou votre mot de passe si vous l'avez déjà choisi.</p>
+    ${message ? `<p class="card note">${esc(message)}</p>` : ""}
+    <form class="stack" id="f">
+      <label class="f">Votre e-mail<input id="email" type="email" autocomplete="username" required inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+      <label class="f">Code d'accès ou mot de passe<input id="code" type="password" autocomplete="current-password" required autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+      <label class="chk"><input type="checkbox" id="voir">Afficher ce que je tape</label>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn primary" type="submit">Entrer</button>
+    </form>
+    <button class="btn flat" id="oubli" type="button">J'ai oublié mon mot de passe</button>`, true);
+  document.getElementById("f").onsubmit = async e => {
+    e.preventDefault();
+    const err = document.getElementById("err"), b = e.submitter; err.textContent = ""; b.disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim().toLowerCase(), password: document.getElementById("code").value.trim() });
+    b.disabled = false;
+    if (error) { err.textContent = reseau(error) ? "Pas de réseau : réessayez." : /banned/i.test(error.message) ? "Votre accès n'est plus ouvert." : "E-mail ou code incorrect. Vérifiez qu'il n'y a ni espace ni majuscule en trop."; return; }
+    suite();
+  };
+  document.getElementById("voir").onchange = e => document.getElementById("code").type = e.target.checked ? "text" : "password";
+  document.getElementById("oubli").onclick = () => feuille(`<h2>Mot de passe oublié</h2>
+    <p>Appelez OIKOS au ${TEL_OIKOS} : nous vous enverrons un nouveau code d'accès par mail. Vous choisirez ensuite un nouveau mot de passe.</p>
+    <a class="btn primary" href="tel:${chiffres(TEL_OIKOS)}">${ico("tel")} Appeler OIKOS</a>
+    <button class="btn flat" data-fermer>Fermer</button>`);
+}
+function ecranNouveauMdp(obligatoire) {
+  page(`${LOGO}
+    <h1>${obligatoire ? "Choisissez votre mot de passe" : "Changer mon mot de passe"}</h1>
+    <p class="muted">${obligatoire ? "Le code d'accès ne sert qu'une fois. " : ""}Au moins 8 caractères. Vous seul le connaissez.</p>
+    <form class="stack" id="f">
+      <label class="f">Nouveau mot de passe<input id="m1" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="f">Encore une fois<input id="m2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn primary" type="submit">Valider</button>
+      ${obligatoire ? "" : `<button class="btn flat" type="button" id="annuler">Annuler</button>`}
+    </form>`, true);
+  if (!obligatoire) document.getElementById("annuler").onclick = () => accueil("compte");
+  document.getElementById("f").onsubmit = async e => {
+    e.preventDefault();
+    const m1 = document.getElementById("m1").value, m2 = document.getElementById("m2").value, err = document.getElementById("err");
+    if (m1 !== m2) { err.textContent = "Les deux mots de passe ne sont pas identiques."; return; }
+    e.submitter.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: m1 });
+    if (error) { e.submitter.disabled = false; err.textContent = reseau(error) ? "Pas de réseau : réessayez." : /different|same/i.test(error.message) ? "Choisissez un mot de passe différent du code d'accès." : /weak|short|least/i.test(error.message) ? "Mot de passe trop simple : allongez-le." : "Le mot de passe n'a pas pu être enregistré."; return; }
+    const r = await appel("client_mdp_choisi"); if (r.coupe) return;
+    toast("Mot de passe enregistré");
+    if (obligatoire) suite(); else { D.compte.mdp_provisoire = false; accueil("compte"); }
+  };
+}
+function ecranFin() {
+  page(`${LOGO}<h1>Votre accès n'est plus ouvert</h1>
+    <p class="muted">Pour toute question, appelez OIKOS au ${TEL_OIKOS}.</p>
+    <a class="btn primary" href="tel:${chiffres(TEL_OIKOS)}">${ico("tel")} Appeler OIKOS</a>
+    <button class="btn flat" id="re">Me connecter avec un autre compte</button>`, true);
+  document.getElementById("re").onclick = () => ecranCode();
+}
+function ecranHorsLigne(texte) {
+  page(`${LOGO}<h1>Connexion impossible</h1><p class="muted">${esc(texte || "Vérifiez votre connexion à Internet, puis réessayez.")}</p>
+    <button class="btn primary" id="re">Réessayer</button>`, true);
+  document.getElementById("re").onclick = () => { app.innerHTML = CHARGE; demarrer(); };
+}
+
+/* ===================== Cadre : en-tête, page, onglets ===================== */
+/* L'onglet « Avance immédiate » n'existe que tant que le formulaire est à remplir. Ensuite il est rangé dans Mon compte. */
+const urssafAFaire = () => D.compte.urssaf === "a_faire" && !LS.get("urssaf-range");
+const nonLus = conv => D.messages.filter(m => m.de !== "client" && !m.lu_le && (!conv || (conv === "oikos" ? m.canal === "oikos" : m.presta_id === conv))).length;
+const nouveau = (liste, cle) => { const vu = LS.get("vu-" + cle) || 0; return liste.filter(x => x.decide_le && new Date(x.decide_le) > vu).length; };
+const nouveauxDocs = () => { const vu = LS.get("vu-documents"); if (vu == null) return 0; return D.documents.filter(x => new Date(x.cree_le) > vu).length; };
+function onglets() {
+  const l = [["accueil", "Accueil", "accueil", 0], ["suivi", "Suivi", "agenda", nouveau(D.modifs, "modifs")], ["demander", "Demander", "plus", nouveau(D.demandes, "demandes")],
+    ["messages", "Messages", "bulle", nonLus()], ["documents", "Documents", "dossier", nouveauxDocs()]];
+  if (urssafAFaire()) l.push(["urssaf", "Avance", "euro", 0]);
+  return l;
+}
+const saisieEnCours = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || brouillon.photos.length > 0 || !!msPiece || Array.from(document.querySelectorAll("textarea")).some(t => t.value.trim()); };
+function accueil(o) {
+  if (o) onglet = o;
+  if (!VUES[onglet] || (onglet === "urssaf" && D.compte.urssaf === "fait")) onglet = "accueil";
+  dessiner();
+  window.scrollTo(0, 0);
+}
+function dessiner(silencieux) {
+  if (!D) return;
+  const l = onglets();
+  const haut = window.scrollY;
+  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}<div>OIKOS<small>Espace client</small></div></div>
+      <button class="compte-btn" id="vers-compte" type="button">${ico("personne")}<span>Mon compte</span></button></header>
+    <main class="page" id="page"></main>
+    <nav class="nav" aria-label="Navigation"><div style="--n:${l.length}">${l.map(([k, t, i, n]) => `<button type="button" data-o="${k}" ${k === onglet ? 'aria-current="page"' : ""}>${ico(i)}${n ? `<span class="badge">${n}</span>` : ""}<span>${t}</span></button>`).join("")}</div></nav>`;
+  app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) accueil(b.dataset.o); };
+  document.getElementById("vers-compte").onclick = () => accueil("compte");
+  VUES[onglet](document.getElementById("page"));
+  if (silencieux) window.scrollTo(0, haut);
+}
+const bandeauEtat = () => D.compte.lecture_seule ? `<div class="card note"><b>${ico("cadenas")} Consultation seule</b><p class="small">Vous pouvez tout consulter. Pour une demande, appelez OIKOS au ${TEL_OIKOS}.</p></div>`
+  : D.compte.pause_jusqu ? `<div class="card note"><b>${ico("sablier")} Envois en pause jusqu'au ${quandFr(D.compte.pause_jusqu)}</b><p class="small">Nous avons bien reçu vos demandes. Pour une urgence, appelez OIKOS au ${TEL_OIKOS}.</p></div>` : "";
+const bloque = () => D.compte.lecture_seule || !!D.compte.pause_jusqu;
+
+/* ===================== Accueil ===================== */
+/* Un rendez-vous se lit sans se fixer sur l'heure : « vers 9h », « environ 2 h » */
+const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const vers = d => { d = new Date(d); return "vers " + d.getHours() + "h" + (d.getMinutes() ? pad2(d.getMinutes()) : ""); };
+const dureeRdv = r => { const m = Math.round((new Date(r.fin) - new Date(r.debut)) / 6e4); return m > 0 ? "environ " + (Math.round(m / 30) / 2).toLocaleString("fr-FR") + " h" : ""; };
+const RETARD = "Les horaires sont indicatifs : selon ses trajets et ses autres passages, votre intervenant peut arriver un peu plus tôt ou un peu plus tard.";
+const ligneRdv = (r, passe) => { const d = new Date(r.debut); return `<div class="rdv ${passe ? "passe" : ""}"><span class="jour"><small>${JOURS[d.getDay()].slice(0, 3)}.</small><b>${d.getDate()}</b></span>
+    <div class="corps"><b>${JOURS[d.getDay()][0].toUpperCase() + JOURS[d.getDay()].slice(1)} ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</b>
+    <span class="muted small">${vers(d)}${dureeRdv(r) ? " · " + dureeRdv(r) : ""}${r.prenom ? " · " + esc(r.prenom) : ""}</span></div></div>`; };
+const nomRef = r => [r.prenom, r.nom].filter(Boolean).join(" ");
+function vueAccueil(z) {
+  const c = D.client, n = nonLus(), nd = nouveau(D.demandes, "demandes"), nm = nouveau(D.modifs, "modifs");
+  const prochain = D.rdv.find(r => new Date(r.fin) > Date.now());
+  const referents = D.referents.map((r, i) => `<button class="doc" type="button" data-ref="${i}"><span class="rond">${ico("personne")}</span>
+      <span class="corps"><b>${esc(nomRef(r))}</b><span class="muted small">${esc(r.activite || "Intervenant")}</span></span>${ico("chevron")}</button>`).join("");
+  const nouvelles = [n ? `<button class="doc" data-va="messages"><span class="rond">${ico("bulle")}</span><span class="corps"><b>${n} nouveau${n > 1 ? "x" : ""} message${n > 1 ? "s" : ""}</b></span>${ico("chevron")}</button>` : "",
+    nd ? `<button class="doc" data-va="demander"><span class="rond">${ico("ok")}</span><span class="corps"><b>OIKOS a répondu à votre demande</b></span>${ico("chevron")}</button>` : "",
+    nm ? `<button class="doc" data-va="suivi" data-suivi="route"><span class="rond">${ico("route")}</span><span class="corps"><b>Réponse à votre demande de modification</b></span>${ico("chevron")}</button>` : ""].join("");
+  z.innerHTML = `<div><p class="muted">Bonjour,</p><h1>${esc(c.nom)}</h1></div>
+    ${bandeauEtat()}
+    ${nouvelles ? `<section class="card" style="gap:0">${nouvelles}</section>` : ""}
+    ${prochain ? `<section class="card"><div class="row entre"><h2>Prochain passage</h2><button class="btn flat petit" data-va="suivi" data-suivi="rdv">Tout l'agenda</button></div><div>${ligneRdv(prochain)}</div><p class="muted small">${RETARD}</p></section>` : ""}
+    ${referents ? `<section class="card"><h2>Votre intervenant${D.referents.length > 1 ? "s" : ""}</h2><div>${referents}</div></section>` : ""}
+    <section class="stack">
+      <button class="btn primary" data-va="demander">${ico("plus")} Demander un service</button>
+      <button class="btn contour" data-va="messages">${ico("bulle")} Écrire à OIKOS</button>
+    </section>
+    ${urssafAFaire() ? `<section class="card"><h2>Avance immédiate du crédit d'impôt</h2><p class="muted">Avec l'avance immédiate de l'URSSAF, vous ne payez que la moitié de vos factures : le crédit d'impôt est déduit tout de suite. Un formulaire suffit.</p><button class="btn" data-va="urssaf">${ico("euro")} Remplir le formulaire</button></section>` : ""}
+    ${carteAvis()}`;
+  z.onclick = e => {
+    const b = e.target.closest("[data-va]"); if (b) { if (b.dataset.suivi) suiviVue = b.dataset.suivi; return accueil(b.dataset.va); }
+    const f = e.target.closest("[data-ref]"); if (f) return ficheIntervenant(D.referents[+f.dataset.ref]);
+    const a = e.target.closest("[data-avis]"); if (a) repondreAvis(a.dataset.avis);
+  };
+}
+/* La petite fiche de l'intervenant : qui il est, depuis quand, et comment le joindre */
+function ficheIntervenant(r) {
+  const tel = r.telephone ? chiffres(r.telephone) : "";
+  feuille(`<div class="row" style="flex-wrap:nowrap"><span class="rond" style="width:56px;height:56px;font-size:24px">${ico("personne")}</span><div class="corps"><h2>${esc(nomRef(r))}</h2><span class="muted">${esc(r.activite || "Intervenant")} · OIKOS</span></div></div>
+    ${r.depuis ? `<p class="muted">À vos côtés depuis le ${jourFr(r.depuis)}.</p>` : ""}
+    ${tel ? `<div class="card" style="box-shadow:none;background:var(--sunk)"><span class="muted small">Téléphone</span><b style="font-size:20px;letter-spacing:.03em">${esc(r.telephone)}</b></div>
+      <div class="deux"><a class="btn primary" href="tel:${esc(tel)}">${ico("tel")} Appeler</a><a class="btn" href="sms:${esc(tel)}">${ico("bulle")} SMS</a></div>`
+      : `<p class="muted">Pour le joindre, écrivez à OIKOS : nous lui transmettons.</p>`}
+    ${r.id && !bloque() ? `<button class="btn contour" data-fermer data-ecrire="${r.id}">${ico("bulle")} Lui écrire un message</button>` : ""}
+    <p class="muted small">Pour un changement de planning, une absence ou une demande en plus, passez par OIKOS : c'est nous qui organisons les passages.</p>
+    <button class="btn flat" data-fermer>Fermer</button>`, z => z.addEventListener("click", e => { const b = e.target.closest("[data-ecrire]"); if (b) { msConv = b.dataset.ecrire; accueil("messages"); } }));
+}
+/* Satisfaction, puis avis Google seulement si le client est satisfait et ne l'a pas déjà laissé */
+function carteAvis() {
+  const a = D.compte.avis, age = D.compte.avis_le ? (Date.now() - new Date(D.compte.avis_le)) / 864e5 : 0;
+  if (a === "fait" || (a === "plus_tard" && age < 30) || (a === "pas_satisfait" && age < 90)) return "";
+  if (a === "satisfait" || a === "plus_tard") return D.lien_avis ? `<section class="card"><h2>Merci pour votre confiance</h2><p class="muted">Si vous avez un instant, un avis sur Google aide beaucoup une petite entreprise comme la nôtre.</p>
+      <a class="btn primary" href="${esc(D.lien_avis)}" target="_blank" rel="noopener" id="lien-avis">${ico("etoile")} Laisser un avis sur Google</a>
+      <div class="row"><button class="btn flat" data-avis="fait">C'est déjà fait</button><button class="btn flat" data-avis="plus_tard">Plus tard</button></div></section>` : "";
+  return `<section class="card"><h2>Êtes-vous satisfait de nos services ?</h2><p class="muted small">Votre réponse est lue par OIKOS uniquement.</p>
+    <div class="deux"><button class="btn" data-avis="satisfait">Oui</button><button class="btn" data-avis="pas_satisfait">Pas vraiment</button></div></section>`;
+}
+async function repondreAvis(v) {
+  const r = await appel("client_avis", { reponse: v }); if (r.coupe) return; if (!r.ok) return toast(r.erreur);
+  D.compte.avis = v; D.compte.avis_le = new Date().toISOString();
+  if (v === "pas_satisfait") { msBrouillon = msBrouillon || "Ce qui pourrait être amélioré : "; toast("Merci de nous le dire. Expliquez-nous ce qui ne va pas, nous vous répondrons."); return accueil("messages"); }
+  if (v === "fait") toast("Merci beaucoup pour votre avis.");
+  dessiner(true);
+}
+document.addEventListener("click", e => {
+  /* Après le passage sur Google : au retour, on demande si l'avis est déposé, pour ne plus le proposer */
+  if (!e.target.closest("#lien-avis")) return;
+  setTimeout(() => feuille(`<h2>Avez-vous pu laisser votre avis ?</h2><p class="muted">Si oui, nous ne vous le proposerons plus.</p>
+    <button class="btn primary" data-fermer data-avis-fin="fait">Oui, c'est fait</button><button class="btn flat" data-fermer data-avis-fin="plus_tard">Pas encore</button>`,
+    z => z.addEventListener("click", ev => { const b = ev.target.closest("[data-avis-fin]"); if (b) repondreAvis(b.dataset.avisFin); })), 1200);
+});
+
+/* ===================== Feuille de route (entretien) ===================== */
+const CATEGORIES = { tonte: "Tonte", taille: "Taille", desherbage: "Désherbage", arrosage: "Arrosage", ramassage: "Ramassage", plantation: "Plantation", traitement: "Traitement", nettoyage: "Nettoyage", menage: "Ménage", autre: "Autre" };
+const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const rythme = t => { const f = t.frequence_jours; return !f ? "Une fois" : f === 1 ? "À chaque passage" : f === 7 ? "Chaque semaine" : f === 14 ? "Toutes les 2 semaines" : f >= 28 && f <= 31 ? "Chaque mois" : f % 7 === 0 ? "Toutes les " + f / 7 + " semaines" : "Tous les " + f + " jours"; };
+const ETATS_MODIF = { en_attente: ["En attente de l'accord d'OIKOS", "warn"], acceptee: ["Acceptée", "ok"], ajustee: ["Acceptée avec un ajustement", "ok"], refusee: ["Non retenue", "non"] };
+const GENRES_MODIF = { ajout: "Ajouter", retrait: "Ne plus faire", changement: "Modifier", autre: "Autre demande" };
+let suiviVue = "rdv";
+function vueSuivi(z) {
+  z.innerHTML = `<div class="seg" id="suivi-seg"><button type="button" data-s="rdv" aria-pressed="${suiviVue === "rdv"}">Rendez-vous</button><button type="button" data-s="route" aria-pressed="${suiviVue === "route"}">Feuille de route</button></div>
+    <div id="suivi-corps" style="display:flex;flex-direction:column;gap:14px"></div>`;
+  z.querySelector("#suivi-seg").onclick = e => { const b = e.target.closest("[data-s]"); if (!b) return; suiviVue = b.dataset.s; dessiner(); window.scrollTo(0, 0); };
+  (suiviVue === "route" ? vueRoute : vueRdv)(z.querySelector("#suivi-corps"));
+}
+function vueRdv(z) {
+  const aVenir = D.rdv.filter(r => new Date(r.fin) > Date.now()), passes = D.rdv.filter(r => new Date(r.fin) <= Date.now()).reverse();
+  z.innerHTML = `<h1>Vos rendez-vous</h1>
+    <div class="card note"><p class="small">${ico("horloge")} ${RETARD}</p></div>
+    ${aVenir.length ? `<div class="card" style="gap:0">${aVenir.map(r => ligneRdv(r)).join("")}</div>`
+      : `<div class="card"><p>Aucun passage n'est inscrit à l'agenda pour l'instant.</p><p class="muted small">Les passages apparaissent ici dès qu'ils sont planifiés. Pour convenir d'une date, écrivez à OIKOS.</p></div>`}
+    ${passes.length ? `<h3>Ces derniers jours</h3><div class="card" style="gap:0">${passes.map(r => ligneRdv(r, true)).join("")}</div>` : ""}
+    <button class="btn contour" data-va="messages">${ico("bulle")} Demander un changement de date</button>`;
+  z.onclick = e => { if (e.target.closest("[data-va]")) { msBrouillon = msBrouillon || "Bonjour, pour mon prochain passage : "; accueil("messages"); } };
+}
+/* Pour quel passage le client parle : « au prochain passage » (null) ou une date prévue à l'agenda */
+let routeJour = null;
+const jourLocal = d => { d = new Date(d); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); };
+const consignesDu = j => D.consignes.filter(x => (x.jour || null) === j && x.etat !== "refusee");
+function vueRoute(z) {
+  LS.set("vu-modifs", Date.now());
+  const jours = [...new Set(D.rdv.filter(r => new Date(r.fin) > Date.now()).map(r => jourLocal(r.debut)))].slice(0, 4);
+  if (routeJour && !jours.includes(routeJour) && !consignesDu(routeJour).length) routeJour = null;
+  const liste = consignesDu(routeJour), prio = t => liste.find(x => x.genre === "priorite" && x.tache_id === t.id && !x.fait_le), ajoute = g => liste.find(x => x.genre === "ajout" && x.code === g.code && !x.fait_le);
+  const nomJour = j => j ? new Date(j + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "Prochain passage";
+  const item = x => `<div class="item ${x.genre === "priorite" ? "prio" : ""}"><span class="corps"><b>${esc(x.libelle)}</b><span class="muted small">${x.fait_le ? "Fait le " + jourCourt(x.fait_le) : x.etat === "en_attente" ? "En attente de l'accord d'OIKOS" : x.genre === "priorite" ? "En priorité" : "En plus ce jour-là"}</span></span>
+      ${x.fait_le ? `<span class="tag ok" style="margin-right:8px">Fait</span>` : bloque() ? "" : `<button type="button" data-retire="${x.id}" aria-label="Retirer : ${esc(x.libelle)}">${ico("croix")}</button>`}</div>`;
+  const taches = D.route.filter(t => !t.termine);
+  const refusees = D.consignes.filter(x => x.etat === "refusee").slice(-3);
+  const anciennes = D.modifs.map(m => { const [t, c] = ETATS_MODIF[m.etat] || [m.etat, ""]; return `<div class="ligne"><div class="corps">
+      <span class="row entre"><b>${esc(GENRES_MODIF[m.genre] || "Demande")}${m.tache_titre ? " : " + esc(m.tache_titre) : ""}</b><span class="tag ${c}">${t}</span></span>
+      <span class="pre">${esc(m.texte)}</span>${m.reponse ? `<p class="reponse"><span class="muted small">Réponse d'OIKOS</span><br>${esc(m.reponse)}</p>` : ""}</div></div>`; }).join("");
+  z.innerHTML = `<h1>Votre feuille de route</h1>
+    <p class="muted">Vos tâches habituelles, et ce que vous souhaitez pour un passage. Votre intervenant le voit en arrivant.</p>
+    ${bandeauEtat()}
+    <div class="defile" id="jours"><button type="button" class="chip" data-jour="" aria-pressed="${!routeJour}">Prochain passage</button>${jours.map(j => `<button type="button" class="chip" data-jour="${j}" aria-pressed="${routeJour === j}">${nomJour(j)}</button>`).join("")}</div>
+    <section class="card"><h2>${routeJour ? "Pour le " + new Date(routeJour + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "Pour le prochain passage"}</h2>
+      ${liste.length ? `<div class="resume">${liste.filter(x => x.genre === "priorite").concat(liste.filter(x => x.genre !== "priorite")).map(item).join("")}</div>`
+        : `<p class="muted">Rien de particulier : votre intervenant suit les tâches habituelles. Touchez « Priorité » sur une tâche, ou ajoutez-en une ci-dessous.</p>`}</section>
+    ${taches.length ? `<h3>Vos tâches habituelles</h3><div class="card" style="gap:0">${taches.map(t => `<div class="tache"><div class="corps"><b>${esc(t.titre)}</b>
+        <span class="muted small">${rythme(t)}${t.derniere_fois ? " · fait le " + jourCourt(t.derniere_fois) : ""}</span>${t.detail ? `<span class="muted small pre">${esc(t.detail)}</span>` : ""}</div>
+        ${bloque() ? "" : `<button type="button" class="etoile" data-prio="${t.id}" aria-pressed="${!!prio(t)}">${ico("etoile")}Priorité</button>`}</div>`).join("")}</div>`
+      : `<div class="card"><p>Vos tâches habituelles ne sont pas encore en ligne.</p><p class="muted small">Elles apparaîtront ici dès qu'OIKOS les aura préparées.</p></div>`}
+    ${bloque() ? "" : `<h3>En plus ce jour-là</h3><div class="card">
+      ${D.catalogue.length ? `<div class="chips" id="cat">${D.catalogue.map(g => `<button type="button" class="chip" data-code="${esc(g.code)}" aria-pressed="${!!ajoute(g)}">${esc(g.libelle)}</button>`).join("")}</div>` : ""}
+      <form class="ajout-ligne" id="f-plus"><input name="texte" type="text" required minlength="3" maxlength="200" aria-label="Une autre tâche à ajouter" placeholder="${D.catalogue.length ? "Une autre tâche ? Écrivez-la" : "Écrivez la tâche à ajouter"}"><button class="btn primary petit" type="submit">Ajouter</button></form>
+      <p class="muted small">Ces tâches courantes partent directement sur la feuille de votre intervenant.</p></div>
+    <h3>Autre chose ?</h3><form class="card" id="f-autre"><label class="f">Demande spécifique<textarea name="texte" required minlength="3" maxlength="500" style="min-height:80px" placeholder="Par exemple : nettoyer la cave, laver les rideaux"></textarea></label>
+      <p class="muted small">Pour ce qui sort de vos tâches habituelles. OIKOS la lit d'abord et vous répond, avec un devis si besoin.</p>
+      <p class="err" id="e-autre" role="alert"></p><button class="btn" type="submit">Envoyer à OIKOS</button></form>`}
+    <p class="muted small">${D.client.temps_semaine_min ? "Le temps prévu est de " + (Math.round(D.client.temps_semaine_min / 6) / 10).toLocaleString("fr-FR") + " h par semaine. " : ""}Tout se fait dans la limite du temps prévu : ce qui est en priorité est fait d'abord, le reste si le temps le permet.</p>
+    ${refusees.length ? `<h3>Demandes non retenues</h3><div class="card" style="gap:0">${refusees.map(x => `<div class="ligne"><div class="corps"><b>${esc(x.libelle)}</b>${x.reponse ? `<p class="reponse"><span class="muted small">Réponse d'OIKOS</span><br>${esc(x.reponse)}</p>` : ""}</div></div>`).join("")}</div>` : ""}
+    ${anciennes ? `<h3>Vos demandes de modification</h3><div class="card" style="gap:0">${anciennes}</div>` : ""}`;
+  const consigne = async (args, bouton) => {
+    if (bouton) bouton.disabled = true;
+    const r = await appel("client_consigne", { genre: args.genre, jour: routeJour, tache: args.tache || null, code: args.code || null, texte: args.texte || null });
+    if (r.coupe) return false; if (!r.ok) { toast(r.erreur); if (bouton) bouton.disabled = false; return false; }
+    if (await charger()) dessiner(true); return true;
+  };
+  const retirer = async (id, bouton) => { if (bouton) bouton.disabled = true; const r = await appel("client_consigne_retirer", { consigne: id }); if (r.coupe) return; if (!r.ok) { toast(r.erreur); if (bouton) bouton.disabled = false; return; } if (await charger()) dessiner(true); };
+  z.onclick = e => {
+    const j = e.target.closest("[data-jour]"); if (j) { routeJour = j.dataset.jour || null; return dessiner(true); }
+    const p = e.target.closest("[data-prio]"); if (p) { const t = D.route.find(x => x.id === p.dataset.prio), x = t && prio(t); return x ? retirer(x.id, p) : consigne({ genre: "priorite", tache: p.dataset.prio }, p); }
+    const c = e.target.closest("[data-code]"); if (c) { const g = D.catalogue.find(x => x.code === c.dataset.code), x = g && ajoute(g); return x ? retirer(x.id, c) : consigne({ genre: "ajout", code: c.dataset.code }, c); }
+    const x = e.target.closest("[data-retire]"); if (x) return retirer(x.dataset.retire, x);
+  };
+  const fp = z.querySelector("#f-plus");
+  if (fp) fp.onsubmit = async e => { e.preventDefault(); await consigne({ genre: "ajout", texte: new FormData(fp).get("texte") }, e.submitter); };
+  const fa = z.querySelector("#f-autre");
+  if (fa) fa.onsubmit = async e => { e.preventDefault(); const b = e.submitter, texte = new FormData(fa).get("texte"); if (await consigne({ genre: "autre", texte }, b)) toast("Demande envoyée à OIKOS"); };
+}
+
+/* ===================== Demander un service ===================== */
+const ETATS_DEMANDE = { nouvelle: ["Envoyée", ""], vue: ["Vue par OIKOS", ""], en_cours: ["En cours", "warn"], traitee: ["Traitée", "ok"], refusee: ["Non retenue", "non"] };
+const brouillon = { activite: "", texte: "", souhait: "", photos: [] };   // gardé tant que l'appli reste ouverte
+function vueDemander(z) {
+  LS.set("vu-demandes", Date.now());
+  const liste = D.demandes.map(d => { const [t, c] = ETATS_DEMANDE[d.etat] || [d.etat, ""]; return `<div class="ligne"><div class="corps">
+      <span class="row entre"><b>${d.partenaire ? "Mise en relation · " + esc(d.partenaire) : esc(d.activite)}</b><span class="tag ${c}">${t}</span></span>
+      <span class="pre">${esc(d.texte)}</span>
+      <span class="muted small">Envoyée le ${quandFr(d.cree_le)}${d.souhait ? " · souhaité : " + esc(d.souhait) : ""}${d.photos.length ? " · " + d.photos.length + " photo" + (d.photos.length > 1 ? "s" : "") : ""}</span>
+      ${d.reponse ? `<p class="reponse"><span class="muted small">Réponse d'OIKOS</span><br>${esc(d.reponse)}</p>` : ""}</div></div>`; }).join("");
+  z.innerHTML = `<h1>Demander un service</h1>
+    <p class="muted">Décrivez votre besoin, ajoutez des photos si cela aide. Chaque demande est étudiée et fait l'objet d'un devis. Nous vous répondons ici, que nous puissions y donner suite ou non.</p>
+    ${bandeauEtat()}
+    ${bloque() ? "" : `<form class="card" id="fd">
+      <div><p class="muted small" style="margin-bottom:6px">Pour quel service ?</p><div class="chips" id="act">${ACTIVITES.map(a => `<button type="button" class="chip" data-a="${a}" aria-pressed="${brouillon.activite === a}">${a}</button>`).join("")}</div></div>
+      <label class="f">Votre besoin<textarea id="d-texte" required minlength="5" maxlength="4000" placeholder="Par exemple : tailler la haie du fond du jardin, environ 15 mètres">${esc(brouillon.texte)}</textarea></label>
+      <label class="f">Pour quand ? (facultatif)<input id="d-souhait" type="text" maxlength="200" value="${esc(brouillon.souhait)}" placeholder="Par exemple : avant fin mars"></label>
+      <div><p class="muted small" style="margin-bottom:6px">Photos (facultatif, ${PHOTOS_MAX} au maximum)</p><div class="vignettes" id="vig"></div></div>
+      <input type="file" id="d-fichiers" accept="image/*" multiple hidden>
+      <p class="err" id="ed" role="alert"></p>
+      <button class="btn primary" type="submit">Envoyer ma demande</button></form>`}
+    ${liste ? `<h2 style="margin-top:8px">Vos demandes</h2><div class="card" style="gap:0">${liste}</div>` : ""}
+    ${D.partenaires.length ? `<h2 style="margin-top:8px">Nos partenaires</h2>
+      <p class="muted">Des entreprises de confiance pour ce qu'OIKOS ne fait pas. Dites-nous votre besoin : nous organisons la mise en relation et restons votre interlocuteur.</p>
+      ${D.partenaires.map(x => `<div class="card"><div class="row entre"><b>${esc(x.nom)}</b><span class="tag">${esc(x.metier)}</span></div>${x.description ? `<p class="muted small pre">${esc(x.description)}</p>` : ""}
+        ${bloque() ? "" : `<button class="btn petit" type="button" data-part="${x.id}">${ico("lien")} Être mis en relation</button>`}</div>`).join("")}` : ""}`;
+  z.onclick = e => { const b = e.target.closest("[data-part]"); if (b) feuillePartenaire(D.partenaires.find(x => x.id === b.dataset.part)); };
+  const f = z.querySelector("#fd"); if (!f) return;
+  const vig = z.querySelector("#vig"), entree = z.querySelector("#d-fichiers"), err = z.querySelector("#ed");
+  const dessinerVig = () => {
+    vig.innerHTML = brouillon.photos.map((p, i) => `<figure><img src="${p.url}" alt="Photo ${i + 1}"><button type="button" data-retire="${i}" aria-label="Retirer la photo ${i + 1}">${ico("croix")}</button></figure>`).join("")
+      + (brouillon.photos.length < PHOTOS_MAX ? `<button type="button" class="ajout" id="ajout">${ico("photo")}Ajouter</button>` : "");
+  };
+  dessinerVig();
+  vig.onclick = e => {
+    if (e.target.closest("#ajout")) return entree.click();
+    const b = e.target.closest("[data-retire]"); if (!b) return;
+    URL.revokeObjectURL(brouillon.photos[+b.dataset.retire].url); brouillon.photos.splice(+b.dataset.retire, 1); dessinerVig();
+  };
+  entree.onchange = () => {
+    for (const x of entree.files) { if (brouillon.photos.length >= PHOTOS_MAX) break; if (/^image\//.test(x.type)) brouillon.photos.push({ f: x, url: URL.createObjectURL(x) }); }
+    entree.value = ""; dessinerVig();
+  };
+  z.querySelector("#act").onclick = e => { const b = e.target.closest("[data-a]"); if (!b) return; brouillon.activite = b.dataset.a; z.querySelectorAll("#act .chip").forEach(x => x.setAttribute("aria-pressed", x === b)); };
+  z.querySelector("#d-texte").oninput = e => brouillon.texte = e.target.value;
+  z.querySelector("#d-souhait").oninput = e => brouillon.souhait = e.target.value;
+  f.onsubmit = async e => {
+    e.preventDefault(); err.textContent = "";
+    if (!brouillon.activite) { err.textContent = "Choisissez le service concerné."; return; }
+    const b = e.submitter; b.disabled = true; b.textContent = "Envoi en cours…";
+    try {
+      const photos = [];
+      for (const p of brouillon.photos) photos.push({ chemin: p.chemin || (p.chemin = await deposer("demandes", p.f)), nom: p.f.name });
+      const r = await appel("client_demander_service", { genre: "devis", activite: brouillon.activite, texte: brouillon.texte, souhait: brouillon.souhait || null, photos });
+      if (r.coupe) return;
+      if (!r.ok) throw new Error(r.erreur);
+      brouillon.photos.forEach(p => URL.revokeObjectURL(p.url));
+      Object.assign(brouillon, { activite: "", texte: "", souhait: "", photos: [] });
+      toast("Demande envoyée. OIKOS vous répond ici.");
+      if (await charger()) dessiner();
+    } catch (x) { err.textContent = x.message || "L'envoi n'a pas abouti."; b.disabled = false; b.textContent = "Envoyer ma demande"; }
+  };
+}
+
+function feuillePartenaire(x) {
+  if (!x) return;
+  feuille(`<h2>Mise en relation</h2><p><b>${esc(x.nom)}</b> <span class="tag">${esc(x.metier)}</span></p>
+    <form class="stack" id="fp"><label class="f">Votre besoin<textarea name="texte" required minlength="5" maxlength="4000" placeholder="Décrivez ce qu'il y a à faire"></textarea></label>
+      <p class="muted small">Votre demande arrive chez OIKOS, qui prend contact avec le partenaire et revient vers vous avec une proposition.</p>
+      <p class="err" id="ep" role="alert"></p>
+      <button class="btn primary" type="submit">Envoyer à OIKOS</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (z, fermer) => {
+    z.querySelector("#fp").onsubmit = async e => {
+      e.preventDefault(); const b = e.submitter; b.disabled = true;
+      const r = await appel("client_demander_partenaire", { partenaire: x.id, texte: new FormData(e.target).get("texte") });
+      b.disabled = false; if (r.coupe) return fermer();
+      if (!r.ok) { z.querySelector("#ep").textContent = r.erreur; return; }
+      fermer(); toast("Demande envoyée. OIKOS organise la mise en relation."); if (await charger()) dessiner(true);
+    };
+  });
+}
+
+/* ===================== Fichiers ===================== */
+const EXTENSIONS = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "application/pdf": "pdf", "text/plain": "txt",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.oasis.opendocument.text": "odt", "application/vnd.oasis.opendocument.spreadsheet": "ods" };
+function reduire(f, max, qualite) {
+  return new Promise((oui, non) => {
+    const img = new Image(), u = URL.createObjectURL(f);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+      c.toBlob(b => b ? oui(b) : non(new Error("image")), "image/jpeg", qualite);
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); non(new Error("image")); };
+    img.src = u;
+  });
+}
+/* Dépose un fichier dans le dossier du client ; le nom est tiré au hasard, l'extension vient du type. Rend son chemin. */
+async function deposer(sous, f) {
+  let blob = f, ext = EXTENSIONS[f.type];
+  if (!ext) throw new Error("Ce type de fichier n'est pas accepté. Envoyez une photo, un PDF ou un document Word, Excel ou texte.");
+  if (/^image\/(jpeg|png|webp)$/.test(f.type) && f.size > 4e5) { try { blob = await reduire(f, 1600, 0.82); ext = "jpg"; } catch (e) {} }
+  if (blob.size > POIDS_MAX) throw new Error("Ce fichier est trop lourd (10 Mo au maximum).");
+  const alea = Array.from(crypto.getRandomValues(new Uint8Array(8)), x => x.toString(16).padStart(2, "0")).join("");
+  const chemin = `${D.client.id}/${sous}/${Date.now().toString(36)}-${alea}.${ext}`;
+  const { error } = await sb.storage.from(SEAU).upload(chemin, blob, { contentType: ext === "jpg" ? "image/jpeg" : f.type });
+  if (error) throw new Error(reseau(error) ? "Pas de réseau : réessayez." : "L'envoi du fichier a été refusé pour le moment. Réessayez plus tard.");
+  return chemin;
+}
+/* Lien vers un fichier du stockage, valable 5 minutes (gardé 4 minutes pour ne pas le redemander à chaque affichage) */
+const liens = {};
+async function lienFichier(chemin, telecharger) {
+  const cle = chemin + "|" + (telecharger || ""), l = liens[cle];
+  if (l && Date.now() - l.le < 24e4) return l.url;
+  const { data, error } = await sb.storage.from(SEAU).createSignedUrl(chemin, 300, telecharger ? { download: telecharger } : undefined);
+  if (error || !data) throw new Error("fichier");
+  liens[cle] = { url: data.signedUrl, le: Date.now() };
+  return data.signedUrl;
+}
+/* Ouvre un fichier dans une nouvelle fenêtre (pièce jointe d'un message). La fenêtre est ouverte tout de suite, sinon le téléphone la bloque. */
+async function ouvrirFichier(chemin) {
+  const w = window.open("", "_blank");
+  try { const u = await lienFichier(chemin); if (w) w.location = u; else location.href = u; }
+  catch (e) { if (w) w.close(); toast("Ce fichier n'est pas disponible pour le moment."); }
+}
+const extDe = chemin => (String(chemin).match(/\.([a-z0-9]+)$/i) || [, ""])[1].toLowerCase();
+const estImage = chemin => /^(jpe?g|png|webp)$/.test(extDe(chemin));
+/* Lecteur de PDF (pdf.js, fourni avec l'appli) : chargé seulement quand un PDF est à montrer */
+let pdfPret = null;
+function chargerPdf() {
+  const script = n => new Promise((oui, non) => { const e = document.createElement("script"); e.src = n; e.onload = oui; e.onerror = () => non(new Error("lecteur")); document.head.append(e); });
+  return pdfPret || (pdfPret = script("pdf.worker.min.js").then(() => script("pdf.min.js")).then(() => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js"; return window.pdfjsLib; }).catch(e => { pdfPret = null; throw e; }));
+}
+async function pagesPdf(url, largeur, max) {
+  const lib = await chargerPdf(), pdf = await lib.getDocument({ url, isEvalSupported: false }).promise, pages = [];
+  for (let i = 1; i <= Math.min(max, pdf.numPages); i++) {
+    const pg = await pdf.getPage(i), v = pg.getViewport({ scale: largeur / pg.getViewport({ scale: 1 }).width }), c = document.createElement("canvas");
+    c.width = Math.round(v.width); c.height = Math.round(v.height);
+    await pg.render({ canvasContext: c.getContext("2d"), viewport: v }).promise; pages.push(c);
+  }
+  return { pages, total: pdf.numPages };
+}
+
+/* ===================== Messages ===================== */
+/* Deux sortes de conversation : avec OIKOS, et avec chaque intervenant qui a l'appli. Chaque bulle dit qui écrit. */
+let msBrouillon = "", msPiece = null, msConv = "oikos";
+const prestaJoignables = () => D.referents.filter(r => r.id);
+function vueMessages(z) {
+  const prestas = prestaJoignables();
+  if (msConv !== "oikos" && !prestas.some(r => r.id === msConv) && !D.messages.some(m => m.presta_id === msConv)) msConv = "oikos";
+  const presta = prestas.find(r => r.id === msConv), avecOikos = msConv === "oikos";
+  const nomConv = avecOikos ? "OIKOS" : (presta ? presta.prenom : (D.messages.find(m => m.presta_id === msConv) || {}).qui) || "votre intervenant";
+  const fil = D.messages.filter(m => avecOikos ? m.canal === "oikos" : m.presta_id === msConv).map(m => {
+    const piece = m.piece_etat === "refusee" ? `<small>Pièce jointe refusée (type de fichier non accepté)</small>` : m.piece ? `<button class="piece" type="button" data-piece="${esc(m.piece)}">${ico("trombone")}<span>${esc(m.piece_nom || "Pièce jointe")}</span></button>` : "";
+    const de = m.de === "oikos" ? "OIKOS" : m.de === "presta" ? esc(m.qui || "Votre intervenant") + " · votre intervenant" : "";
+    return `<div class="bulle ${m.de === "client" ? "moi" : ""}">${de ? `<span class="de">${de}</span>` : ""}${esc(m.texte)}${piece}<small>${quandFr(m.cree_le)}${m.de === "client" && m.lu_le ? " · lu" : ""}</small></div>`; }).join("");
+  const choix = prestas.length || D.messages.some(m => m.canal === "presta") ? `<div class="defile" id="convs">
+      <button type="button" class="chip conv" data-conv="oikos" aria-pressed="${avecOikos}">OIKOS${nonLus("oikos") ? `<span class="badge">${nonLus("oikos")}</span>` : ""}</button>
+      ${prestas.map(r => `<button type="button" class="chip conv" data-conv="${r.id}" aria-pressed="${msConv === r.id}">${esc(r.prenom)}, votre intervenant${nonLus(r.id) ? `<span class="badge">${nonLus(r.id)}</span>` : ""}</button>`).join("")}</div>` : "";
+  z.innerHTML = `<h1>Messages</h1>${bandeauEtat()}${choix}
+    ${avecOikos ? "" : `<p class="muted small">Vous écrivez directement à ${esc(nomConv)}. OIKOS peut lire cette conversation. Pour une facture, un devis ou un changement de contrat, écrivez plutôt à OIKOS.</p>`}
+    <div class="fil" id="fil">${fil || `<div class="card"><p>Aucun message pour l'instant.</p><p class="muted small">${avecOikos ? "Écrivez à OIKOS ci-dessous : une question, une précision, un document à transmettre." : "Un mot pour " + esc(nomConv) + " : une consigne, un accès, une précision avant son passage."}</p></div>`}</div>
+    ${bloque() || (!avecOikos && !presta) ? "" : `<div id="jointe"></div><form class="ecrire" id="fmsg">
+      ${avecOikos ? `<button type="button" class="rondbtn" id="joindre" aria-label="Joindre un fichier">${ico("trombone")}</button>` : ""}
+      <textarea id="ms-texte" rows="1" maxlength="4000" placeholder="Écrire à ${esc(nomConv)}…" aria-label="Votre message">${esc(msBrouillon)}</textarea>
+      <button type="submit" class="rondbtn envoi" aria-label="Envoyer">${ico("envoi")}</button>
+      <input type="file" id="ms-fichier" hidden accept="image/*,application/pdf,.docx,.xlsx,.odt,.ods,.txt"></form>`}`;
+  z.querySelector("#fil").onclick = e => { const b = e.target.closest("[data-piece]"); if (b) ouvrirFichier(b.dataset.piece); };
+  const convs = z.querySelector("#convs");
+  if (convs) convs.onclick = e => { const b = e.target.closest("[data-conv]"); if (!b || b.dataset.conv === msConv) return; msConv = b.dataset.conv; msPiece = null; dessiner(); };
+  if (nonLus()) appel("client_lu").then(r => { if (r.ok) { D.messages.forEach(m => { if (m.de !== "client" && !m.lu_le) m.lu_le = new Date().toISOString(); }); document.querySelectorAll('.nav [data-o="messages"] .badge, #convs .badge').forEach(b => b.remove()); } });
+  const f = z.querySelector("#fmsg");
+  if (f) {
+    const zone = z.querySelector("#ms-texte"), entree = z.querySelector("#ms-fichier"), jointe = z.querySelector("#jointe"), joindre = z.querySelector("#joindre");
+    const grandir = () => { zone.style.height = "auto"; zone.style.height = Math.min(160, zone.scrollHeight + 2) + "px"; };
+    const dessinerPiece = () => { jointe.innerHTML = msPiece ? `<div class="jointe">${ico("trombone")}<span style="flex:1">${esc(msPiece.name)}</span><button type="button" id="retire" aria-label="Retirer le fichier">${ico("croix")}</button></div>` : ""; const r = jointe.querySelector("#retire"); if (r) r.onclick = () => { msPiece = null; dessinerPiece(); }; };
+    grandir(); dessinerPiece();
+    zone.oninput = () => { msBrouillon = zone.value; grandir(); };
+    if (joindre) joindre.onclick = () => entree.click();
+    entree.onchange = () => { const x = entree.files[0]; entree.value = ""; if (!x) return; if (!EXTENSIONS[x.type]) return toast("Ce type de fichier n'est pas accepté : envoyez une photo, un PDF ou un document."); msPiece = x; dessinerPiece(); };
+    f.onsubmit = async e => {
+      e.preventDefault(); const texte = zone.value.trim(); if (!texte && !msPiece) return;
+      const b = f.querySelector(".envoi"); b.disabled = true;
+      try {
+        const piece = msPiece && avecOikos ? await deposer("messages", msPiece) : null;
+        const r = await appel("client_envoyer_message", { texte, piece, piece_nom: piece ? msPiece.name : null, pour: avecOikos ? null : msConv });
+        if (r.coupe) return;
+        if (!r.ok) throw new Error(r.erreur);
+        msBrouillon = ""; msPiece = null;
+        if (await charger()) { dessiner(); window.scrollTo(0, document.body.scrollHeight); }
+      } catch (x) { toast(x.message || "L'envoi n'a pas abouti."); b.disabled = false; }
+    };
+  }
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+/* ===================== Documents ===================== */
+/* Un seul espace : chaque document en vignette, avec aperçu et téléchargement. Les factures gardent leur liste. Puis le relevé d'heures. */
+const TYPES_DOC = { contrat: "Contrat", juridique: "Dossier", feuille_signee: "Document signé", devis: "Devis", feuille_route: "Feuille de route", autre: "Document" };
+const vignettes = {};   // aperçus déjà fabriqués, gardés tant que l'appli reste ouverte
+const heuresFr = m => (Math.round(m / 60 * 100) / 100).toLocaleString("fr-FR") + " h";
+/* Trois familles simples, affichées seulement si elles ont quelque chose */
+const FAMILLES_DOC = [["Contrat et devis", ["contrat", "devis"]], ["Administratif", ["juridique", "feuille_signee"]], ["Suivi de vos prestations", ["feuille_route", "autre"]]];
+function vueDocuments(z) {
+  const vu = LS.get("vu-documents"), neuf = d => vu != null && new Date(d.cree_le) > vu ? ` <span class="tag warn">Nouveau</span>` : "";
+  const docs = D.documents.filter(d => d.categorie !== "facture"), factures = D.documents.filter(d => d.categorie === "facture");
+  const mois = {}; D.heures.forEach(h => { const d = new Date(h.jour), k = d.getFullYear() + "-" + pad2(d.getMonth() + 1); (mois[k] = mois[k] || []).push(h); });
+  const ligne = d => `<button class="doc" type="button" data-doc="${d.id}"><span class="mini" data-vig="${d.id}">${ico("doc")}</span>
+      <span class="corps"><b>${esc(d.titre)}</b><span class="muted small">${TYPES_DOC[d.categorie] || "Document"} · ${d.date_doc ? jourFr(d.date_doc) : "ajouté le " + jourCourt(d.cree_le)}${neuf(d)}</span></span>${ico("chevron")}</button>`;
+  const familles = FAMILLES_DOC.map(([titre, cats]) => { const l = docs.filter(d => cats.includes(d.categorie)); return l.length ? `<h3>${titre}</h3><div class="card" style="gap:0">${l.map(ligne).join("")}</div>` : ""; }).join("");
+  z.innerHTML = `<h1>Vos documents</h1><p class="muted">Tout ce qu'OIKOS a mis à votre disposition. Touchez un document pour le voir et le télécharger.</p>
+    ${familles || `<div class="card"><p>Aucun document pour l'instant.</p><p class="muted small">Ils apparaîtront ici dès qu'OIKOS les aura déposés. S'il vous en manque un, demandez-le par message.</p></div>`}
+    ${factures.length ? `<h3>Factures</h3><div class="card" style="gap:0">${factures.map(d => `<button class="doc" type="button" data-doc="${d.id}"><span class="rond">${ico("euro")}</span>
+        <span class="corps"><b>${esc(d.titre)}</b><span class="muted small">${d.date_doc ? jourFr(d.date_doc) : "Ajoutée le " + jourCourt(d.cree_le)}${neuf(d)}</span></span>${ico("chevron")}</button>`).join("")}</div>` : ""}
+    ${D.compte.voir_heures === false ? "" : `<h3>Relevé d'heures</h3>
+      ${Object.keys(mois).length ? `<div class="card" style="gap:0">${Object.keys(mois).sort().reverse().map((k, i) => { const l = mois[k], d = new Date(l[0].jour);
+          return `<details class="mois" ${i === 0 ? "open" : ""}><summary><span>${d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span><span class="tag">${heuresFr(l.reduce((a, h) => a + (+h.minutes || 0), 0))}</span></summary>
+            ${l.map(h => `<div class="passage"><span>${new Date(h.jour).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}<span class="muted"> · ${esc(h.activite || "")}${h.prenom ? " · " + esc(h.prenom) : ""}</span></span><b>${heuresFr(+h.minutes || 0)}</b></div>`).join("")}</details>`; }).join("")}</div>
+        <p class="muted small">Relevé des passages déclarés par votre intervenant. En cas d'écart, la facture fait foi : signalez-le à OIKOS par message.</p>`
+        : `<div class="card"><p class="muted">Aucun passage déclaré pour l'instant.</p></div>`}`}`;
+  LS.set("vu-documents", Date.now());
+  z.onclick = e => { const b = e.target.closest("[data-doc]"); if (!b) return; const d = D.documents.find(x => x.id === b.dataset.doc); if (!d) return;
+    if (d.chemin) ouvrirDocument(d); else if (/^https:\/\//.test(d.lien || "")) window.open(d.lien, "_blank", "noopener"); };
+  remplirVignettes(docs);
+}
+/* Les vignettes se fabriquent l'une après l'autre : photo telle quelle, première page pour un PDF */
+async function remplirVignettes(docs) {
+  for (const d of docs) {
+    const poser = () => { const el = document.querySelector(`[data-vig="${d.id}"]`); if (el && vignettes[d.id]) el.innerHTML = `<img src="${vignettes[d.id]}" alt="">`; return !!el; };
+    if (vignettes[d.id]) { poser(); continue; }
+    if (!d.chemin || !(estImage(d.chemin) || extDe(d.chemin) === "pdf")) continue;
+    try {
+      const u = await lienFichier(d.chemin);
+      vignettes[d.id] = estImage(d.chemin) ? u : (await pagesPdf(u, 360, 1)).pages[0].toDataURL("image/jpeg", 0.8);
+      if (!poser()) return;   // l'utilisateur a changé d'onglet
+    } catch (e) {}
+  }
+}
+function ouvrirDocument(d) {
+  const ext = extDe(d.chemin), nom = (d.titre.replace(/[\\/:*?"<>|]+/g, " ").trim() || "document") + "." + ext;
+  feuille(`<div class="row entre" style="flex-wrap:nowrap"><div class="corps"><h2>${esc(d.titre)}</h2><span class="muted small">${TYPES_DOC[d.categorie] || "Document"}${d.date_doc ? " · " + jourFr(d.date_doc) : ""}</span></div>
+      <button class="btn petit flat" data-fermer aria-label="Fermer">${ico("croix")}</button></div>
+    <button class="btn primary" type="button" id="dl">${ico("telecharger")} Télécharger</button>
+    <div class="apercu" id="apercu">${CHARGE}</div>`, async z => {
+    const zone = z.querySelector("#apercu");
+    z.querySelector("#dl").onclick = async () => {
+      try { const a = document.createElement("a"); a.href = await lienFichier(d.chemin, nom); a.download = nom; a.rel = "noopener"; document.body.append(a); a.click(); a.remove(); }
+      catch (e) { toast("Le téléchargement n'a pas abouti. Réessayez."); }
+    };
+    try {
+      const u = await lienFichier(d.chemin);
+      if (estImage(d.chemin)) zone.innerHTML = `<img src="${u}" alt="${esc(d.titre)}">`;
+      else if (ext === "pdf") {
+        const { pages, total } = await pagesPdf(u, Math.min(1100, Math.round((zone.clientWidth || 340) * Math.min(2, devicePixelRatio || 1))), 12);
+        zone.innerHTML = ""; pages.forEach(c => zone.append(c));
+        if (total > pages.length) zone.insertAdjacentHTML("beforeend", `<p class="muted small">${total - pages.length} page${total - pages.length > 1 ? "s" : ""} de plus dans le fichier : téléchargez-le pour tout voir.</p>`);
+      } else zone.innerHTML = `<p class="muted" style="text-align:center">Pas d'aperçu pour ce type de fichier.<br>Téléchargez-le pour l'ouvrir.</p>`;
+    } catch (e) { zone.innerHTML = `<p class="muted" style="text-align:center">L'aperçu n'a pas pu s'afficher.<br>Vous pouvez télécharger le document.</p>`; }
+  });
+}
+
+/* ===================== Avance immédiate (URSSAF) ===================== */
+function ibanValide(t) {
+  const s = String(t).replace(/\s/g, "").toUpperCase(); if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(s)) return false;
+  const r = (s.slice(4) + s.slice(0, 4)).replace(/[A-Z]/g, c => c.charCodeAt(0) - 55); let m = 0; for (const c of r) m = (m * 10 + +c) % 97; return m === 1;
+}
+function vueUrssaf(z) {
+  const c = D.client, u = D.urssaf_dossier, morceaux = String(c.nom || "").trim().split(/\s+/);
+  const majuscules = morceaux.filter(x => x.length > 1 && x === x.toUpperCase()), reste = morceaux.filter(x => !majuscules.includes(x));
+  const v = LS.get("urssaf-brouillon") || { nom: majuscules.join(" ") || morceaux[0] || "", prenom: reste.join(" "), email: c.email || D.compte.email || "", telephone: c.telephone || "", adresse: c.adresse || "" };
+  const champ = (k, t, plus = "") => `<label class="f">${t}<input name="${k}" value="${esc(v[k] || "")}" ${plus}></label>`;
+  if (D.compte.urssaf !== "a_faire") {
+    z.innerHTML = `<h1>Avance immédiate</h1><div class="card"><b>${ico("ok")} ${D.compte.urssaf === "envoye" ? "Votre formulaire est bien parti" : "C'est en place"}</b>
+      <p class="muted">${D.compte.urssaf === "envoye" ? "OIKOS crée votre compte auprès de l'URSSAF. Vous recevrez un mail de l'URSSAF pour l'activer : pensez à regarder vos courriers indésirables." : "Vous n'avez rien à faire."}</p></div>
+      <button class="btn flat" data-retour>Retour à mon compte</button>`;
+    z.querySelector("[data-retour]").onclick = () => accueil("compte"); return;
+  }
+  z.innerHTML = `<h1>Avance immédiate</h1>
+    <p class="muted">Avec l'avance immédiate de l'URSSAF, le crédit d'impôt de 50 % est déduit tout de suite : vous ne payez que la moitié de chaque facture. Ce formulaire permet à OIKOS de créer votre compte. Il se remplit une seule fois.</p>
+    ${bandeauEtat()}
+    ${u && u.etat === "a_corriger" && u.note ? `<div class="card note"><b>${ico("alerte")} À corriger</b><p class="pre">${esc(u.note)}</p></div>` : ""}
+    ${bloque() ? "" : `<form class="card" id="fu" autocomplete="on">
+      <label class="f">Service concerné<select name="service" required>${["Ménage", "Jardinage", "Bricolage", "Cours particuliers"].map(a => `<option ${v.service === a ? "selected" : ""}>${a}</option>`).join("")}</select></label>
+      <label class="f">Civilité<select name="civilite" required><option value="">Choisir</option><option ${v.civilite === "Madame" ? "selected" : ""}>Madame</option><option ${v.civilite === "Monsieur" ? "selected" : ""}>Monsieur</option></select></label>
+      <div class="deux">${champ("prenom", "Prénom", 'required autocomplete="given-name" maxlength="80"')}${champ("nom", "Nom", 'required autocomplete="family-name" maxlength="80"')}</div>
+      ${champ("nom_naissance", "Nom de naissance (s'il est différent)", 'maxlength="80"')}
+      ${champ("email", "E-mail", 'type="email" required autocomplete="email" inputmode="email" maxlength="120"')}
+      ${champ("telephone", "Téléphone portable", 'type="tel" required autocomplete="tel" inputmode="tel" maxlength="20"')}
+      ${champ("adresse", "Adresse (numéro et rue)", 'required autocomplete="street-address" maxlength="160"')}
+      <div class="deux">${champ("code_postal", "Code postal", 'required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="postal-code"')}${champ("ville", "Ville", 'required autocomplete="address-level2" maxlength="80"')}</div>
+      ${champ("naissance", "Date de naissance", 'type="date" required autocomplete="bday"')}
+      <label class="chk"><input type="checkbox" name="etranger" ${v.pays_naissance ? "checked" : ""}>Je suis né(e) hors de France</label>
+      <div id="ne-fr" class="deux">${champ("commune_naissance", "Commune de naissance", 'maxlength="80"')}${champ("departement_naissance", "Code postal de naissance", 'maxlength="5" inputmode="numeric" pattern="[0-9]{5}"')}</div>
+      <div id="ne-et" hidden>${champ("pays_naissance", "Pays de naissance", 'maxlength="80"')}</div>
+      ${champ("iban", "IBAN du compte qui paie les factures", 'required autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="42" placeholder="FR76 …"')}
+      ${champ("bic", "BIC", 'required autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="11"')}
+      <label class="chk"><input type="checkbox" name="accord" required>J'autorise OIKOS à transmettre ces informations à l'URSSAF pour créer mon compte d'avance immédiate.</label>
+      <p class="muted small">${ico("cadenas")} Vos coordonnées bancaires sont transmises à OIKOS puis effacées de cet espace.</p>
+      <p class="err" id="eu" role="alert"></p>
+      <button class="btn primary" type="submit">Envoyer le formulaire</button>
+      <button class="btn flat" type="button" id="ranger">Je ne souhaite pas le remplir maintenant</button></form>`}`;
+  const f = z.querySelector("#fu"); if (!f) return;
+  const etr = f.elements.etranger, basculer = () => { z.querySelector("#ne-fr").hidden = etr.checked; z.querySelector("#ne-et").hidden = !etr.checked; };
+  etr.onchange = basculer; basculer();
+  /* Le brouillon reste sur ce téléphone, sans les coordonnées bancaires */
+  f.oninput = () => { const o = Object.fromEntries(new FormData(f)); delete o.iban; delete o.bic; delete o.accord; delete o.etranger; if (!etr.checked) o.pays_naissance = ""; LS.set("urssaf-brouillon", o); };
+  z.querySelector("#ranger").onclick = () => { LS.set("urssaf-range", 1); toast("D'accord. Vous le retrouverez dans Mon compte."); accueil("accueil"); };
+  f.onsubmit = async e => {
+    e.preventDefault(); const err = z.querySelector("#eu"), o = Object.fromEntries(new FormData(f)); err.textContent = "";
+    if (!ibanValide(o.iban)) { err.textContent = "L'IBAN ne semble pas correct. Vérifiez-le sur votre relevé d'identité bancaire."; f.elements.iban.focus(); return; }
+    if (!/^[A-Za-z]{6}[A-Za-z0-9]{2}([A-Za-z0-9]{3})?$/.test(o.bic.trim())) { err.textContent = "Le BIC comporte 8 ou 11 caractères."; f.elements.bic.focus(); return; }
+    if (etr.checked ? !o.pays_naissance.trim() : (!o.commune_naissance.trim() || !o.departement_naissance.trim())) { err.textContent = "Indiquez votre lieu de naissance."; return; }
+    if (etr.checked) { o.commune_naissance = ""; o.departement_naissance = "99"; } else o.pays_naissance = "";
+    delete o.accord; delete o.etranger; o.iban = o.iban.replace(/\s/g, "").toUpperCase(); o.bic = o.bic.trim().toUpperCase();
+    const b = e.submitter; b.disabled = true;
+    const r = await appel("client_envoyer_urssaf", { donnees: o });
+    b.disabled = false; if (r.coupe) return;
+    if (!r.ok) { err.textContent = r.erreur; return; }
+    LS.set("urssaf-brouillon", null);
+    toast("Formulaire envoyé. OIKOS s'occupe de la suite.");
+    if (await charger()) accueil("accueil");
+  };
+}
+
+/* ===================== Mon compte ===================== */
+let invite = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); invite = e; });
+function vueCompte(z) {
+  const c = D.client, k = D.compte, installee = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const urssaf = k.urssaf === "fait" ? ["En place", "ok", ""] : k.urssaf === "envoye" ? ["Formulaire envoyé" + (k.urssaf_le ? " le " + jourCourt(k.urssaf_le) : ""), "", ""] : k.urssaf === "non_concerne" ? null : ["À faire quand vous le souhaitez", "", "urssaf"];
+  z.innerHTML = `<h1>Mon compte</h1>
+    <section class="card"><h2>Vos coordonnées</h2>
+      <div><div class="ligne"><div class="corps"><span class="muted small">Nom</span><b>${esc(c.nom)}</b></div></div>
+      ${c.adresse ? `<div class="ligne"><div class="corps"><span class="muted small">Adresse</span><span>${esc(c.adresse)}</span></div></div>` : ""}
+      ${c.telephone ? `<div class="ligne"><div class="corps"><span class="muted small">Téléphone</span><span>${esc(c.telephone)}</span></div></div>` : ""}
+      <div class="ligne"><div class="corps"><span class="muted small">E-mail de connexion</span><span>${esc(k.email)}</span></div></div></div>
+      <p class="muted small">Une information a changé ? Dites-le à OIKOS par message.</p></section>
+    ${urssaf ? `<section class="card"><div class="row entre"><h2>Avance immédiate</h2><span class="tag ${urssaf[1]}">${urssaf[0]}</span></div>
+      ${urssaf[2] ? `<button class="btn petit" data-va="urssaf">${ico("euro")} Ouvrir le formulaire</button>` : ""}</section>` : ""}
+    <section class="stack">
+      ${!installee ? `<button class="btn" id="installer">${ico("ecran")} Mettre l'appli sur mon écran d'accueil</button>` : ""}
+      <button class="btn" id="mdp">${ico("cadenas")} Changer mon mot de passe</button>
+      <a class="btn" href="tel:${chiffres(TEL_OIKOS)}">${ico("tel")} Appeler OIKOS · ${TEL_OIKOS}</a>
+      <button class="btn stop" id="sortir">${ico("sortie")} Me déconnecter</button>
+    </section>
+    <p class="muted small" style="text-align:center">OIKOS Sud Services · Espace client</p>`;
+  z.onclick = async e => {
+    const b = e.target.closest("[data-va]"); if (b) { LS.set("urssaf-range", null); return accueil(b.dataset.va); }
+    if (e.target.closest("#mdp")) return ecranNouveauMdp(false);
+    if (e.target.closest("#sortir")) { await sortir(); return ecranCode(); }
+    if (e.target.closest("#installer")) {
+      if (invite) { invite.prompt(); invite = null; return; }
+      feuille(`<h2>Sur l'écran d'accueil</h2><p>Sur iPhone : touchez le bouton Partager de Safari, puis « Sur l'écran d'accueil ».</p><p>Sur Android : ouvrez le menu de Chrome (les trois points), puis « Ajouter à l'écran d'accueil ».</p><button class="btn primary" data-fermer>J'ai compris</button>`);
+    }
+  };
+}
+
+const VUES = { accueil: vueAccueil, suivi: vueSuivi, demander: vueDemander, messages: vueMessages, documents: vueDocuments, urssaf: vueUrssaf, compte: vueCompte };
+document.addEventListener("visibilitychange", async () => { if (!document.hidden && D && !document.querySelector(".voile") && !saisieEnCours() && await charger()) dessiner(true); });
+demarrer();
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
