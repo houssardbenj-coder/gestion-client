@@ -525,6 +525,58 @@ label.f input:focus,label.f select:focus,label.f textarea:focus,.pk-champ:focus{
 .entete-msg .nav-badge{top:-3px;left:auto;right:-4px}
 #ms-fil{height:calc(100dvh - 330px);min-height:220px}
 #ms-texte{font-size:16px}
+/* Récap du mois dans Reporting : résumé, filtres (clients, activité, curseur des jours), tableau, calendrier */
+.rc-tuiles{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px}
+.rc-tuile{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rc-tuile span{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.rc-tuile b{font-size:26px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.rc-tuile.grand b{font-size:34px;color:var(--accent)}
+.rc-tuile i{font-style:normal;font-size:12px;color:var(--muted)}
+.rc-filtre-btn{display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 14px;font-weight:600;cursor:pointer;min-height:52px;color:var(--ink)}
+.rc-filtre-btn .ico{width:18px;height:18px;vertical-align:-3px}
+.rc-filtre-btn .nb{background:var(--accent);color:var(--accent-ink);border-radius:999px;font-size:12px;padding:2px 8px;margin-left:6px}
+.rc-filtres{display:flex;flex-direction:column;gap:14px;padding-top:4px;margin-top:8px}
+.rc-filtres h3{margin:0 0 6px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.rc-filtres .chip{min-height:36px;font-size:14px;padding:4px 11px}
+.rc-raz{border:0;background:none;color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:0;align-self:flex-start}
+.rc-curseur{position:relative;height:34px}
+.rc-curseur .rail{position:absolute;left:11px;right:11px;top:15px;height:4px;border-radius:4px;background:var(--line)}
+.rc-curseur .plein{position:absolute;top:15px;height:4px;border-radius:4px;background:var(--accent)}
+.rc-curseur input{position:absolute;left:0;top:0;width:100%;height:34px;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none}
+.rc-curseur input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:24px;height:24px;border-radius:50%;background:var(--surface);border:3px solid var(--accent);cursor:grab;box-shadow:0 2px 6px rgb(0 0 0 / .18)}
+.rc-curseur input::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:50%;background:var(--surface);border:3px solid var(--accent);cursor:grab}
+.rc-curseur input::-webkit-slider-runnable-track{background:none}
+.rc-periode{display:flex;justify-content:space-between;font-weight:600;font-variant-numeric:tabular-nums}
+.rc-seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:12px;padding:3px;gap:3px}
+.rc-seg button{border:0;background:none;border-radius:9px;padding:8px;font-weight:600;color:var(--muted);cursor:pointer}
+.rc-seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgb(0 0 0 / .15)}
+.rc-tab{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+.rc-tab th{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding:4px 2px 8px;text-align:center;line-height:1.15}
+.rc-tab th:first-child{text-align:left}
+.rc-tab th small{display:block;font-weight:500;text-transform:none;letter-spacing:0}
+.rc-tab td{padding:0;border-top:1px solid var(--line);text-align:center;height:44px}
+.rc-tab td:first-child{text-align:left;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:4px}
+.rc-tab td.c span{display:inline-block;min-width:36px;padding:4px 3px;border-radius:8px}
+.rc-tab td.vide{color:var(--line)}
+.rc-tab td.tot{font-weight:700;text-align:right;padding-left:6px}
+.rc-tab tfoot td{border-top:2px solid var(--ink);font-weight:700}
+.rc-barre{display:block;height:4px;border-radius:4px;background:var(--accent);margin-top:3px;opacity:.75}
+.rc-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.rc-cal .tete{font-size:11px;font-weight:600;color:var(--muted);text-align:center;text-transform:uppercase}
+.rc-j{border:1px solid var(--line);border-radius:10px;min-height:50px;padding:3px 2px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:var(--surface);cursor:pointer;font-variant-numeric:tabular-nums;color:var(--ink)}
+.rc-j small{font-size:11px;color:var(--muted)}
+.rc-j b{font-size:13px;font-weight:700}
+.rc-j.hors{opacity:.3}
+.rc-j.rien{background:transparent}
+.rc-j[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:-1px}
+.rc-leg{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);justify-content:flex-end;flex-wrap:wrap}
+.rc-leg i{width:14px;height:14px;border-radius:4px;display:inline-block}
+.rc-act{display:flex;flex-direction:column;gap:8px}
+.rc-act div{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rc-act .jauge{flex:1;height:10px;border-radius:6px;background:var(--sunk);overflow:hidden}
+.rc-act .jauge i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.rc-act span{width:84px;font-size:14px}
+.rc-act b{width:56px;text-align:right;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -584,7 +636,7 @@ const sb = window.supabase.createClient(SB_URL, SB_CLE, {
 
 /* ===================== Outils ===================== */
 /* Icônes dessinées (trait fin) : les mêmes sur tous les téléphones, à la place des émojis */
-const ICONES = { partage: "M12 15V3M8 7l4-4 4 4M8 10H5v11h14V10h-3", ecranaccueil: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM12 8v8M8 12h8", jour: "M12 4 21 20H3Z", mission: "M4 8h16v11H4zM9 8V5h6v3", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", clients: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 5a3.5 3.5 0 0 1 0 6.5M18 14.5c1.9.8 3 2.8 3 5.5", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", itineraire: "M21 3 3 10.5l7.5 3L13.5 21z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", cloche: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", clocheoff: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4M4 4l16 16", whatsapp: "M4 20l1.3-4.2A8.5 8.5 0 1 1 8.5 19zM9 9c0 3.3 2.7 6 6 6", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", voiture: "M5 16V11l2-5h10l2 5v5M3 16h18v3H3zM5 11h14", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", code: "M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01", cle: "M15 9a4 4 0 1 0-3.3 3.9L9 16H6v3H3v-3l6.1-6.1A4 4 0 0 0 15 9zM16 8v.01", sortie: "M14 4H5v16h9M10 12h10M16 8l4 4-4 4", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", croix: "M6 6l12 12M18 6 6 18", fleche: "M5 12h14M13 6l6 6-6 6", chevron: "M9 6l6 6-6 6", valide: "M5 12.5 10 17.5 19 7.5" };
+const ICONES = { partage: "M12 15V3M8 7l4-4 4 4M8 10H5v11h14V10h-3", ecranaccueil: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM12 8v8M8 12h8", jour: "M12 4 21 20H3Z", mission: "M4 8h16v11H4zM9 8V5h6v3", agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", clients: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 5a3.5 3.5 0 0 1 0 6.5M18 14.5c1.9.8 3 2.8 3 5.5", reporting: "M5 20V11M12 20V5M19 20v-6", personne: "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-4 3-7 7-7s7 3 7 7", cadenas: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3", lieu: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", itineraire: "M21 3 3 10.5l7.5 3L13.5 21z", route: "M8 4h8v3H8zM8 5.5H5V21h14V5.5h-3M9 12h6M9 16h6", plus: "M12 5v14M5 12h14", stylo: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3", doc: "M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6", mail: "M3 6h18v13H3zM3 7l9 7 9-7", bulle: "M4 5h16v11H9l-5 4z", dossier: "M3 6h6l2 2h10v11H3z", tel: "M5 4h4l1.5 5L8 11a12 12 0 0 0 5 5l2-2.5 5 1.5v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z", euro: "M18 6.5A7 7 0 0 0 7 12a7 7 0 0 0 11 5.5M4 10.5h9M4 13.5h8", sac: "M7 8h10a2 2 0 0 1 2 2v10H5V10a2 2 0 0 1 2-2zM9 8V6a3 3 0 0 1 6 0v2M9 14h6", ok: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6", cloche: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", clocheoff: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4M4 4l16 16", whatsapp: "M4 20l1.3-4.2A8.5 8.5 0 1 1 8.5 19zM9 9c0 3.3 2.7 6 6 6", photo: "M4 7h4l1.5-2.5h5L16 7h4v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", archive: "M3 5h18v4H3zM5 9v11h14V9M10 13h4", voiture: "M5 16V11l2-5h10l2 5v5M3 16h18v3H3zM5 11h14", alerte: "M12 4 21 20H3ZM12 10v5M12 17.5v.01", envoi: "M12 16V4M7 9l5-5 5 5M4 20h16", code: "M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01", cle: "M15 9a4 4 0 1 0-3.3 3.9L9 16H6v3H3v-3l6.1-6.1A4 4 0 0 0 15 9zM16 8v.01", sortie: "M14 4H5v16h9M10 12h10M16 8l4 4-4 4", telecharger: "M12 4v12M7 11l5 5 5-5M4 20h16", croix: "M6 6l12 12M18 6 6 18", fleche: "M5 12h14M13 6l6 6-6 6", chevron: "M9 6l6 6-6 6", valide: "M5 12.5 10 17.5 19 7.5", filtre: "M4 5h16l-6 8v6l-4-2v-4z" };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[n]}"/></svg>`;
 const MONO = `<svg class="mono" viewBox="0 0 30 28" aria-hidden="true"><path d="M17 3 28 26H6Z"/><path d="M9 2 28 21 2 26Z"/></svg>`;
 const COCHE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES.valide}"/></svg>`;
@@ -2306,7 +2358,6 @@ async function vueMois() {
   if (error) throw error;
   cache.mois = pt;
   const finis = pt.filter(p => p.depart), total = finis.reduce((s, p) => s + minutesEntre(p.arrivee, p.depart), 0);
-  const parClient = {}; finis.forEach(p => parClient[p.client_id] = (parClient[p.client_id] || 0) + minutesEntre(p.arrivee, p.depart));
   const tousValides = finis.length && finis.every(p => p.valide_par_intervenante);
   const titre = m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const choix = sel => `<option value="">— quel client ? —</option>` + clients.map(c => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nom)}</option>`).join("");
@@ -2332,17 +2383,13 @@ async function vueMois() {
       <p class="muted small" style="margin-top:6px">Une ligne orange est incomplète : choisis le client, le jour et les heures.</p>` : ""}
     <div class="row" style="justify-content:space-between;margin-top:22px"><button class="btn flat" id="prec" aria-label="Mois précédent">◀</button>
       <h2 style="margin:0;text-transform:capitalize">${titre}</h2><button class="btn flat" id="suiv" aria-label="Mois suivant" ${m1 > new Date() ? "disabled" : ""}>▶</button></div>
-    <div class="card" style="margin-top:10px;align-items:center"><span class="muted">Heures du mois</span><span class="compteur">${heuresTxt(total)}</span>
-      <span class="muted small">${finis.length} passage${finis.length > 1 ? "s" : ""} · ${Object.keys(parClient).length} client${Object.keys(parClient).length > 1 ? "s" : ""}</span>
-      ${tousValides ? `<span class="tag">✓ Tu as validé ces heures</span>` : ""}</div>
-    <h2>Par client</h2><div class="card">${Object.keys(parClient).length ? Object.entries(parClient).map(([id, mn]) => `<div class="ligne"><span>${esc(nomClient(id))}</span><b>${heuresTxt(mn)}</b></div>`).join("") : `<p class="muted">Aucune heure ce mois-ci.</p>`}</div>
-    <h2>Chaque passage</h2><div class="card">${pt.length ? pt.map(p => `<div class="ligne"><button data-pt="${p.id}">
-        <b>${esc(nomClient(p.client_id))} ›</b><br><span class="muted small">${jourTxt(p.arrivee)}${p.creneau_connu !== false ? " · " + heure(p.arrivee) + " → " + (p.depart ? heure(p.depart) : "?") : ""}</span>
-        <span class="row" style="gap:4px;margin-top:3px">${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans mon rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></button>
-        <b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</div>
+    <div id="recap" style="margin-top:12px"></div>
+    ${tousValides ? `<p style="margin-top:10px"><span class="tag">✓ Tu as validé ces heures</span></p>` : ""}
+    <h2>Chaque passage <span class="muted small" id="rc-suit" style="font-family:inherit"></span></h2><div class="card" id="passages"></div>
     ${finis.length && !tousValides ? `<button class="btn primary big" id="valider" style="margin-top:14px;width:100%"><span class="ic">${ico("ok")}</span>Mes heures du mois sont justes</button>` : ""}
     <p class="muted small" style="margin-top:8px">Chaque passage envoyé part tout seul dans ton rapport d'activité (ta feuille d'heures OIKOS). ${faitSaFacture() ? "Chaque début de mois, ta facture du mois fini s'envoie ici, en haut de Reporting : OIKOS la compare à ces heures." : "OIKOS fait ta facture à partir de ces heures."}</p>`);
   const el = document.getElementById("contenu"), zone = document.getElementById("dire");
+  brancherRecap(pt);
   el.querySelectorAll("[data-fact-imp]").forEach(b => b.onclick = () => factureImporter(b.dataset.factImp));
   el.querySelectorAll("[data-fact-aucune]").forEach(b => b.onclick = () => factureAucune(b.dataset.factAucune).catch(souci));
   document.getElementById("verifier").onclick = () => {
@@ -2394,6 +2441,133 @@ async function vueMois() {
       .gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).not("depart", "is", null).eq("verrouille", false);
     if (error) return souci(error);
     toast("Merci, tes heures sont validées"); accueil("mois");
+  };
+}
+/* ---------- Récap du mois (dans Reporting) : résumé condensé + filtres clients / activité / jours ----------
+   Tout se calcule sur les passages déjà chargés : toucher un filtre ne recharge rien. */
+let recap = { clients: new Set(), acts: new Set(), du: 1, au: 31, vue: "semaines", ouvert: false, mois: "" };
+function recapCalcul(pt) {
+  const an = moisVu.getFullYear(), mo = moisVu.getMonth(), nb = new Date(an, mo + 1, 0).getDate();
+  if (recap.mois !== moisIso(moisVu)) Object.assign(recap, { mois: moisIso(moisVu), du: 1, au: nb });
+  recap.du = Math.min(recap.du, nb); recap.au = Math.min(recap.au, nb);
+  const jourDe = p => new Date(p.arrivee).getDate(), dow = j => (new Date(an, mo, j).getDay() + 6) % 7;
+  const sem = []; for (let j = 1; j <= nb; j++) { if (j === 1 || dow(j) === 0) sem.push({ du: j, au: j }); sem[sem.length - 1].au = j; }
+  const act = p => ACTIVITES.includes(p.activite) ? p.activite : "Ménage";
+  const garde = p => (!recap.clients.size || recap.clients.has(p.client_id)) && (!recap.acts.size || recap.acts.has(act(p))) && jourDe(p) >= recap.du && jourDe(p) <= recap.au;
+  const ids = [...new Set([...pt.map(p => p.client_id), ...recap.clients])].sort((x, y) => nomClient(x).localeCompare(nomClient(y), "fr"));
+  const vus = pt.filter(garde), L = vus.filter(p => p.depart);
+  return { an, mo, nb, sem, dow, jourDe, act, ids, vus, L };
+}
+const rcNbFiltres = nb => (recap.clients.size ? 1 : 0) + (recap.acts.size ? 1 : 0) + (recap.du > 1 || recap.au < nb ? 1 : 0);
+const rcFond = (mn, max) => mn ? `background:color-mix(in srgb,var(--accent) ${Math.round(12 + 48 * mn / max)}%,var(--surface));${mn / max > .6 ? "color:var(--accent-ink)" : ""}` : "";
+const rcJour = (r, j) => new Date(r.an, r.mo, j).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+function rcBouton(r) {
+  const n = rcNbFiltres(r.nb);
+  return `<button class="rc-filtre-btn" id="rc-ouvre" aria-expanded="${recap.ouvert}"><span>${ico("filtre")} Filtrer${n ? `<span class="nb">${n}</span>` : ""}</span><span class="muted">${recap.ouvert ? "▲" : "▼"}</span></button>`;
+}
+function rcPlein(r) {
+  const pc = v => (r.nb > 1 ? (v - 1) / (r.nb - 1) : 0);
+  return `left:calc(11px + (100% - 22px) * ${pc(recap.du)});right:calc(11px + (100% - 22px) * ${1 - pc(recap.au)})`;
+}
+const rcPeriode = r => `<div class="rc-periode"><span>du ${rcJour(r, recap.du)}</span><span>au ${rcJour(r, recap.au)}</span></div>`;
+function rcFiltres(r) {
+  if (!recap.ouvert) return "";
+  return `<div class="card rc-filtres">
+    <div><h3>Clients</h3><div class="chips"><button class="chip" data-rc-tous-c aria-pressed="${!recap.clients.size}">Tous</button>${r.ids.map(id => `<button class="chip" data-rc-c="${id}" aria-pressed="${recap.clients.has(id)}">${esc(nomClient(id))}</button>`).join("")}</div></div>
+    <div><h3>Activité</h3><div class="chips"><button class="chip" data-rc-tous-a aria-pressed="${!recap.acts.size}">Toutes</button>${ACTIVITES.map(a => `<button class="chip" data-rc-a="${a}" aria-pressed="${recap.acts.has(a)}">${a}</button>`).join("")}</div></div>
+    <div><h3>Jours du mois</h3>${rcPeriode(r)}
+      <div class="rc-curseur"><div class="rail"></div><div class="plein" style="${rcPlein(r)}"></div>
+        <input type="range" id="rc-du" min="1" max="${r.nb}" value="${recap.du}" aria-label="Premier jour"><input type="range" id="rc-au" min="1" max="${r.nb}" value="${recap.au}" aria-label="Dernier jour"></div>
+      <div class="chips" style="margin-top:6px">${r.sem.map((s, i) => `<button class="chip" data-rc-sem="${i}" aria-pressed="${recap.du === s.du && recap.au === s.au}">S${i + 1}</button>`).join("")}<button class="chip" data-rc-sem="tout" aria-pressed="${recap.du === 1 && recap.au === r.nb}">Tout le mois</button></div></div>
+    <button class="rc-raz" id="rc-raz" ${rcNbFiltres(r.nb) ? "" : "hidden"}>Tout effacer</button></div>`;
+}
+function rcResultats(r) {
+  const { L } = r, mn = p => minutesEntre(p.arrivee, p.depart), somme = l => l.reduce((s, p) => s + mn(p), 0);
+  const tot = somme(L), cl = r.ids.filter(id => L.some(p => p.client_id === id)), jours = new Set(L.map(r.jourDe)).size;
+  const totC = id => somme(L.filter(p => p.client_id === id)), maxC = Math.max(1, ...cl.map(totC));
+  const h = heuresSaisie;
+  let tableau;
+  if (recap.vue === "semaines") {
+    const sems = r.sem.filter(s => s.au >= recap.du && s.du <= recap.au);
+    const dans = (p, s) => r.jourDe(p) >= s.du && r.jourDe(p) <= s.au;
+    const cell = (id, s) => somme(L.filter(p => p.client_id === id && dans(p, s)));
+    const max = Math.max(1, ...cl.flatMap(id => sems.map(s => cell(id, s))));
+    tableau = `<table class="rc-tab"><thead><tr><th>Client</th>${sems.map(s => `<th>S${r.sem.indexOf(s) + 1}<small>${s.du}-${s.au}</small></th>`).join("")}<th style="text-align:right">Total</th></tr></thead>
+      <tbody>${cl.map(id => `<tr><td>${esc(nomClient(id))}<span class="rc-barre" style="width:${Math.round(100 * totC(id) / maxC)}%"></span></td>${sems.map(s => { const m = cell(id, s); return m ? `<td class="c"><span style="${rcFond(m, max)}">${h(m)}</span></td>` : `<td class="vide">·</td>`; }).join("")}<td class="tot">${h(totC(id))}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td>Total</td>${sems.map(s => `<td>${h(somme(L.filter(p => dans(p, s)))) || "·"}</td>`).join("")}<td class="tot">${h(tot)}</td></tr></tfoot></table>`;
+  } else {
+    const acts = ACTIVITES.filter(a => L.some(p => r.act(p) === a));
+    const cell = (id, a) => somme(L.filter(p => p.client_id === id && r.act(p) === a));
+    const max = Math.max(1, ...cl.flatMap(id => acts.map(a => cell(id, a))));
+    tableau = `<table class="rc-tab"><thead><tr><th>Client</th>${acts.map(a => `<th>${a}</th>`).join("")}<th style="text-align:right">Total</th></tr></thead>
+      <tbody>${cl.map(id => `<tr><td>${esc(nomClient(id))}</td>${acts.map(a => { const m = cell(id, a); return m ? `<td class="c"><span style="${rcFond(m, max)}">${h(m)}</span></td>` : `<td class="vide">·</td>`; }).join("")}<td class="tot">${h(totC(id))}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td>Total</td>${acts.map(a => `<td>${h(somme(L.filter(p => r.act(p) === a)))}</td>`).join("")}<td class="tot">${h(tot)}</td></tr></tfoot></table>`;
+  }
+  const parJour = j => somme(L.filter(p => r.jourDe(p) === j)), maxJ = Math.max(1, ...Array.from({ length: r.nb }, (_, i) => parJour(i + 1)));
+  const cal = `<div class="rc-cal">${["L", "M", "M", "J", "V", "S", "D"].map(d => `<div class="tete">${d}</div>`).join("")}${"<div></div>".repeat(r.dow(1))}${Array.from({ length: r.nb }, (_, i) => {
+    const j = i + 1, m = parJour(j), hors = j < recap.du || j > recap.au;
+    return `<button class="rc-j${hors ? " hors" : ""}${m ? "" : " rien"}" data-rc-j="${j}" aria-pressed="${recap.du === j && recap.au === j}" aria-label="${rcJour(r, j)}${m ? " : " + heuresTxt(m) : ""}" style="${hors ? "" : rcFond(m, maxJ)}"><small style="${m / maxJ > .6 ? "color:inherit" : ""}">${j}</small><b>${m ? h(m) : ""}</b></button>`; }).join("")}</div>`;
+  const parAct = ACTIVITES.map(a => [a, somme(L.filter(p => r.act(p) === a))]).filter(x => x[1]), maxA = Math.max(1, ...parAct.map(x => x[1]));
+  return `<div class="rc-tuiles" style="margin-top:12px">
+      <div class="rc-tuile grand"><span>Heures</span><b>${heuresTxt(tot)}</b><i>${rcNbFiltres(r.nb) ? "selon le filtre" : "tout le mois"}</i></div>
+      <div class="rc-tuile"><span>Passages</span><b>${L.length}</b><i>${L.length ? "~ " + heuresTxt(tot / L.length) + " chacun" : "&nbsp;"}</i></div>
+      <div class="rc-tuile"><span>Clients</span><b>${cl.length}</b><i>${jours} jour${jours > 1 ? "s" : ""} travaillé${jours > 1 ? "s" : ""}</i></div></div>
+    <div class="card" style="margin-top:12px">
+      <div class="rc-seg"><button data-rc-vue="semaines" aria-pressed="${recap.vue === "semaines"}">Par semaine</button><button data-rc-vue="activites" aria-pressed="${recap.vue === "activites"}">Par activité</button></div>
+      ${cl.length ? tableau : `<p class="muted">${rcNbFiltres(r.nb) ? "Aucune heure avec ce filtre." : "Aucune heure ce mois-ci."}</p>`}</div>
+    <h2>Jour par jour</h2>
+    <div class="card">${cal}<div class="rc-leg">peu <i style="${rcFond(1, 4)}"></i><i style="${rcFond(2, 4)}"></i><i style="${rcFond(4, 4)}"></i> beaucoup · touche un jour pour le voir seul</div></div>
+    ${parAct.length > 1 ? `<h2>Par activité</h2><div class="card rc-act">${parAct.map(([a, m]) => `<div><span>${a}</span><span class="jauge"><i style="width:${Math.round(100 * m / maxA)}%"></i></span><b>${heuresTxt(m)}</b></div>`).join("")}</div>` : ""}`;
+}
+function rcPassages(r) {
+  return r.vus.length ? r.vus.map(p => `<div class="ligne"><button data-pt="${p.id}">
+        <b>${esc(nomClient(p.client_id))} ›</b><br><span class="muted small">${jourTxt(p.arrivee)}${p.creneau_connu !== false ? " · " + heure(p.arrivee) + " → " + (p.depart ? heure(p.depart) : "?") : ""} · ${esc(r.act(p))}</span>
+        <span class="row" style="gap:4px;margin-top:3px">${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans mon rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></button>
+        <b>${p.depart ? heuresTxt(minutesEntre(p.arrivee, p.depart)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("")
+    : `<p class="muted">${rcNbFiltres(r.nb) ? "Aucun passage avec ce filtre." : "Aucun passage."}</p>`;
+}
+/* partiel : pendant qu'on glisse le curseur, on ne redessine pas le curseur lui-même */
+function dessinerRecap(pt, partiel) {
+  const zone = document.getElementById("recap"); if (!zone) return;
+  const r = recapCalcul(pt);
+  document.getElementById("passages").innerHTML = rcPassages(r);
+  document.getElementById("rc-suit").textContent = rcNbFiltres(r.nb) ? "(selon le filtre)" : "";
+  if (partiel && zone.querySelector(".rc-curseur")) {
+    zone.querySelector("#rc-res").innerHTML = rcResultats(r);
+    zone.querySelector(".rc-periode").outerHTML = rcPeriode(r);
+    zone.querySelector(".plein").setAttribute("style", rcPlein(r));
+    zone.querySelector("#rc-ouvre").outerHTML = rcBouton(r);
+    zone.querySelectorAll("[data-rc-sem]").forEach(b => { const s = r.sem[b.dataset.rcSem]; b.setAttribute("aria-pressed", s ? recap.du === s.du && recap.au === s.au : recap.du === 1 && recap.au === r.nb); });
+    zone.querySelector("#rc-raz").hidden = !rcNbFiltres(r.nb);
+    return;
+  }
+  zone.innerHTML = `<h2 style="margin-top:0">Récap du mois</h2>${rcBouton(r)}${rcFiltres(r)}<div id="rc-res">${rcResultats(r)}</div>`;
+}
+function brancherRecap(pt) {
+  const zone = document.getElementById("recap"); if (!zone) return;
+  dessinerRecap(pt);
+  const bascule = (set, v) => set.has(v) ? set.delete(v) : set.add(v);
+  zone.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const r = recapCalcul(pt), d = b.dataset;
+    if (b.id === "rc-ouvre") recap.ouvert = !recap.ouvert;
+    else if (d.rcC) { bascule(recap.clients, d.rcC); if (r.ids.every(id => recap.clients.has(id))) recap.clients.clear(); }
+    else if ("rcTousC" in d) recap.clients.clear();
+    else if (d.rcA) { bascule(recap.acts, d.rcA); if (recap.acts.size === ACTIVITES.length) recap.acts.clear(); }
+    else if ("rcTousA" in d) recap.acts.clear();
+    else if (d.rcSem) { const s = r.sem[d.rcSem]; recap.du = s ? s.du : 1; recap.au = s ? s.au : r.nb; }
+    else if (d.rcVue) recap.vue = d.rcVue;
+    else if (d.rcJ) { const j = +d.rcJ; if (recap.du === j && recap.au === j) { recap.du = 1; recap.au = r.nb; } else recap.du = recap.au = j; }
+    else if (b.id === "rc-raz") { recap.clients.clear(); recap.acts.clear(); recap.du = 1; recap.au = r.nb; }
+    else return;
+    dessinerRecap(pt);
+  };
+  zone.oninput = e => {
+    if (e.target.id !== "rc-du" && e.target.id !== "rc-au") return;
+    const du = zone.querySelector("#rc-du"), au = zone.querySelector("#rc-au");
+    let a = +du.value, b = +au.value;
+    if (a > b) { if (e.target === du) a = b; else b = a; du.value = a; au.value = b; }
+    recap.du = a; recap.au = b; dessinerRecap(pt, true);
   };
 }
 /* Une ligne → un passage : avec un créneau, les vraies heures ; sinon midi + la durée (seule la durée compte) */
