@@ -1,4 +1,4 @@
 {
- "version": 36,
- "notes": "Emploi du temps fiable : un client archivé ou en pause qu'on programme depuis le pilote redevient actif, les séances sautées (vacances, férié, absence, pause) partent au pilote avec leur raison, un RDV coché fait reste dans l'agenda."
+ "version": 37,
+ "notes": "Théo et les répétitions remises juste après un arrêt : les séances reviennent (l'arrêt est traité avant la répétition, et les répétitions déjà faites sont revérifiées une fois)."
 }

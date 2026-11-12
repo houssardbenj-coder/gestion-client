@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));padding-bottom:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
 body{margin:0;font:14px system-ui,sans-serif;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.PB_VERSION=36;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
+<script>window.PB_VERSION=37;window.PB_UPDATE_URL="https://houssardbenj-coder.github.io/gestion-client/";</script>
 <script>window.PB_SEED={};</script>
 <script>// Base de données locale : remplace le stockage Claude par le stockage du téléphone.
 // Même interface que la page Claude (collection / doc / onSnapshot / set / delete),
@@ -1452,19 +1452,9 @@ async function recurrentsDuPilote(jeton,s){
   try{lignes=await piloteBase(jeton,"pilote_documents?cle=eq.recurrents&select=contenu")}catch(e){return null}   // SQL 47 pas lancé : rien à faire
   const c0=lignes&&lignes[0]&&lignes[0].contenu,dem=c0&&Array.isArray(c0.demandes)?c0.demandes.slice(-200):[];
   const faits=new Set(Array.isArray(s.recFaits)?s.recFaits:[]),etats={};let ajoutes=0;
-  for(const d of dem){
-    if(!d||typeof d.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(d.id)||typeof d.cle!=="string")continue;
-    const sid="pil"+d.id,c=customers.find(x=>x.extKey&&x.extKey===d.cle)||(d.cle.startsWith("pi:c:")?customers.find(x=>x.id===d.cle.slice(5)):null);
-    if(faits.has(d.id)||(c&&slotsOf(c).some(x=>x.id===sid))){faits.add(d.id);etats[d.id]="fait";continue}
-    const wd=Number(d.wd),dur0=Number(d.dur),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);   // une durée de la liste des séances
-    if(!(Number.isInteger(wd)&&wd>=0&&wd<=6&&/^([01]\d|2[0-3]):[0-5]\d$/.test(d.heure||"")&&dur0>=15&&dur0<=600&&/^\d{4}-\d\d-\d\d$/.test(d.depuis||""))){etats[d.id]="illisible";continue}
-    if(!c){etats[d.id]="introuvable";continue}
-    const ext=creneauEtendu(c,wd,d.heure,d.depuis),act=piloteActif(c);
-    if(ext===false&&!act.status){faits.add(d.id);etats[d.id]="fait";continue}
-    const maj={...act,...(ext===false?{}:{slots:ext||slotsOf(c).concat({id:sid,wd,time:d.heure,dur,every:1,from:d.depuis,until:""})})};
-    try{await db.doc("customers/"+c.id).set(custBody({...c,...maj}));Object.assign(c,maj);faits.add(d.id);etats[d.id]="fait";ajoutes++}catch(e){etats[d.id]="echec"}
-  }
-  // « Ne plus répéter » demandé dans le pilote : le créneau s'arrête la veille du jour choisi (les séances d'avant restent)
+  // « Ne plus répéter » demandé dans le pilote : le créneau s'arrête la veille du jour choisi (les séances d'avant restent).
+  // Traité AVANT les répétitions (v37) : sinon une répétition remise juste après un arrêt croyait l'ancienne encore valable,
+  // ne créait rien, puis l'arrêt passait et il ne restait aucune séance (Théo Siegler, 08/11/2026).
   const arrets=c0&&Array.isArray(c0.arrets)?c0.arrets.slice(-200):[];
   for(const x of arrets){
     if(!x||typeof x.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(x.id)||typeof x.cust!=="string"||typeof x.slot!=="string")continue;
@@ -1476,6 +1466,21 @@ async function recurrentsDuPilote(jeton,s){
     if(!sl||(sl.until&&sl.until<=x.jusqu)){faits.add("arret:"+x.id);etats[x.id]="fait";continue}
     const slots=slotsOf(c).map(y=>y.id===x.slot?{...y,until:x.jusqu}:y).filter(y=>!(y.from&&y.until&&y.until<y.from));
     try{await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots;faits.add("arret:"+x.id);etats[x.id]="fait";ajoutes++}catch(e){etats[x.id]="echec"}
+  }
+  for(const d of dem){
+    if(!d||typeof d.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(d.id)||typeof d.cle!=="string")continue;
+    const sid="pil"+d.id,c=customers.find(x=>x.extKey&&x.extKey===d.cle)||(d.cle.startsWith("pi:c:")?customers.find(x=>x.id===d.cle.slice(5)):null);
+    const deja=faits.has(d.id)||(c&&slotsOf(c).some(x=>x.id===sid));
+    const revoir=deja&&c&&!faits.has("rep37:"+d.id);   // v37 : une demande déjà « faite » est revérifiée une fois (réparation du cas Théo)
+    if(deja&&!revoir){faits.add(d.id);etats[d.id]="fait";continue}
+    const wd=Number(d.wd),dur0=Number(d.dur),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);   // une durée de la liste des séances
+    if(!(Number.isInteger(wd)&&wd>=0&&wd<=6&&/^([01]\d|2[0-3]):[0-5]\d$/.test(d.heure||"")&&dur0>=15&&dur0<=600&&/^\d{4}-\d\d-\d\d$/.test(d.depuis||""))){etats[d.id]="illisible";continue}
+    if(!c){etats[d.id]="introuvable";continue}
+    if(revoir){faits.add("rep37:"+d.id);if(creneauEtendu(c,wd,d.heure,d.depuis)!==null){faits.add(d.id);etats[d.id]="fait";continue}}   // une séance couvre bien la demande : rien à faire
+    const ext=creneauEtendu(c,wd,d.heure,d.depuis),act=piloteActif(c),sid2=slotsOf(c).some(x=>x.id===sid)?sid+"b":sid;
+    if(ext===false&&!act.status){faits.add(d.id);etats[d.id]="fait";continue}
+    const maj={...act,...(ext===false?{}:{slots:ext||slotsOf(c).concat({id:sid2,wd,time:d.heure,dur,every:1,from:d.depuis,until:""})})};
+    try{await db.doc("customers/"+c.id).set(custBody({...c,...maj}));Object.assign(c,maj);faits.add(d.id);faits.add("rep37:"+d.id);etats[d.id]="fait";ajoutes++}catch(e){etats[d.id]="echec"}
   }
   // RDV créés dans le pilote : un vrai RDV ici (ou une séance régulière du client si « Chaque semaine »)
   const nouveaux=c0&&Array.isArray(c0.nouveaux)?c0.nouveaux.slice(-200):[];
