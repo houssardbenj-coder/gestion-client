@@ -961,12 +961,13 @@ async function compteurAVoir() {
   } catch (e) {}
 }
 let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [], cachePropositions = [];
-let cacheEquipes = null, cacheSocietes = null, cacheMembres = null;   // null : SQL 52 (ou 55 pour les membres) pas lancé
+let cacheEquipes = null, cacheSocietes = null, cacheMembres = null, cacheClientEquipes = null;   // null : SQL 52 (ou 55 pour les membres) pas lancé
 async function chargerBase() {
   [cacheEquipes, cacheSocietes, cacheMembres] = await Promise.all([
     sb.from("equipes").select("*").order("cheffe_nom").then(r => r.error ? null : r.data || []),
     sb.from("societes").select("*").order("nom").then(r => r.error ? null : r.data || []),
     sb.from("equipe_membres").select("*").order("debut").then(r => r.error ? null : r.data || [])]);
+  cacheClientEquipes = await sb.from("client_equipes").select("*").order("debut").then(r => r.error ? null : r.data || []);
   [cacheProfils, cacheClients, cacheAttrib, cacheDemandes, cachePropositions] = await Promise.all([
     q(sb.from("profils").select("*").order("prenom")),
     q(sb.from("clients").select("*").order("nom")),
@@ -5078,6 +5079,13 @@ function equipeAuJour(p, date) {
   return p.equipe ? equipeDe(p.equipe) : null;
 }
 const equipeActuelle = p => equipeAuJour(p, ymd(new Date()));
+/* Le chef d'un client tel jour (SQL 57) : c'est lui qui touche sa part. Pas de chef = 100 % OIKOS. */
+const periodesClient = cid => (cacheClientEquipes || []).filter(m => m.client_id === cid).sort((x, y) => x.debut < y.debut ? -1 : 1);
+const periodeClientAu = (cid, date) => periodesClient(cid).find(m => m.debut <= date && (!m.fin || m.fin >= date)) || null;
+function equipeClientAu(cid, date) {
+  if (cacheClientEquipes) { const m = periodeClientAu(cid, date); return m ? equipeDe(m.equipe_id) : null; }
+  const c = cacheClients.find(k => k.id === cid); return c && c.equipe ? equipeDe(c.equipe) : null;
+}
 const LIB_TAUX = { rattachee: ["Part du chef", "par heure de son équipe"], societe: ["Commission d'OIKOS", "par heure (le reste du prix HT va à sa société)"] };
 const reseauMois = { m: null };
 /* Calcule le mois : une ligne par presta, rangée dans « OIKOS en direct » ou dans son équipe */
@@ -5096,7 +5104,7 @@ async function calculReseau(m0, m1) {
     const act = x.activite || (a && a.activite) || activitePrincipale(activitesClient(c));
     const h = (new Date(x.depart) - new Date(x.arrivee)) / 36e5; if (!(h > 0)) return;
     if (act === "Cours") { cours.h += h; return; }
-    const e = equipeAuJour(p, date), g = groupe(e);
+    const e = equipeClientAu(x.client_id, date), g = groupe(e);
     const r = g.prestas[p.id] || (g.prestas[p.id] = { presta: p, h: 0, hc: 0, ht: 0, paye: 0, cheffe: 0, verser: 0, oikos: 0, apporte: 0, manque: new Set() });
     r.h += h;
     const t = tarifAu(tarifs, p.id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
@@ -5120,13 +5128,13 @@ async function vueReseau() {
   await chargerBase();
   if (cacheEquipes === null) { contenu(`<h1>Réseau</h1><p class="muted">Il faut d'abord lancer le SQL 52 (sociétés et équipes) et le SQL 54 (couleur et commission) dans Supabase.</p>`); return; }
   const auj = new Date(), m0 = reseauMois.m || new Date(auj.getFullYear(), auj.getMonth(), 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
-  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque chef a son équipe de presta. Rattaché : pas de société, son équipe travaille pour OIKOS et le chef touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. Un presta sans équipe est un presta d'OIKOS. Pour mettre un presta dans une équipe ou l'en retirer : Équipe › Presta, bouton « Équipe » sur sa carte (le passé ne bouge pas).")}</h1>
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque chef a son équipe de presta. Rattaché : pas de société, son équipe travaille pour OIKOS et le chef touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. C'est le chef du client qui touche sa part, quel que soit le presta qui y va : fiche du client › Vue d'ensemble › Chef. Un client sans chef rapporte 100 % à OIKOS. Mettre ou retirer un chef ne change pas les mois passés.")}</h1>
       <button class="btn primary" id="nv-cheffe">${ico("plus")} Nouveau chef</button></div>
     <div class="row" style="justify-content:space-between;margin:10px 0"><button class="btn" data-rm="-1" aria-label="Mois précédent">‹</button>
       <b style="text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
       <button class="btn" data-rm="1" aria-label="Mois suivant" ${m1 > auj ? "disabled" : ""}>›</button></div>
     <div id="rs"><p class="muted small">Calcul…</p></div>
-    <section class="card" style="margin-top:12px"><b>${ico("feuille")} Onglet RÉSEAU de l'Excel</b> ${aide("Un onglet du TABLEAU DE BORD OFFICIEL, au même format que SAISIE SERVICES : chaque ligne d'heures d'un presta qui était dans l'équipe d'un chef ce jour-là, avec la part du chef ou la commission d'OIKOS, ce qu'il faut verser et ce qui reste à OIKOS, plus un récapitulatif par mois et par chef. Il est entièrement réécrit à chaque mise à jour : n'y tape rien. Les autres onglets ne sont pas touchés. Comme toute écriture par programme, ouvre et enregistre l'Excel dans WPS avant de lancer les factures.")}<div id="rs-xl" style="margin-top:6px"><p class="muted small" style="margin:0">Lecture de l'Excel…</p></div></section>`);
+    <section class="card" style="margin-top:12px"><b>${ico("feuille")} Onglet RÉSEAU de l'Excel</b> ${aide("Un onglet du TABLEAU DE BORD OFFICIEL, au même format que SAISIE SERVICES : chaque ligne d'heures chez un client qui avait un chef ce jour-là, avec la part du chef ou la commission d'OIKOS, ce qu'il faut verser et ce qui reste à OIKOS, plus un récapitulatif par mois et par chef. Il est entièrement réécrit à chaque mise à jour : n'y tape rien. Les autres onglets ne sont pas touchés. Comme toute écriture par programme, ouvre et enregistre l'Excel dans WPS avant de lancer les factures.")}<div id="rs-xl" style="margin-top:6px"><p class="muted small" style="margin:0">Lecture de l'Excel…</p></div></section>`);
   el.onclick = e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.rm) { reseauMois.m = new Date(m0.getFullYear(), m0.getMonth() + +b.dataset.rm, 1); return afficher(); }
@@ -5161,13 +5169,13 @@ async function vueReseau() {
         : `<p class="muted small" style="margin:8px 0 0">Aucun passage terminé ce mois-ci.</p>`}
       ${modesMois.length > 1 ? `<p class="muted small" style="margin:6px 0 0">Changement de sorte ce mois-ci : chaque passage est compté avec la sorte et le taux de son jour.</p>` : ""}
       ${modesMois.length === 1 && modesMois[0] === "societe" && rs.length ? `<p class="muted small" style="margin:6px 0 0">Sa société paie elle-même ses presta (${suEuros(somme(rs, "paye"))}) sur ce que tu lui verses.</p>` : ""}
-      ${sans.length ? `<p class="muted small" style="margin:6px 0 0">Aussi dans l'équipe : ${sans.map(p => esc(nomPers(p))).join(", ")}</p>` : membres(e).length ? "" : `<p class="muted small" style="margin:6px 0 0">Aucun presta dans l'équipe : Équipe › Presta, bouton « Équipe » sur la carte d'un presta.</p>`}</section>`;
+      ${sans.length ? `<p class="muted small" style="margin:6px 0 0">Aussi dans l'équipe : ${sans.map(p => esc(nomPers(p))).join(", ")}</p>` : ""}</section>`;
   };
   const direct = res.groupes.direct ? Object.values(res.groupes.direct.prestas).sort((x, y) => norm(nomPers(x.presta)) < norm(nomPers(y.presta)) ? -1 : 1) : [];
   const actives = cacheEquipes.filter(e => e.active), arretees = cacheEquipes.filter(e => !e.active);
   const cartes = actives.map(carteEquipe).join("") + arretees.filter(e => res.groupes[e.id]).map(carteEquipe).join("");
   totOikos += somme(direct, "oikos"); totHt += somme(direct, "ht"); totH += somme(direct, "h");
-  const carteDirect = `<section class="card" style="margin-bottom:12px"><b style="font-size:17px">OIKOS en direct</b> <span class="muted small">· presta sans équipe</span>
+  const carteDirect = `<section class="card" style="margin-bottom:12px"><b style="font-size:17px">OIKOS en direct</b> <span class="muted small">· clients sans chef (100 % OIKOS)</span>
     ${direct.length ? `<div class="su-table" style="margin-top:8px"><table><thead><tr><th>Presta</th><th class="n">Heures</th><th class="n">Facturé HT</th><th class="n">Payé au presta</th><th class="n">Reste à OIKOS</th></tr></thead>
       <tbody>${direct.map(r => `<tr><td>${prestaCell(r)}</td><td class="n">${heures(r.h * 60)}</td><td class="n">${suEuros(r.ht)}</td><td class="n">${suEuros(r.paye)}</td><td class="n"><b>${suEuros(r.oikos)}</b></td></tr>`).join("")}
       <tr class="total"><td>Total</td><td class="n">${heures(somme(direct, "h") * 60)}</td><td class="n">${suEuros(somme(direct, "ht"))}</td><td class="n">${suEuros(somme(direct, "paye"))}</td><td class="n"><b>${suEuros(somme(direct, "oikos"))}</b></td></tr></tbody></table></div>`
@@ -5175,7 +5183,7 @@ async function vueReseau() {
   zone.innerHTML = `<div class="su-chiffres" style="margin-bottom:12px">${[["Heures du réseau", heures(totH * 60)], ["Facturé HT", suEuros(totHt)], ["À verser aux chefs et sociétés", suEuros(totVerser)], ["Reste à OIKOS", suEuros(totOikos)]].map(([n, v]) => `<div class="card"><span class="muted small">${n}</span><b>${v}</b></div>`).join("")}</div>
     ${cartes || `<section class="card" style="margin-bottom:12px"><p class="muted" style="margin:0">Aucun chef pour l'instant : touche « Nouveau chef ».</p></section>`}${carteDirect}
     <p class="muted small">Facturé HT = heures × prix de l'heure du client (« Ce que rapporte ce client », lu comme TTC), divisé par la TVA de l'activité comme dans l'onglet TVA de l'Excel (ménage 10 %, jardinage et bricolage 20 %). Payé au presta = son tarif à l'heure du jour du passage.
-      Chaque passage compte pour l'équipe du presta ce jour-là. « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
+      Chaque passage compte pour le chef du client ce jour-là (client sans chef : 100 % OIKOS). « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
 }
 /* Onglet RÉSEAU de l'Excel : lignes de SAISIE SERVICES des presta qui étaient dans une équipe ce jour-là, calculées ici
    (les équipes et leurs taux sont dans la base), écrites par le programme du PC (reseau_excel.py). Rien n'est écrit s'il est à jour. */
@@ -5183,10 +5191,10 @@ function lignesReseauExcel(xl) {
   const prestas = cacheProfils.filter(p => p.role === "intervenante"), lignes = [], inconnus = new Set();
   (xl.services || []).forEach(l => {
     if (!l.date || !l.intervenant) return;   // les lignes archivées comptent aussi : ce sont des heures faites
-    const p = prestas.find(x => memeIntervenant(l.intervenant, x)); if (!p) return;
-    const e = equipeAuJour(p, l.date); if (!e) return;
-    const c = cacheClients.find(k => norm(k.nom) === norm(l.client)) || null, tx = tauxEquipeAu(e, l.date), h = +l.heures || 0;
-    if (!c) inconnus.add(l.client);
+    const c = cacheClients.find(k => norm(k.nom) === norm(l.client)) || null;
+    if (!c) { inconnus.add(l.client); return; }
+    const e = equipeClientAu(c.id, l.date); if (!e) return;   // client sans chef ce jour-là : 100 % OIKOS
+    const tx = tauxEquipeAu(e, l.date), h = +l.heures || 0;
     const apporte = !!c && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos")), taux = tx ? (apporte ? tx.apporte : tx.confie) : null, soc = (tx ? tx.mode : e.mode) === "societe";
     const ht = l.ht == null ? null : +l.ht, cout = l.cout == null ? null : +l.cout, part = taux == null ? null : Math.round(h * taux * 100) / 100;
     lignes.push({ date: l.date, mois: l.mois || "", cheffe: e.cheffe_nom + " · " + e.nom, sorte: soc ? "En société" : femme(e) ? "Rattachée" : "Rattaché", couleur: couleurSure(e.couleur), intervenant: l.intervenant, client: l.client, activite: l.activite,
@@ -5202,7 +5210,7 @@ async function ongletReseauExcel(boite) {
   catch (e) { boite.innerHTML = `<p class="muted small" style="margin:0">PC pas relié : relie-le (bouton « Relier le PC » à droite) pour voir et mettre à jour l'onglet RÉSEAU.</p>`; return; }
   const { lignes, inconnus } = lignesReseauExcel(xl);
   const etat = await pc("/reseau", { version: xl.version, lignes, comparer: true }, 60000);
-  const note = inconnus.length ? `<br><span class="muted small">Client(s) de l'Excel pas retrouvé(s) dans la base, comptés comme « confiés » : ${esc(inconnus.slice(0, 6).join(", "))}${inconnus.length > 6 ? "…" : ""}</span>` : "";
+  const note = inconnus.length ? `<br><span class="muted small">Client(s) de l'Excel pas retrouvé(s) dans la base, laissés à OIKOS : ${esc(inconnus.slice(0, 6).join(", "))}${inconnus.length > 6 ? "…" : ""}</span>` : "";
   boite.innerHTML = etat.a_jour ? `<p class="small" style="margin:0"><span style="color:var(--go)">${ico("ok")}</span> À jour : ${lignes.length} ligne(s) d'heures des équipes.${note}</p>`
     : `<div class="row" style="justify-content:space-between"><span class="small">${etat.existe ? "Pas à jour" : "L'onglet n'existe pas encore"} : ${lignes.length} ligne(s) d'heures des équipes à écrire.${note}</span>
       <button class="btn primary" id="rs-xl-maj">${ico("feuille")} Mettre à jour l'onglet RÉSEAU</button></div>`;
@@ -5215,6 +5223,61 @@ async function ongletReseauExcel(boite) {
       ongletReseauExcel(boite).catch(() => {});
     } catch (x) { b.disabled = false; b.textContent = "Mettre à jour l'onglet RÉSEAU"; souci(x); }
   };
+}
+/* Fiche client › Chef : qui touche la part sur ce client (SQL 57). Le chef peut aussi être son presta. */
+function chefClientHtml(c) {
+  if (!cacheEquipes) return "";
+  const e = equipeClientAu(c.id, ymd(new Date())), ap = c.apporte_par ? equipeDe(c.apporte_par) : null;
+  return `<p style="margin:0 0 6px"><b>Chef :</b> ${e ? eqPoint(e) + esc(e.cheffe_nom) + ` <span class="muted small">· part ${duChef(e)} sur ce client</span>` : `aucun <span class="muted small">· 100 % OIKOS</span>`}
+    ${ap ? ` <span class="muted small">· apporté par ${esc(ap.cheffe_nom)}</span>` : ""} <button class="btn" type="button" data-chef-client>${ico("personne")} ${e ? "Changer ou retirer" : "Mettre un chef"}</button></p>`;
+}
+function changerChefClient(c, apres) {
+  if (!cacheClientEquipes) return toast("Il faut d'abord lancer le SQL 57 (chef de chaque client) dans Supabase");
+  const auj = tfAujourdhui(), e = equipeClientAu(c.id, auj), per = periodesClient(c.id).slice().reverse(), sansPresta = !lignesRegulieres(c).length;
+  fenetre(`<h2 style="margin:0">Chef · ${esc(c.nom)}</h2>
+    <p style="margin:6px 0 0">Aujourd'hui : <b>${e ? eqPoint(e) + esc(e.cheffe_nom) : "aucun chef (100 % OIKOS)"}</b></p>
+    <form id="cc" style="display:grid;gap:10px;margin-top:10px">
+      <div class="deux"><label class="f">Désormais<select name="eq"><option value="">Aucun chef : 100 % OIKOS</option>${(cacheEquipes || []).filter(x => x.active).map(x => `<option value="${x.id}" ${e && e.id === x.id ? "selected" : ""}>${esc(x.cheffe_nom)} · ${esc(x.nom)}</option>`).join("")}</select></label>
+        <label class="f">À partir du<input type="date" name="depuis" value="${auj}" max="${auj}"></label></div>
+      <label class="chk" id="cc-presta" ${sansPresta ? "" : "hidden"}><input type="checkbox" name="presta" ${sansPresta ? "checked" : ""}>Ce client n'a pas de presta : le chef fait aussi les passages (il devient son presta)</label>
+      <label class="f">Apporté par<select name="apporte"><option value="">OIKOS</option>${(cacheEquipes || []).map(x => `<option value="${x.id}" ${c.apporte_par === x.id ? "selected" : ""}>${esc(x.cheffe_nom)}</option>`).join("")}</select></label>
+      <p class="muted small" style="margin:0">Le chef touche sa part sur ce client quel que soit le presta qui y va. Pour mettre un presta à la place du chef : « Changer d'intervenante » ; le chef reste le chef. Les passages d'avant la date restent comptés comme avant.</p>
+      <p class="err" id="cc-err"></p>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>
+    ${per.length ? `<h3>Historique</h3>${per.map(m => { const x = equipeDe(m.equipe_id); return `<div class="ligne"><span>${x ? eqPoint(x) + esc(x.cheffe_nom) : "Équipe supprimée"}</span><span class="muted small">du ${tfDateFr(m.debut)}${m.fin ? " au " + tfDateFr(m.fin) : " à aujourd'hui"}</span></div>`; }).join("")}` : ""}`, (el, fermer) => {
+    const f = el.querySelector("#cc"), err = el.querySelector("#cc-err");
+    f.onchange = () => { el.querySelector("#cc-presta").hidden = !sansPresta || !f.eq.value; };
+    f.onchange();
+    f.onsubmit = async ev => {
+      ev.preventDefault(); err.textContent = "";
+      const cible = f.eq.value || null, d = f.depuis.value, apporte = f.apporte.value || null, enCours = periodeClientAu(c.id, auj);
+      const changeChef = (enCours ? enCours.equipe_id : null) !== cible, changeApport = (c.apporte_par || null) !== apporte;
+      if (!changeChef && !changeApport) { err.textContent = "Rien ne change."; return; }
+      if (changeChef) {
+        if (!d || d > auj) { err.textContent = "Choisis une date d'aujourd'hui ou d'avant."; return; }
+        if (periodesClient(c.id).some(m => m.debut >= d && m !== enCours)) { err.textContent = "Il y a déjà une période qui commence à cette date ou après : choisis une date plus récente."; return; }
+        if (enCours && enCours.debut > d) { err.textContent = `Le chef actuel est là depuis le ${tfDateFr(enCours.debut)} : choisis cette date ou plus tard.`; return; }
+      }
+      const bouton = f.querySelector("[type=submit]"); bouton.disabled = true;
+      const echec = m => { bouton.disabled = false; err.textContent = m; };
+      if (changeChef) {
+        const veille = ymd(new Date(new Date(d + "T12:00").getTime() - 864e5));
+        if (enCours) { const r = enCours.debut === d ? await sb.from("client_equipes").delete().eq("id", enCours.id) : await sb.from("client_equipes").update({ fin: veille }).eq("id", enCours.id); if (r.error) return echec(r.error.message); }
+        if (cible) { const r = await sb.from("client_equipes").insert({ client_id: c.id, equipe_id: cible, debut: d }); if (r.error) return echec(r.error.message); }
+        const x = cible && equipeDe(cible);
+        if (x && sansPresta && f.presta.checked) {
+          const compte = x.cheffe && cacheProfils.find(p => p.id === x.cheffe), nom = compte ? nomPers(compte) : x.cheffe_nom;
+          if (!dejaSuivi(c.id, nom)) {
+            const r = await sb.from("attributions").insert({ client_id: c.id, intervenante_id: compte ? compte.id : null, nom_libre: compte ? null : x.cheffe_nom, activite: activitePrincipale(activitesClient(c)), debut: d, note: "Chef de ce client, il fait aussi les passages" });
+            if (r.error) toast("Chef enregistré, mais il n'a pas pu être mis comme presta : " + r.error.message);
+          }
+        }
+      }
+      if (changeApport) { const r = await sb.from("clients").update({ apporte_par: apporte }).eq("id", c.id); if (r.error) return echec(r.error.message); c.apporte_par = apporte; }
+      toast(changeChef ? (cible ? `C'est noté : ${equipeDe(cible).cheffe_nom} est le chef de ${c.nom} depuis le ${tfDateFr(d)}` : `C'est noté : ${c.nom} n'a plus de chef depuis le ${tfDateFr(d)} (100 % OIKOS)`) : "Enregistré");
+      fermer(); await apres();
+    };
+  });
 }
 /* Nouvelle cheffe / modifier : nom, structure, sorte, couleur, son compte presta éventuel, taux datés */
 function ficheCheffe(e) {
@@ -5311,7 +5374,7 @@ function clientsApportes(e) {
   if (!e) return;
   const ids = cacheProfils.filter(p => p.equipe === e.id).map(p => p.id);
   const servis = new Set(cacheAttrib.filter(a => ids.includes(a.intervenante_id) && prestaEnCours(a)).map(a => a.client_id));
-  cacheClients.filter(c => c.apporte_par === e.id).forEach(c => servis.add(c.id));
+  cacheClients.filter(c => c.apporte_par === e.id || (equipeClientAu(c.id, ymd(new Date())) || {}).id === e.id).forEach(c => servis.add(c.id));
   const liste = [...servis].map(id => cacheClients.find(c => c.id === id)).filter(Boolean).sort((x, y) => norm(x.nom) < norm(y.nom) ? -1 : 1);
   fenetre(`<h2 style="margin:0">${eqPoint(e)}Clients apportés par ${esc(e.cheffe_nom)}</h2>
     <p class="muted small">Coche les clients trouvés par son équipe. Les autres clients suivis par son équipe sont des clients d'OIKOS confiés.</p>
@@ -5830,7 +5893,7 @@ async function dosEnsemble(c, corps, re) {
   const [urlsP, urlsT] = await Promise.all([urlsSignees(photos.map(p => p.apercu)), urlsDocs(docs)]);
   const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
   const reguliers = lignesRegulieres(c);
-  corps.innerHTML = `${prestatairesActuels(c) ? `<p style="margin:0 0 6px"><b>Prestataire :</b> ${esc(prestatairesActuels(c))}${reguliers.length ? ` <button class="btn" type="button" data-changer-presta>${ico("mission")} Changer d'intervenante</button>` : ""}</p>` : ""}${prestaPotentiels(c) ? `<p style="margin:0 0 6px"><b>Prestataire potentiel :</b> ${esc(prestaPotentiels(c))}</p>` : ""}${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("etincelle")} Analyses (${analyses.length})</h2>
+  corps.innerHTML = `${chefClientHtml(c)}${prestatairesActuels(c) ? `<p style="margin:0 0 6px"><b>Prestataire :</b> ${esc(prestatairesActuels(c))}${reguliers.length ? ` <button class="btn" type="button" data-changer-presta>${ico("mission")} Changer d'intervenante</button>` : ""}</p>` : ""}${prestaPotentiels(c) ? `<p style="margin:0 0 6px"><b>Prestataire potentiel :</b> ${esc(prestaPotentiels(c))}</p>` : ""}${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("etincelle")} Analyses (${analyses.length})</h2>
       ${analyses.map(a => `<div class="ligne"><span>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`).join("")}</section>` : ""}
     <section class="card"><h2 style="margin-top:0">${ico("dossier")} Dossiers de tâches (${taches.length})</h2>
       ${taches.map(t => { const l = docs.filter(d => d.tache_id === t.id); return `<div class="dos-tache" data-t="${t.id}"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow-wrap:anywhere">${esc(t.dossier_nom)}</b>
@@ -5844,6 +5907,7 @@ async function dosEnsemble(c, corps, re) {
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">${ico("cadenas")} Juridique (${jur.length})</h2>
       ${jur.map(x => `<p style="margin:0 0 8px"><span class="tag">${TYPES_J[x.type]}</span> <b>${esc(x.titre)}</b>${x.texte ? `<br><span style="white-space:pre-wrap">${esc(x.texte)}</span>` : ""}</p>`).join("") || `<p class="muted">Rien dans le volet juridique.</p>`}</section>`;
   corps.onclick = e => {
+    if (e.target.closest("[data-chef-client]")) return changerChefClient(c, async () => { await chargerBase(); afficher(); re(); });
     if (e.target.closest("[data-changer-presta]")) return reguliers.length === 1 ? changerIntervenante(c, reguliers[0], async () => { await chargerBase(); afficher(); re(); }) : corps.closest(".fenetre").querySelector('[data-dos="presta"]').click();
     const v = e.target.closest("[data-voir]"); if (v) return ouvrirDocTache(v.dataset.voir);
     const b = e.target.closest("[data-ouvre]"); if (b) ficheTache(taches.find(t => t.id === b.closest("[data-t]").dataset.t), re);
