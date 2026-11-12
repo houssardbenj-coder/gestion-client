@@ -557,6 +557,7 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .ms-b.ec-info small.ms-qui{color:var(--info)}
 .ec-cat{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
 .ec-carte select{margin-left:6px}
+#ec-fa-ico .chip{display:inline-flex;padding:6px 9px}#ec-fa-ico .chip .ico{width:20px;height:20px}#ec-fa-ico .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .ms-b.moi{background:var(--accent-soft)}
 .ms-pers[aria-current="true"]{box-shadow:inset 4px 0 0 var(--accent);border-radius:4px 10px 10px 4px}
 /* Chiffres : un filet de couleur par nature de montant */
@@ -2344,7 +2345,7 @@ function tacheDepuisMessages(p, apres) {
    Le client ne décide de rien : chaque demande attend ton accord. Tant que le SQL 53 n'est pas lancé, la page le dit et le reste du pilote ne change pas. */
 let ecSection = "demandes", ecClient = "", ecQui = "", ecOuverte = "", ecMinuteur = null, ecNb = 0;
 const EC_SEAU = "espace-client";
-const EC_SECTIONS = [["demandes", "Demandes de service"], ["route", "Feuille de route"], ["messages", "Messages"], ["urssaf", "Avance immédiate"], ["comptes", "Clients qui ont l'appli"], ["partenaires", "Partenaires"], ["reglages", "Réglages"]];
+const EC_SECTIONS = [["demandes", "Demandes de service"], ["route", "Feuille de route"], ["messages", "Messages"], ["urssaf", "Avance immédiate"], ["comptes", "Clients qui ont l'appli"], ["partenaires", "Partenaires"], ["annexes", "Services annexes"], ["reglages", "Réglages"]];
 const EC_ETATS_DEMANDE = { nouvelle: "Nouvelle", vue: "Vue", en_cours: "En cours", traitee: "Traitée", refusee: "Refusée" };
 const EC_ETATS_MODIF = { en_attente: "En attente de ton accord", acceptee: "Acceptée", ajustee: "Acceptée avec ajustement", refusee: "Refusée" };
 const EC_GENRES_MODIF = { ajout: "Ajouter", retrait: "Retirer", changement: "Changer", autre: "Autre demande" };
@@ -2411,7 +2412,7 @@ async function vueEspace() {
     <div id="ec-corps" style="margin-top:12px"><p class="muted">Chargement…</p></div>`);
   el.querySelector("#ec-chips").onclick = e => { const b = e.target.closest("[data-ec]"); if (b) { if (b.dataset.ec !== "comptes") ecClient = ""; ecAller(b.dataset.ec); } };
   const corps = el.querySelector("#ec-corps"), re = () => afficher("espace");
-  try { await ({ demandes: ecDemandes, route: ecRoute, messages: ecMessages, urssaf: ecUrssaf, comptes: ecComptes, partenaires: ecPartenaires, reglages: ecReglages })[ecSection](corps, re); }
+  try { await ({ demandes: ecDemandes, route: ecRoute, messages: ecMessages, urssaf: ecUrssaf, comptes: ecComptes, partenaires: ecPartenaires, annexes: ecAnnexes, reglages: ecReglages })[ecSection](corps, re); }
   catch (e) { corps.innerHTML = `<p class="err">${esc(e.message || e)}</p>`; }
 }
 /* ---------- a. Demandes de service ---------- */
@@ -2436,7 +2437,7 @@ async function ecDemandes(corps, re) {
     return `<section class="card ec-carte ${nouvelle ? "ec-nouvelle" : ""}" data-d="${d.id}" style="margin-top:10px">
       <div class="ligne" style="border-top:0;padding-top:0;flex-wrap:wrap"><span style="min-width:0">
           ${nouvelle ? `<span class="tag ec-rouge">Nouvelle demande</span> ` : `<span class="tag ${fini(d) ? "off" : ""}">${EC_ETATS_DEMANDE[d.etat]}</span> `}
-          ${d.modifie_le ? `<span class="tag warn">Modifiée par le client le ${esc(ecQuand(d.modifie_le))}</span> ` : ""}<b>${esc(nomClient(d.client_id))}</b> <span class="muted small">· ${d.partenaire_id || d.partenaire_nom ? "Mise en relation : " + esc(d.partenaire_nom || "partenaire") : esc(d.activite)} · ${ecQuand(d.cree_le)}${(d.photos || []).length ? " · " + d.photos.length + " photo" + (d.photos.length > 1 ? "s" : "") : ""}</span>
+          ${d.modifie_le ? `<span class="tag warn">Modifiée par le client le ${esc(ecQuand(d.modifie_le))}</span> ` : ""}<b>${esc(nomClient(d.client_id))}</b> <span class="muted small">· ${d.partenaire_id || d.partenaire_nom ? "Mise en relation : " + esc(d.partenaire_nom || "partenaire") : d.annexe_titre ? "Service annexe : " + esc(d.annexe_titre) : esc(d.activite)} · ${ecQuand(d.cree_le)}${(d.photos || []).length ? " · " + d.photos.length + " photo" + (d.photos.length > 1 ? "s" : "") : ""}</span>
           ${o ? "" : `<br><span class="muted">${esc(String(d.texte).slice(0, 140))}${d.texte.length > 140 ? "…" : ""}</span>`}</span>
         <span class="row" style="flex:none"><button class="btn ${nouvelle ? "primary" : ""}" data-ouvrir>${o ? "Replier" : "Ouvrir"}</button>
           <button class="btn" data-repondre>Répondre</button>
@@ -2474,7 +2475,7 @@ async function ecDemandes(corps, re) {
         t => changer({ etat: "refusee", reponse: t || d.reponse || null, decide_le: new Date().toISOString(), vue_le: d.vue_le || new Date().toISOString() }, "Demande refusée"));
       if (b.hasAttribute("data-devis")) {
         if (!c) return toast("Client introuvable");
-        const titre = String(d.texte).split(/\r?\n/)[0].trim().slice(0, 60) || "Demande de l'appli client";
+        const titre = d.annexe_titre ? d.annexe_titre.slice(0, 60) : String(d.texte).split(/\r?\n/)[0].trim().slice(0, 60) || "Demande de l'appli client";
         const depart = { titre, type_prestation: "one_shot", besoin: d.texte };
         if (ACTIVITES_DEVIS.includes(d.activite)) depart.activite = d.activite;
         return nouvelleDemande(c, () => ecAller("demandes"), depart, async nv => {
@@ -2922,6 +2923,97 @@ async function ecPartenaires(corps, re) {
     if (e.target.closest("[data-part-actif]")) { const { error } = await sb.from("partenaires").update({ actif: !x.actif }).eq("id", x.id); if (error) return souci(error); return re(); }
     if (e.target.closest("[data-part-sup]")) { if (!confirm("Supprimer « " + x.nom_affiche + " » ? Les demandes déjà reçues restent.")) return;
       const { error } = await sb.from("partenaires").delete().eq("id", x.id); if (error) return souci(error); toast("Partenaire supprimé"); re(); }
+  };
+}
+/* ---------- Services annexes (SQL 61) : chaque service est un onglet en plus dans l'appli des clients ----------
+   Tu le crées ici ; le client le voit tout de suite (à son prochain chargement). Sa demande arrive dans « Demandes de service », par mail, avec le nom du service.
+   Les icônes sont les mêmes dans l'appli client (ANNEXE_ICONES, à garder identiques des deux côtés). */
+const ANNEXE_ICONES = { etoile: "M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.8z", fer: "M3 17h15a3 3 0 0 0 3-3V8h-9a9 9 0 0 0-9 9zM9 12.5h6M3 20h18", vitre: "M5 3h14v18H5zM12 3v18M5 12h14", feuille: "M5 19C5 10 11 5 20 5c0 9-6 14-15 14zM5 19l8-8", panier: "M4 9h16l-1.6 11H5.6zM9 9l3-5 3 5M9.5 13v4M14.5 13v4", patte: "M12 20c-3 0-5-1.4-5-3.4S9.5 12 12 12s5 2.6 5 4.6-2 3.4-5 3.4zM6 9a1.6 1.6 0 1 0 0 3.2A1.6 1.6 0 1 0 6 9zM18 9a1.6 1.6 0 1 0 0 3.2A1.6 1.6 0 1 0 18 9zM9.5 4.5a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2zM14.5 4.5a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z", voiture: "M3 16v-4l2.5-5h13l2.5 5v4zM3 16v3h3v-3M18 16v3h3v-3M7 13h.01M17 13h.01", outil: "M14.5 5.5a4 4 0 0 0 5 5L10 20a2.1 2.1 0 0 1-3-3l9.5-9.5a4 4 0 0 0-2-2z", livre: "M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1zM12 6v14", cadeau: "M4 9h16v4H4zM5 13h14v8H5zM12 9v12M12 9C10 5 6 5 7 8M12 9c2-4 6-4 5-1", coeur: "M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z", cle: "M15 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12.2 11.8 4 20M7 17l2 2M5 19l2 2", maison: "M4 11 12 4l8 7v9h-5v-6H9v6H4z", flocon: "M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5" };
+const ANNEXE_NOMS = { etoile: "Étoile", fer: "Repassage", vitre: "Vitres", feuille: "Jardin", panier: "Courses", patte: "Animaux", voiture: "Voiture", outil: "Bricolage", livre: "Cours", cadeau: "Cadeau", coeur: "Aide", cle: "Clés", maison: "Maison", flocon: "Saison" };
+const icoAnnexe = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${ANNEXE_ICONES[n] || ANNEXE_ICONES.etoile}"/></svg>`;
+async function ecAnnexes(corps, re) {
+  const r = await sb.from("services_annexes").select("*").order("ordre").order("cree_le");
+  if (r.error) {
+    if (ecAbsent(r.error)) { corps.innerHTML = `<section class="card"><p><b>Les services annexes ne sont pas encore installés (SQL 61).</b></p><p class="muted" style="margin-top:6px">Lance le fichier « 61 - services annexes.sql » dans Supabase, puis recharge cette page.</p></section>`; return; }
+    throw r.error;
+  }
+  const liste = r.data;
+  const [cases, comptes, demandes] = await Promise.all([q(sb.from("services_annexes_clients").select("*")), q(sb.from("comptes_clients").select("client_id,actif")),
+    q(sb.from("client_demandes").select("annexe_id,etat").not("annexe_id", "is", null))]);
+  const avecAppli = [...new Set(comptes.filter(k => k.actif).map(k => k.client_id))].sort((a, b) => nomClient(a).localeCompare(nomClient(b), "fr"));
+  const cochesDe = id => cases.filter(x => x.service_id === id).map(x => x.client_id);
+  const nb = id => demandes.filter(d => d.annexe_id === id).length, nbNouv = id => demandes.filter(d => d.annexe_id === id && d.etat === "nouvelle").length;
+  const auj = new Date().toISOString().slice(0, 10);
+  const etat = x => !x.actif ? ["masqué", "warn"] : x.au && x.au < auj ? ["terminé le " + ecDate(x.au), "warn"] : x.du && x.du > auj ? ["à partir du " + ecDate(x.du), "warn"] : ["visible", ""];
+  corps.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:10px"><p class="muted" style="margin:0;max-width:70ch">Chaque service est un onglet en plus dans l'appli de tes clients, à côté d'Accueil, Suivi, Demander… Le client lit ta présentation et t'envoie une demande : elle arrive dans « Demandes de service » et par mail, avec le nom du service. Un nouveau service apparaît chez le client à sa prochaine ouverture de l'appli.</p>
+      <button class="btn primary" id="ec-ann-nv">${ico("plus")} Proposer un service</button></div>
+    ${liste.length ? liste.map((x, i) => { const [t, c] = etat(x), coches = cochesDe(x.id); return `<div class="card ec-carte" data-ann="${x.id}" style="margin-bottom:8px;${x.actif ? "" : "opacity:.6"}"><div class="row" style="justify-content:space-between;align-items:flex-start">
+        <span style="min-width:0;display:flex;gap:10px;align-items:flex-start"><span class="tag" style="padding:6px">${icoAnnexe(x.icone)}</span><span style="min-width:0">
+          <b>${esc(x.titre)}</b> <span class="muted small">· onglet « ${esc(x.onglet)} »</span> <span class="tag ${c}">${t}</span>
+          ${nb(x.id) ? ` <span class="muted small">· ${nb(x.id)} demande${nb(x.id) > 1 ? "s" : ""}${nbNouv(x.id) ? ", dont " + nbNouv(x.id) + " nouvelle" + (nbNouv(x.id) > 1 ? "s" : "") : ""}</span>` : ""}
+          ${x.accroche ? `<br><span class="muted small">${esc(x.accroche)}</span>` : ""}
+          <br><span class="small">${x.pour_tous ? "Pour tous les clients qui ont l'appli" : coches.length ? "Seulement pour : " + coches.map(id => esc(nomClient(id))).join(", ") : "Aucun client coché : personne ne le voit"}${x.prix ? " · " + esc(x.prix) : ""}</span></span></span>
+        <span class="row" style="flex:none">
+          <button class="btn flat" data-ann-haut ${i ? "" : "disabled"} aria-label="Monter">↑</button><button class="btn flat" data-ann-bas ${i < liste.length - 1 ? "" : "disabled"} aria-label="Descendre">↓</button>
+          <button class="btn" data-ann-mod>Modifier</button><button class="btn" data-ann-actif>${x.actif ? "Masquer" : "Montrer"}</button><button class="btn flat" data-ann-sup>Supprimer</button></span></div></div>`; }).join("")
+      : `<section class="card"><p class="muted">Aucun service annexe pour l'instant. Exemples : repassage, nettoyage des vitres, garde d'animaux pendant les vacances, courses, entretien de printemps…</p></section>`}
+    ${liste.length > 4 ? `<p class="muted small" style="margin-top:8px">Au-delà de 6 onglets en tout, la barre du bas de l'appli client défile de côté : garde les noms d'onglets courts.</p>` : ""}`;
+  const fiche = x => {
+    let icone = x ? x.icone : "etoile", coches = new Set(x ? cochesDe(x.id) : []);
+    fenetre(`<h2 style="margin:0">${x ? "Modifier le service" : "Proposer un service"}</h2>
+    <form id="ec-fa" style="display:grid;gap:10px;margin-top:10px">
+      <div class="deux"><label class="f">Nom de l'onglet (14 caractères au plus)<input type="text" name="onglet" required maxlength="14" placeholder="Repassage" value="${esc(x ? x.onglet : "")}"></label>
+        <label class="f">Titre de la page<input type="text" name="titre" required maxlength="80" placeholder="Repassage à domicile" value="${esc(x ? x.titre : "")}"></label></div>
+      <div><span class="small"><b>Icône de l'onglet</b></span><div class="chips" id="ec-fa-ico" style="margin-top:6px">${Object.keys(ANNEXE_ICONES).map(k => `<button type="button" class="chip" data-ico="${k}" aria-pressed="${k === icone}" title="${ANNEXE_NOMS[k]}">${icoAnnexe(k)}</button>`).join("")}</div></div>
+      <label class="f">Phrase d'accroche (facultatif)<input type="text" name="accroche" maxlength="200" placeholder="Votre linge repassé et plié pendant le passage" value="${esc(x ? x.accroche || "" : "")}"></label>
+      <label class="f">Présentation (facultatif)<textarea name="description" rows="5" maxlength="3000" placeholder="Ce qui est compris, comment ça se passe, pour qui">${esc(x ? x.description || "" : "")}</textarea></label>
+      <div class="deux"><label class="f">Prix indicatif (facultatif)<input type="text" name="prix" maxlength="120" placeholder="À partir de 25 € de l'heure, 50 % déductibles" value="${esc(x ? x.prix || "" : "")}"></label>
+        <label class="f">Texte du bouton<input type="text" name="bouton" maxlength="40" placeholder="Je suis intéressé" value="${esc(x ? x.bouton || "" : "")}"></label></div>
+      <label class="f">Exemple écrit dans la case du client (facultatif)<input type="text" name="aide" maxlength="200" placeholder="Par exemple : deux paniers de linge par semaine" value="${esc(x ? x.aide || "" : "")}"></label>
+      <div class="deux"><label class="f">Visible à partir du (facultatif)<input type="date" name="du" value="${x && x.du ? x.du : ""}"></label>
+        <label class="f">Visible jusqu'au (facultatif)<input type="date" name="au" value="${x && x.au ? x.au : ""}"></label></div>
+      <div><span class="small"><b>Qui le voit ?</b></span>
+        <div class="chips" id="ec-fa-qui" style="margin-top:6px"><button type="button" class="chip" data-qui="tous" aria-pressed="${!x || x.pour_tous}">Tous les clients qui ont l'appli</button><button type="button" class="chip" data-qui="choisis" aria-pressed="${!!x && !x.pour_tous}">Seulement ceux que je coche</button></div>
+        <div id="ec-fa-clients" style="margin-top:8px;max-height:220px;overflow:auto;${!x || x.pour_tous ? "display:none" : ""}">${avecAppli.length ? avecAppli.map(id => `<label class="chk" style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-cl="${id}" ${coches.has(id) ? "checked" : ""}>${esc(nomClient(id))}</label>`).join("") : `<p class="muted small">Aucun client n'a encore l'appli.</p>`}</div></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn flat" type="button" data-fermer>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div></form>`, (z, fermer) => {
+      let pourTous = !x || x.pour_tous;
+      z.querySelector("#ec-fa-ico").onclick = e => { const b = e.target.closest("[data-ico]"); if (!b) return; icone = b.dataset.ico; z.querySelectorAll("#ec-fa-ico .chip").forEach(c => c.setAttribute("aria-pressed", c === b)); };
+      z.querySelector("#ec-fa-qui").onclick = e => { const b = e.target.closest("[data-qui]"); if (!b) return; pourTous = b.dataset.qui === "tous";
+        z.querySelectorAll("#ec-fa-qui .chip").forEach(c => c.setAttribute("aria-pressed", c === b)); z.querySelector("#ec-fa-clients").style.display = pourTous ? "none" : ""; };
+      z.querySelector("#ec-fa-clients").onchange = e => { const c = e.target.closest("[data-cl]"); if (c) c.checked ? coches.add(c.dataset.cl) : coches.delete(c.dataset.cl); };
+      z.querySelector("#ec-fa").onsubmit = async e => {
+        e.preventDefault(); const f = new FormData(e.target), v = { icone, pour_tous: pourTous };
+        ["onglet", "titre", "accroche", "description", "prix", "bouton", "aide", "du", "au"].forEach(k => v[k] = String(f.get(k) || "").trim() || null);
+        if (v.du && v.au && v.au < v.du) return toast("La date de fin est avant la date de début");
+        if (!pourTous && !coches.size && !confirm("Aucun client coché : personne ne verra ce service. Enregistrer quand même ?")) return;
+        const b = e.submitter; if (b) b.disabled = true;
+        try {
+          let id = x && x.id;
+          if (x) await q(sb.from("services_annexes").update(v).eq("id", x.id));
+          else { v.ordre = liste.length ? Math.max(...liste.map(k => k.ordre || 0)) + 1 : 0; id = (await q(sb.from("services_annexes").insert(v).select("id").single())).id; }
+          /* Les clients cochés : on ne garde que ceux de la liste (rien n'est perdu si on repasse à « tous ») */
+          const avant = new Set(x ? cochesDe(x.id) : []);
+          const enlever = [...avant].filter(c => !coches.has(c)), ajouter = [...coches].filter(c => !avant.has(c));
+          if (enlever.length) await q(sb.from("services_annexes_clients").delete().eq("service_id", id).in("client_id", enlever));
+          if (ajouter.length) await q(sb.from("services_annexes_clients").insert(ajouter.map(c => ({ service_id: id, client_id: c }))));
+          toast(x ? "Service modifié" : "Service proposé : il apparaît dans l'appli des clients"); fermer(); re();
+        } catch (err) { if (b) b.disabled = false; souci(err); }
+      };
+    });
+  };
+  corps.querySelector("#ec-ann-nv").onclick = () => fiche(null);
+  corps.onclick = async e => {
+    const carte = e.target.closest("[data-ann]"); if (!carte) return; const i = liste.findIndex(k => k.id === carte.dataset.ann), x = liste[i]; if (!x) return;
+    if (e.target.closest("[data-ann-mod]")) return fiche(x);
+    try {
+      if (e.target.closest("[data-ann-actif]")) { await q(sb.from("services_annexes").update({ actif: !x.actif }).eq("id", x.id)); toast(x.actif ? "Masqué : l'onglet disparaît chez les clients" : "Visible à nouveau"); return re(); }
+      const sens = e.target.closest("[data-ann-haut]") ? -1 : e.target.closest("[data-ann-bas]") ? 1 : 0;
+      if (sens) { const autre = liste[i + sens]; if (!autre) return;
+        const l = liste.slice(); l[i] = autre; l[i + sens] = x;
+        await Promise.all(l.map((k, n) => k.ordre === n ? null : q(sb.from("services_annexes").update({ ordre: n }).eq("id", k.id))).filter(Boolean)); return re(); }
+      if (e.target.closest("[data-ann-sup]")) { if (!confirm("Supprimer « " + x.titre + " » ? L'onglet disparaît chez les clients. Les demandes déjà reçues restent, avec le nom du service.")) return;
+        await q(sb.from("services_annexes").delete().eq("id", x.id)); toast("Service supprimé"); re(); }
+    } catch (err) { souci(err); }
   };
 }
 /* Fiche client : le bouton « Appli client » dit où il en est */

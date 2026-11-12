@@ -1175,7 +1175,7 @@ async function ecConversations() {
 }
 async function vueMessagesClient(conv) {
   clearInterval(msMinuteur);
-  const charger = async () => { const { data, error } = await sb.from("client_messages").select("id,de,texte,piece,cree_le,lu_le").eq("canal", "presta").eq("presta_id", moi.id).eq("client_id", conv.id).order("cree_le", { ascending: false }).limit(300); if (error) throw error; return data.reverse(); };
+  const charger = async () => { const { data, error } = await sb.from("client_messages").select("id,de,texte,piece,piece_nom,piece_etat,cree_le,lu_le").eq("canal", "presta").eq("presta_id", moi.id).eq("client_id", conv.id).order("cree_le", { ascending: false }).limit(300); if (error) throw error; return data.reverse(); };
   let l = await charger();
   contenu(`${msRetour(true)}<h1>${esc(conv.nom)}</h1><p class="muted small" style="margin-bottom:10px">Ton client t'écrit depuis son appli. OIKOS voit aussi ces messages.${conv.appli ? "" : " Ce client n'a plus l'appli : tu peux relire, plus écrire."}</p>
     <div class="card ms-fil" id="ms-fil"></div>
@@ -1184,7 +1184,10 @@ async function vueMessagesClient(conv) {
   const fil = document.getElementById("ms-fil"), zone = document.getElementById("ms-texte");
   const dessiner = (descendre) => {
     const marque = m => m.de === "presta" ? (m.lu_le ? `<small class="ms-lu">${ico("ok")} Lu le ${msHeure(m.lu_le)}</small>` : `<small>Pas encore lu</small>`) : "";
-    const piece = m => m.piece ? `<small>${ico("doc")} Pièce jointe envoyée à OIKOS</small>` : "";
+    // Pièce jointe du client : contrôlée par le pont (quelques minutes) avant de pouvoir s'ouvrir
+    const piece = m => m.piece_etat === "refusee" ? `<small>${ico("doc")} Pièce jointe refusée (fichier non accepté)</small>`
+      : !m.piece ? "" : m.piece_etat === "ok" ? `<button type="button" class="btn" style="margin-top:6px;width:100%;justify-content:flex-start" data-piece="${esc(m.piece)}">${ico("doc")} ${esc(m.piece_nom || "Pièce jointe")}</button>`
+      : `<small>${ico("doc")} ${esc(m.piece_nom || "Pièce jointe")} : en cours de vérification, elle s'ouvrira dans quelques minutes</small>`;
     const premier = !fil.children.length, enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 60, garde = fil.scrollTop;
     fil.innerHTML = l.map(m => `<div class="ms-b ${m.de === "presta" ? "moi" : ""}"><small style="margin:0 0 2px">${m.de === "presta" ? "Toi" : m.de === "oikos" ? "OIKOS" : esc(conv.nom)}</small>${esc(m.texte)}${piece(m)}<small>${msHeure(m.cree_le)}</small>${marque(m)}</div>`).join("") || `<p class="ms-vide">Aucun message pour l'instant.</p>`;
     fil.scrollTop = !premier && !enBas && !descendre ? garde : fil.scrollHeight;
@@ -1198,6 +1201,14 @@ async function vueMessagesClient(conv) {
     majBadgeMessages();
   };
   dessiner(); marquerLu();
+  // Ouvrir la pièce : lien valable 5 minutes, fenêtre ouverte tout de suite sinon le téléphone la bloque
+  fil.onclick = async e => {
+    const b = e.target.closest("[data-piece]"); if (!b) return;
+    const w = window.open("", "_blank");
+    const { data, error } = await sb.storage.from("espace-client").createSignedUrl(b.dataset.piece, 300);
+    if (error || !data) { if (w) w.close(); return toast("Cette pièce n'est pas disponible pour le moment."); }
+    if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  };
   const form = document.getElementById("ms-form");
   if (form) form.onsubmit = async e => {
     e.preventDefault(); const texte = zone.value.trim(); if (!texte) return;
@@ -1211,7 +1222,7 @@ async function vueMessagesClient(conv) {
     if (onglet !== "messages" || !document.getElementById("ms-fil")) return clearInterval(msMinuteur);
     if (document.hidden) return;
     try {
-      const n = await charger(), signe = x => x.map(m => m.id + (m.lu_le ? "l" : "")).join();
+      const n = await charger(), signe = x => x.map(m => m.id + (m.lu_le ? "l" : "") + (m.piece_etat || "")).join();
       if (signe(n) === signe(l)) return marquerLu();
       l = n; dessiner(); marquerLu();
     } catch (e) {}
