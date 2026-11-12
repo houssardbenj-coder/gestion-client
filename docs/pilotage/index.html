@@ -562,6 +562,7 @@ input[type=text],input[type=email],input[type=tel],input[type=password],input[ty
 .ec-ico-fam{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--muted);margin-top:6px}
 .ec-ico{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--accent-fort,var(--accent));cursor:pointer;font-size:11px;line-height:1.2;text-align:center}
 .ec-ico span{color:var(--ink)}.ec-ico .ico{width:28px;height:28px}
+.ico-img{border-radius:6px;object-fit:contain;stroke:none}.ec-ann-vis .ico-img{width:28px;height:28px}.ec-fa-vis{display:inline-flex;width:52px;height:52px;align-items:center;justify-content:center;border-radius:12px;background:var(--accent-soft);color:var(--accent-fort,var(--accent))}.ec-fa-vis .ico{width:30px;height:30px}.ec-fa-vis .ico-img{width:44px;height:44px}
 .ec-ico[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:var(--accent-soft)}
 .ms-b.moi{background:var(--accent-soft)}
 .ms-pers[aria-current="true"]{box-shadow:inset 4px 0 0 var(--accent);border-radius:4px 10px 10px 4px}
@@ -2985,6 +2986,23 @@ const ICONES_SERVICES = [
 const ICONE_SERVICE = Object.fromEntries(ICONES_SERVICES.map(([k, , , d]) => [k, d]));
 const icoService = k => `<svg class="ico ico-service" viewBox="0 0 24 24" aria-hidden="true">${ICONE_SERVICE[k] || ICONE_SERVICE.etoile}</svg>`;
 /* ICONES-SERVICES:FIN */
+/* Image du service (SQL 62) : réduite ici en carré de 192 points, gardée avec le service. Logo (PNG…) entier sur fond transparent, photo recadrée. */
+const visuelService = x => x.image ? `<img class="ico ico-img" src="${esc(x.image)}" alt="">` : icoService(x.icone);
+async function reduireImageService(f) {
+  if (!/^image\//.test(f.type)) throw new Error("Choisis une photo ou une image (JPG, PNG…).");
+  const url = URL.createObjectURL(f);
+  try {
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error("Cette image ne s'ouvre pas : essaie une autre.")); i.src = url; });
+    const T = 192, c = document.createElement("canvas"), g = c.getContext("2d"), logo = /png|gif|webp|svg/.test(f.type);
+    c.width = c.height = T;
+    const k = logo ? Math.min(T / img.width, T / img.height) : Math.max(T / img.width, T / img.height), w = img.width * k, h = img.height * k;
+    if (!logo) { g.fillStyle = "#fff"; g.fillRect(0, 0, T, T); }
+    g.drawImage(img, (T - w) / 2, (T - h) / 2, w, h);
+    let d = logo ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", .85);
+    if (d.length > 190000) { g.globalCompositeOperation = "destination-over"; g.fillStyle = "#fff"; g.fillRect(0, 0, T, T); d = c.toDataURL("image/jpeg", .8); }
+    return d;
+  } finally { URL.revokeObjectURL(url); }
+}
 async function ecAnnexes(corps, re) {
   const r = await sb.from("services_annexes").select("*").order("ordre").order("cree_le");
   if (r.error) {
@@ -3002,7 +3020,7 @@ async function ecAnnexes(corps, re) {
   corps.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:10px"><p class="muted" style="margin:0;max-width:70ch">Chaque service est un onglet en plus dans l'appli de tes clients, à côté d'Accueil, Suivi, Demander… Le client lit ta présentation et t'envoie une demande : elle arrive dans « Demandes de service » et par mail, avec le nom du service. Un nouveau service apparaît chez le client à sa prochaine ouverture de l'appli.</p>
       <button class="btn primary" id="ec-ann-nv">${ico("plus")} Proposer un service</button></div>
     ${liste.length ? liste.map((x, i) => { const [t, c] = etat(x), coches = cochesDe(x.id); return `<div class="card ec-carte" data-ann="${x.id}" style="margin-bottom:8px;${x.actif ? "" : "opacity:.6"}"><div class="row" style="justify-content:space-between;align-items:flex-start">
-        <span style="min-width:0;display:flex;gap:10px;align-items:flex-start"><span class="tag" style="padding:6px">${icoService(x.icone)}</span><span style="min-width:0">
+        <span style="min-width:0;display:flex;gap:10px;align-items:flex-start"><span class="tag ec-ann-vis" style="padding:6px">${visuelService(x)}</span><span style="min-width:0">
           <b>${esc(x.titre)}</b> <span class="muted small">· onglet « ${esc(x.onglet)} »</span> <span class="tag ${c}">${t}</span>
           ${nb(x.id) ? ` <span class="muted small">· ${nb(x.id)} demande${nb(x.id) > 1 ? "s" : ""}${nbNouv(x.id) ? ", dont " + nbNouv(x.id) + " nouvelle" + (nbNouv(x.id) > 1 ? "s" : "") : ""}</span>` : ""}
           ${x.accroche ? `<br><span class="muted small">${esc(x.accroche)}</span>` : ""}
@@ -3013,12 +3031,15 @@ async function ecAnnexes(corps, re) {
       : `<section class="card"><p class="muted">Aucun service annexe pour l'instant. Exemples : repassage, nettoyage des vitres, garde d'animaux pendant les vacances, courses, entretien de printemps…</p></section>`}
     ${liste.length > 4 ? `<p class="muted small" style="margin-top:8px">Au-delà de 6 onglets en tout, la barre du bas de l'appli client défile de côté : garde les noms d'onglets courts.</p>` : ""}`;
   const fiche = x => {
-    let icone = x ? x.icone : "etoile", coches = new Set(x ? cochesDe(x.id) : []);
+    let icone = x ? x.icone : "etoile", image = x ? x.image || null : null, coches = new Set(x ? cochesDe(x.id) : []);
     fenetre(`<h2 style="margin:0">${x ? "Modifier le service" : "Proposer un service"}</h2>
     <form id="ec-fa" style="display:grid;gap:10px;margin-top:10px">
       <div class="deux"><label class="f">Nom de l'onglet (14 caractères au plus)<input type="text" name="onglet" required maxlength="14" placeholder="Repassage" value="${esc(x ? x.onglet : "")}"></label>
         <label class="f">Titre de la page<input type="text" name="titre" required maxlength="80" placeholder="Repassage à domicile" value="${esc(x ? x.titre : "")}"></label></div>
       <div><span class="small"><b>Icône de l'onglet</b></span><div id="ec-fa-ico" class="ec-ico-grille">${[...new Set(ICONES_SERVICES.map(x => x[2]))].map(f => `<div class="ec-ico-fam">${f}</div>${ICONES_SERVICES.filter(x => x[2] === f).map(([k, n]) => `<button type="button" class="ec-ico" data-ico="${k}" aria-pressed="${k === icone}" title="${n}">${icoService(k)}<span>${n}</span></button>`).join("")}`).join("")}</div></div>
+      <div class="row" style="align-items:center;gap:10px"><span id="ec-fa-vis" class="ec-fa-vis"></span>
+        <button type="button" class="btn" id="ec-fa-img">${ico("photo")} Mettre mon image</button><button type="button" class="btn flat" id="ec-fa-img-non">Retirer l'image</button>
+        <span class="muted small">Une photo ou un logo : il remplace l'icône partout.</span><input type="file" id="ec-fa-img-f" accept="image/*" hidden></div>
       <label class="f">Phrase d'accroche (facultatif)<input type="text" name="accroche" maxlength="200" placeholder="Votre linge repassé et plié pendant le passage" value="${esc(x ? x.accroche || "" : "")}"></label>
       <label class="f">Présentation (facultatif)<textarea name="description" rows="5" maxlength="3000" placeholder="Ce qui est compris, comment ça se passe, pour qui">${esc(x ? x.description || "" : "")}</textarea></label>
       <div class="deux"><label class="f">Prix indicatif (facultatif)<input type="text" name="prix" maxlength="120" placeholder="À partir de 25 € de l'heure, 50 % déductibles" value="${esc(x ? x.prix || "" : "")}"></label>
@@ -3031,7 +3052,13 @@ async function ecAnnexes(corps, re) {
         <div id="ec-fa-clients" style="margin-top:8px;max-height:220px;overflow:auto;${!x || x.pour_tous ? "display:none" : ""}">${avecAppli.length ? avecAppli.map(id => `<label class="chk" style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-cl="${id}" ${coches.has(id) ? "checked" : ""}>${esc(nomClient(id))}</label>`).join("") : `<p class="muted small">Aucun client n'a encore l'appli.</p>`}</div></div>
       <div class="row" style="justify-content:flex-end"><button class="btn flat" type="button" data-fermer>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div></form>`, (z, fermer) => {
       let pourTous = !x || x.pour_tous;
-      z.querySelector("#ec-fa-ico").onclick = e => { const b = e.target.closest("[data-ico]"); if (!b) return; icone = b.dataset.ico; z.querySelectorAll("#ec-fa-ico [data-ico]").forEach(c => c.setAttribute("aria-pressed", c === b)); };
+      const vis = () => { z.querySelector("#ec-fa-vis").innerHTML = image ? `<img class="ico ico-img" src="${esc(image)}" alt="Image du service">` : icoService(icone); z.querySelector("#ec-fa-img-non").hidden = !image; };
+      vis();
+      z.querySelector("#ec-fa-img").onclick = () => z.querySelector("#ec-fa-img-f").click();
+      z.querySelector("#ec-fa-img-non").onclick = () => { image = null; vis(); };
+      z.querySelector("#ec-fa-img-f").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+        try { image = await reduireImageService(f); vis(); } catch (err) { toast(err.message); } };
+      z.querySelector("#ec-fa-ico").onclick = e => { const b = e.target.closest("[data-ico]"); if (!b) return; icone = b.dataset.ico; z.querySelectorAll("#ec-fa-ico [data-ico]").forEach(c => c.setAttribute("aria-pressed", c === b)); vis(); };
       z.querySelector("#ec-fa-qui").onclick = e => { const b = e.target.closest("[data-qui]"); if (!b) return; pourTous = b.dataset.qui === "tous";
         z.querySelectorAll("#ec-fa-qui .chip").forEach(c => c.setAttribute("aria-pressed", c === b)); z.querySelector("#ec-fa-clients").style.display = pourTous ? "none" : ""; };
       z.querySelector("#ec-fa-clients").onchange = e => { const c = e.target.closest("[data-cl]"); if (c) c.checked ? coches.add(c.dataset.cl) : coches.delete(c.dataset.cl); };
@@ -3039,6 +3066,7 @@ async function ecAnnexes(corps, re) {
         e.preventDefault(); const f = new FormData(e.target), v = { icone, pour_tous: pourTous };
         ["onglet", "titre", "accroche", "description", "prix", "bouton", "aide", "du", "au"].forEach(k => v[k] = String(f.get(k) || "").trim() || null);
         if (v.du && v.au && v.au < v.du) return toast("La date de fin est avant la date de début");
+        if (image !== (x ? x.image || null : null)) v.image = image;   // envoyé seulement s'il change (marche aussi sans le SQL 62)
         if (!pourTous && !coches.size && !confirm("Aucun client coché : personne ne verra ce service. Enregistrer quand même ?")) return;
         const b = e.submitter; if (b) b.disabled = true;
         try {
@@ -3051,7 +3079,7 @@ async function ecAnnexes(corps, re) {
           if (enlever.length) await q(sb.from("services_annexes_clients").delete().eq("service_id", id).in("client_id", enlever));
           if (ajouter.length) await q(sb.from("services_annexes_clients").insert(ajouter.map(c => ({ service_id: id, client_id: c }))));
           toast(x ? "Service modifié" : "Service proposé : il apparaît dans l'appli des clients"); fermer(); re();
-        } catch (err) { if (b) b.disabled = false; souci(err); }
+        } catch (err) { if (b) b.disabled = false; if ("image" in v && /image|PGRST204|42703/.test((err.code || "") + " " + (err.message || ""))) return toast(/image_service_ok/.test(err.message || "") ? "Cette image n'est pas acceptée : essaie une autre (JPG ou PNG)." : "Les images ne sont pas encore installées : lance le SQL 62."); souci(err); }
       };
     });
   };

@@ -151,6 +151,7 @@ details.mois .passage{display:flex;justify-content:space-between;gap:10px;paddin
 .nav button{position:relative;border:0;background:none;padding:9px 2px 10px;min-height:58px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer}
 .nav button .ico{width:24px;height:24px}
 .ico .f{fill:currentColor;fill-opacity:.2}
+.ico-img{border-radius:6px;object-fit:contain;display:block}.rond .ico-img{width:72%;height:72%;border-radius:8px}
 .nav div.defile-nav{display:flex;overflow-x:auto;scrollbar-width:none}.nav div.defile-nav::-webkit-scrollbar{display:none}.nav div.defile-nav button{flex:0 0 68px}
 .annexe-tete{flex-direction:row;align-items:center;gap:14px}.annexe-tete .rond{width:56px;height:56px}.annexe-tete .rond .ico{width:28px;height:28px}.annexe-tete h1{margin:0}
 .nav button[aria-current="page"]{color:var(--accent)}
@@ -452,7 +453,7 @@ const nouveauxDocs = () => { const vu = LS.get("vu-documents"); if (vu == null) 
 function onglets() {
   const l = [["accueil", "Accueil", "accueil", 0], ["suivi", "Suivi", "agenda", nouveau(D.modifs, "modifs")], ["demander", "Demander", "plus", nouveau(D.demandes, "demandes")],
     ["messages", "Messages", "bulle", nonLus()], ["documents", "Documents", "dossier", nouveauxDocs()]];
-  D.annexes.services.forEach(s => l.push(["s-" + s.id, s.onglet, s.icone, 0]));
+  D.annexes.services.forEach(s => l.push(["s-" + s.id, s.onglet, s.id, 0]));
   if (urssafOnglet()) l.push(["urssaf", "Avance", "euro", 0]);
   return l;
 }
@@ -472,7 +473,7 @@ function dessiner(silencieux) {
   app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}<div>OIKOS<small>Espace client</small></div></div>
       <button class="compte-btn" id="vers-compte" type="button">${ico("personne")}<span>Mon compte</span></button></header>
     <main class="page" id="page"></main>
-    <nav class="nav" aria-label="Navigation"><div style="--n:${l.length}"${l.length > 6 ? ' class="defile-nav"' : ""}>${l.map(([k, t, i, n]) => `<button type="button" data-o="${k}" ${k === onglet ? 'aria-current="page"' : ""}>${k.startsWith("s-") ? icoService(i) : ico(i)}${n ? `<span class="badge">${n}</span>` : ""}<span>${t}</span></button>`).join("")}</div></nav>`;
+    <nav class="nav" aria-label="Navigation"><div style="--n:${l.length}"${l.length > 6 ? ' class="defile-nav"' : ""}>${l.map(([k, t, i, n]) => `<button type="button" data-o="${k}" ${k === onglet ? 'aria-current="page"' : ""}>${k.startsWith("s-") ? visuelService(D.annexes.services.find(x => x.id === i) || {}) : ico(i)}${n ? `<span class="badge">${n}</span>` : ""}<span>${t}</span></button>`).join("")}</div></nav>`;
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-o]"); if (b) accueil(b.dataset.o); };
   document.getElementById("vers-compte").onclick = () => accueil("compte");
   vueDe(onglet)(document.getElementById("page"));
@@ -510,7 +511,7 @@ function vueAccueil(z) {
       <button class="btn primary" data-va="demander">${ico("plus")} Demander un service</button>
       <button class="btn contour" data-va="messages">${ico("bulle")} Écrire à OIKOS</button>
     </section>
-    ${D.annexes.services.length ? `<section class="card"><h2>Aussi chez OIKOS</h2><div>${D.annexes.services.map(s => `<button class="doc" type="button" data-va="s-${s.id}"><span class="rond">${icoService(s.icone)}</span><span class="corps"><b>${esc(s.titre)}</b>${s.accroche ? `<span class="muted small">${esc(s.accroche)}</span>` : ""}</span>${ico("chevron")}</button>`).join("")}</div></section>` : ""}
+    ${D.annexes.services.length ? `<section class="card"><h2>Aussi chez OIKOS</h2><div>${D.annexes.services.map(s => `<button class="doc" type="button" data-va="s-${s.id}"><span class="rond">${visuelService(s)}</span><span class="corps"><b>${esc(s.titre)}</b>${s.accroche ? `<span class="muted small">${esc(s.accroche)}</span>` : ""}</span>${ico("chevron")}</button>`).join("")}</div></section>` : ""}
     ${urssafAFaire() ? `<section class="card"><h2>Avance immédiate du crédit d'impôt</h2><p class="muted">Avec l'avance immédiate de l'URSSAF, vous ne payez que la moitié de vos factures : le crédit d'impôt est déduit tout de suite. Un formulaire suffit.</p><button class="btn" data-va="urssaf">${ico("euro")} Remplir le formulaire</button></section>` : ""}
     ${carteAvis()}`;
   z.onclick = e => {
@@ -762,6 +763,8 @@ function feuillePartenaire(x) {
 /* ===================== Services annexes (SQL 61) =====================
    Chaque service proposé par OIKOS depuis le pilote est un onglet en plus. Le client lit la présentation et envoie une demande :
    elle arrive chez OIKOS comme « Demander un service », avec le nom du service, et la réponse revient ici. */
+/* Image propre au service (SQL 62) à la place de l'icône ; seulement une image PNG, JPEG ou WEBP (la base refuse le reste) */
+const visuelService = s => s.image && /^data:image\/(png|jpeg|webp);base64,/.test(s.image) ? `<img class="ico ico-img" src="${s.image}" alt="">` : icoService(s.icone);
 const brAnnexe = {};   // brouillon par service, gardé tant que l'appli reste ouverte
 const annexeTitre = d => ((D.annexes.demandes || {})[d.id] || {}).titre || "";
 const annexeDe = o => o && o.startsWith("s-") ? D.annexes.services.find(s => "s-" + s.id === o) : null;
@@ -774,7 +777,7 @@ function vueAnnexe(z, s) {
       <span class="pre">${esc(d.texte)}</span>
       ${d.reponse ? `<p class="reponse"><span class="muted small">Réponse d'OIKOS</span><br>${esc(d.reponse)}</p>` : ""}
       ${!demandeArchivee(d) && !bloque() ? `<button class="btn petit" type="button" data-modif="${d.id}" style="align-self:flex-start">${ico("stylo")} Modifier ma demande</button>` : ""}</div></div>`; };
-  z.innerHTML = `<section class="card annexe-tete"><span class="rond">${icoService(s.icone)}</span><div class="corps"><h1>${esc(s.titre)}</h1>${s.accroche ? `<p class="muted">${esc(s.accroche)}</p>` : ""}</div></section>
+  z.innerHTML = `<section class="card annexe-tete"><span class="rond">${visuelService(s)}</span><div class="corps"><h1>${esc(s.titre)}</h1>${s.accroche ? `<p class="muted">${esc(s.accroche)}</p>` : ""}</div></section>
     ${s.prix || s.au ? `<div class="row">${s.prix ? `<span class="tag">${esc(s.prix)}</span>` : ""}${s.au ? `<span class="muted small">Proposé jusqu'au ${jourFr(s.au)}</span>` : ""}</div>` : ""}
     ${s.description ? `<p class="pre">${esc(s.description)}</p>` : ""}
     ${bandeauEtat()}
