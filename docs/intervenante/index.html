@@ -2829,7 +2829,7 @@ async function chargerPapiers() {
   ]);
   if (pi.error) throw pi.error; if (dc.error) throw dc.error;
   const pour = p => (p.pour === "tous" || p.pour === moi.statut)
-    && (!p.condition || (p.condition === "ae_a_creer" ? moi.ae_a_creer : p.condition === "voiture" ? moi.transport === "Voiture" : true));
+    && (!p.condition || (p.condition === "ae_a_creer" ? moi.ae_a_creer : p.condition === "voiture" ? moi.transport === "Voiture" : p.condition === "cheffe" ? !!moi.cheffe_reseau : false));   // cheffe : papiers des cheffes de réseau (SQL 55)
   const liste = pi.data.filter(pour).map(p => ({ ...p, doc: dc.data.find(d => d.piece_id === p.id) }));
   return { liste, autres: dc.data.filter(d => !d.facture_mois && (!d.piece_id || !liste.some(p => p.id === d.piece_id))) };   // ses factures sont dans Reporting
 }

@@ -961,11 +961,12 @@ async function compteurAVoir() {
   } catch (e) {}
 }
 let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [], cachePropositions = [];
-let cacheEquipes = null, cacheSocietes = null;   // null : SQL 52 pas lancé (ou pas lisible)
+let cacheEquipes = null, cacheSocietes = null, cacheMembres = null;   // null : SQL 52 (ou 55 pour les membres) pas lancé
 async function chargerBase() {
-  [cacheEquipes, cacheSocietes] = await Promise.all([
+  [cacheEquipes, cacheSocietes, cacheMembres] = await Promise.all([
     sb.from("equipes").select("*").order("cheffe_nom").then(r => r.error ? null : r.data || []),
-    sb.from("societes").select("*").order("nom").then(r => r.error ? null : r.data || [])]);
+    sb.from("societes").select("*").order("nom").then(r => r.error ? null : r.data || []),
+    sb.from("equipe_membres").select("*").order("debut").then(r => r.error ? null : r.data || [])]);
   [cacheProfils, cacheClients, cacheAttrib, cacheDemandes, cachePropositions] = await Promise.all([
     q(sb.from("profils").select("*").order("prenom")),
     q(sb.from("clients").select("*").order("nom")),
@@ -4689,7 +4690,7 @@ async function vueIntervenantes() {
     sb.from("comptes_a_retirer").select("*").neq("etat", "fait").then(r => r.data || [])]);   // SQL 51 pas encore lancé : liste vide
   const enAttente = gens.filter(p => p.actif && p.mdp_provisoire && codes.some(c => c.profil_id === p.id));
   const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Presta</h1>
-      <span class="row"><button class="btn primary" id="nv-presta">${ico("plus")} Nouveau presta</button>
+      <span class="row"><button class="btn primary" id="nv-presta">${ico("plus")} Nouveau presta</button>${cacheEquipes ? `<button class="btn" id="nv-cheffe-p">${ico("plus")} Nouvelle cheffe</button>` : ""}
       ${matchMedia("(pointer: coarse)").matches
         ? `<a class="btn flat" href="${SUPABASE_USERS}" target="_blank" rel="noopener">Supabase</a>`
         : `<a class="btn flat" href="oikos-compte2:${SUPABASE_USERS}" title="S'ouvre dans le profil Chrome houssard.benj">Supabase</a>`}</span></div>
@@ -4698,19 +4699,16 @@ async function vueIntervenantes() {
       <span class="row">${c.etat === "erreur" ? `<button class="btn" data-reessai="${c.id}">Réessayer</button><button class="btn flat" data-abandon="${c.id}">Retirer</button>` : c.etat === "prepare" ? `<button class="btn primary" data-prepare="${c.id}">${ico("stylo")} Compléter et inviter</button><button class="btn flat" data-abandon="${c.id}" data-demander>Retirer</button>` : `<span class="tag">invitation dans 5 min</span>`}</span></div>`).join("")}</section>` : ""}
     ${enAttente.length ? `<section class="card" style="margin:10px 0">${enAttente.map(p => `<div class="ligne"><span style="min-width:0"><b>${esc(nomPers(p))}</b> <span class="muted small">compte pas encore activé</span></span>
       <button class="btn" data-sms="${p.id}">${ico("portable")} Envoyer par SMS</button></div>`).join("")}</section>` : ""}
-    <div class="grille" style="margin-top:12px">${gens.map(p => { const papiers = papiersDe(p, pieces, docs); return `<div style="display:grid;gap:6px;align-content:start"><button class="card cliquable" style="text-align:left" data-p="${p.id}">
-      <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}<br><span class="muted small">${esc(p.email || "")}</span><br>
-      <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
-      ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}
-      ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
-      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span>${eqTag(p.equipe ? equipeDe(p.equipe) : null)}</span></button>
-      <span class="row" style="gap:4px">${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}
-      <button class="btn flat" data-archiver-presta="${p.id}" title="Il quitte la liste de l'équipe, son accès est coupé et son compte bloqué. Tu peux le sortir des archives.">${ico("archive")} Archiver</button></span></div>`; }).join("") || `<p class="muted">Aucun intervenant.</p>`}</div>
+    ${sectionsPresta(gens, pieces, docs)}
     ${archives.length ? archivesPrestaHtml(archives, retraits) : ""}`);
   el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
   el.onclick = async e => {
     const g = e.target.closest("[data-gel]"); if (g) return basculerGel(cacheProfils.find(x => x.id === g.dataset.gel), afficher);
     const ra = e.target.closest("[data-archiver-presta],[data-sortir-presta],[data-supprimer-presta],[data-retrait-reessai]"); if (ra) return actionArchivePresta(ra, tous, retraits);
+    const eqb = e.target.closest("[data-equipe-presta]"); if (eqb) return changerEquipe(cacheProfils.find(x => x.id === eqb.dataset.equipePresta));
+    if (e.target.closest("#nv-cheffe-p")) return ficheCheffe(null);
+    const em = e.target.closest("[data-eq-modif]"); if (em) return ficheCheffe(equipeDe(em.dataset.eqModif));
+    const ec = e.target.closest("[data-eq-clients]"); if (ec) return clientsApportes(equipeDe(ec.dataset.eqClients));
     const b = e.target.closest("[data-p]"); if (b) return ficheIntervenante(b.dataset.p);
     if (e.target.closest("#nv-presta")) return nouveauPresta();
     const s = e.target.closest("[data-sms]");
@@ -4723,6 +4721,74 @@ async function vueIntervenantes() {
     if (x && x.hasAttribute("data-demander") && !confirm("Retirer cette fiche préparée ? Rien n'a été envoyé à cette personne.")) return;
     if (x) { await maj(sb.from("comptes_a_creer").delete().eq("id", x.dataset.abandon)); afficher(); }
   };
+}
+/* Page Presta : chaque cheffe avec ses presta en dessous, puis les presta d'OIKOS (sans cheffe) */
+function cartePresta(p, pieces, docs) {
+  const papiers = papiersDe(p, pieces, docs), e = equipeActuelle(p), estCheffe = (cacheEquipes || []).some(x => x.cheffe === p.id && x.active);
+  return `<div style="display:grid;gap:6px;align-content:start"><button class="card cliquable" style="text-align:left" data-p="${p.id}">
+      <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}${estCheffe ? ` <span class="tag">${ico("drapeau")} cheffe</span>` : ""}<br><span class="muted small">${esc(p.email || "")}</span><br>
+      <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
+      ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}
+      ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
+      <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span></span></button>
+      <span class="row" style="gap:4px">${cacheEquipes ? `<button class="btn flat" data-equipe-presta="${p.id}" title="Le mettre dans l'équipe d'une cheffe ou l'en retirer, à la date choisie. Le passé ne bouge pas.">${e ? eqPoint(e) : ico("personne")} Équipe</button>` : ""}
+      ${p.actif ? `<button class="btn ${p.gele ? "go" : "flat"}" data-gel="${p.id}">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}
+      <button class="btn flat" data-archiver-presta="${p.id}" title="Il quitte la liste de l'équipe, son accès est coupé et son compte bloqué. Tu peux le sortir des archives.">${ico("archive")} Archiver</button></span></div>`;
+}
+function sectionsPresta(gens, pieces, docs) {
+  const grille = l => `<div class="grille" style="margin-top:10px">${l.map(p => cartePresta(p, pieces, docs)).join("")}</div>`;
+  if (!cacheEquipes) return gens.length ? grille(gens) : `<p class="muted">Aucun intervenant.</p>`;
+  const actives = cacheEquipes.filter(e => e.active), dans = e => gens.filter(p => (equipeActuelle(p) || {}).id === e.id);
+  const sansEquipe = gens.filter(p => !equipeActuelle(p) || !equipeActuelle(p).active);
+  const compte = e => { const c = e.cheffe && cacheProfils.find(x => x.id === e.cheffe);
+    return c ? `<button class="btn flat" data-p="${c.id}">${ico("dossier")} Sa fiche et ses papiers</button>` : e.cheffe_email ? `<span class="tag">espace en préparation</span>` : `<span class="tag warn">pas encore d'espace</span>`; };
+  const cheffes = actives.map(e => { const l = dans(e), tx = tauxEquipeAu(e, ymd(new Date()));
+    return `<section class="card eq-carte" style="--eq:${couleurSure(e.couleur)};margin-top:14px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start"><span style="min-width:0"><b style="font-size:18px">${eqPoint(e)}${esc(e.cheffe_nom)}</b> <span class="muted">· ${esc(e.nom)}</span>
+        <br><span class="tag">${MODES_EQUIPE[tx ? tx.mode : e.mode]}${(tx ? tx.mode : e.mode) === "societe" ? " : " + esc(nomSociete(e.societe)) : ""}</span> <span class="tag">${l.length} presta</span>
+        <span class="muted small">${tx ? `${LIB_TAUX[tx.mode][0]} : ${suEuros(tx.apporte)} apportés · ${suEuros(tx.confie)} confiés` : "taux à régler"}</span></span>
+        <span class="row">${compte(e)}<button class="btn flat" data-eq-clients="${e.id}">Clients apportés</button><button class="btn" data-eq-modif="${e.id}">${ico("stylo")} Modifier</button></span></div>
+      ${l.length ? grille(l) : `<p class="muted small" style="margin:8px 0 0">Aucun presta dans son équipe : bouton « Équipe » sur la carte d'un presta, ou choisis-la en créant un presta.</p>`}</section>`; }).join("");
+  return cheffes + `<h2 style="margin:22px 0 0">Presta d'OIKOS <span class="muted small" style="font-weight:400">· sans cheffe</span></h2>`
+    + (sansEquipe.length ? grille(sansEquipe) : `<p class="muted">Aucun.</p>`);
+}
+/* Le mettre dans une équipe, l'en retirer ou le changer d'équipe, à une date (aujourd'hui ou avant) : la période en cours est fermée la veille, rien n'est effacé */
+function changerEquipe(p) {
+  if (!p) return;
+  if (!cacheMembres) return toast("Il faut d'abord lancer le SQL 55 (historique des équipes) dans Supabase");
+  const auj = tfAujourdhui(), e = equipeActuelle(p), per = periodesDe(p.id).slice().reverse();
+  fenetre(`<h2 style="margin:0">Équipe de ${esc(nomPers(p))}</h2>
+    <p style="margin:6px 0 0">Aujourd'hui : <b>${e ? eqPoint(e) + "équipe de " + esc(e.cheffe_nom) : "presta d'OIKOS (sans cheffe)"}</b></p>
+    <form id="ce" style="display:grid;gap:10px;margin-top:10px">
+      <div class="deux"><label class="f">Désormais<select name="eq"><option value="">Presta d'OIKOS (sans cheffe)</option>${(cacheEquipes || []).filter(x => x.active).map(x => `<option value="${x.id}" ${e && e.id === x.id ? "selected" : ""}>Équipe de ${esc(x.cheffe_nom)}</option>`).join("")}</select></label>
+        <label class="f">À partir du<input type="date" name="depuis" value="${auj}" max="${auj}"></label></div>
+      <p class="muted small" style="margin:0">Les passages d'avant cette date restent comptés pour son ancienne équipe (ou pour OIKOS).</p>
+      <p class="err" id="ce-err"></p>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>
+    ${per.length ? `<h3>Historique</h3>${per.map(m => { const x = equipeDe(m.equipe_id); return `<div class="ligne"><span>${x ? eqPoint(x) + "Équipe de " + esc(x.cheffe_nom) : "Équipe supprimée"}</span><span class="muted small">du ${tfDateFr(m.debut)}${m.fin ? " au " + tfDateFr(m.fin) : " à aujourd'hui"}</span></div>`; }).join("")}` : ""}`, (el, fermer) => {
+    el.querySelector("#ce").onsubmit = async ev => {
+      ev.preventDefault();
+      const f = ev.target, err = el.querySelector("#ce-err"), cible = f.eq.value || null, d = f.depuis.value;
+      if (!d || d > auj) { err.textContent = "Choisis une date d'aujourd'hui ou d'avant."; return; }
+      const enCours = periodeAu(p.id, auj);
+      if ((enCours ? enCours.equipe_id : null) === cible) { err.textContent = "Rien ne change."; return; }
+      if (periodesDe(p.id).some(m => m.debut >= d && m !== enCours)) { err.textContent = "Il y a déjà une période qui commence à cette date ou après : choisis une date plus récente."; return; }
+      if (enCours && enCours.debut > d) { err.textContent = `Sa période en cours a commencé le ${tfDateFr(enCours.debut)} : choisis cette date ou plus tard.`; return; }
+      const veille = ymd(new Date(new Date(d + "T12:00").getTime() - 864e5));
+      f.querySelector("[type=submit]").disabled = true;
+      if (enCours) {
+        // commencée le même jour : on la retire (elle n'a jamais compté) ; sinon on la ferme la veille
+        const r = enCours.debut === d ? await sb.from("equipe_membres").delete().eq("id", enCours.id) : await sb.from("equipe_membres").update({ fin: veille }).eq("id", enCours.id);
+        if (r.error) { f.querySelector("[type=submit]").disabled = false; err.textContent = r.error.message; return; }
+      }
+      if (cible) {
+        const r = await sb.from("equipe_membres").insert({ intervenante_id: p.id, equipe_id: cible, debut: d });
+        if (r.error) { f.querySelector("[type=submit]").disabled = false; err.textContent = r.error.message; return; }
+      }
+      toast(cible ? "C'est noté : dans l'équipe de " + equipeDe(cible).cheffe_nom + " depuis le " + tfDateFr(d) : "C'est noté : presta d'OIKOS depuis le " + tfDateFr(d));
+      fermer(); await chargerBase(); afficher();
+    };
+  });
 }
 /* Archivés (SQL 51) : seul le gérant peut archiver, sortir des archives ou supprimer, et seulement un compte de presta.
    Archiver : accès déjà coupé ; il quitte l'équipe tout de suite, le Pont photos bloque son compte de connexion dans les 5 minutes.
@@ -4805,6 +4871,7 @@ function nouveauPresta(b = null) {
       <label class="f">Portable (pour le SMS)<input type="tel" name="telephone" placeholder="06 12 34 56 78" autocomplete="off" value="${esc(v.telephone || "")}"></label>
       <label class="f">Statut<select name="statut">${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${k === v.statut ? "selected" : ""}>${t}</option>`).join("")}</select></label>
       <label class="chk"><input type="checkbox" name="ae" ${v.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
+      ${cacheEquipes && cacheMembres ? `<label class="f">Cheffe de réseau<select name="equipe"><option value="">Aucune : presta d'OIKOS</option>${cacheEquipes.filter(e => e.active).map(e => `<option value="${e.id}" ${e.id === v.equipe_id ? "selected" : ""}>Équipe de ${esc(e.cheffe_nom)}</option>`).join("")}</select></label>` : ""}
       <p class="err" id="np-err"></p>
       <div class="row"><button class="btn primary" type="submit">Créer et inviter</button><button class="btn" type="submit" data-garder>Préparer sans inviter</button>${aide("Préparer sans inviter : sa fiche attend dans Intervenants, sans compte et sans aucun message. Tu la complètes et tu l'invites quand tout est prêt.")}<button class="btn flat" type="button" data-fermer>Annuler</button></div>
     </form>`, (el, fermer) => {
@@ -4820,7 +4887,7 @@ function nouveauPresta(b = null) {
       if (cacheProfils.some(p => norm(nomPers(p)) === norm(prenom + " " + nom)) && !confirm(`Un compte existe déjà au nom de ${prenom} ${nom}. En créer un second ?`)) return;
       if (!b) { const deja = await sb.from("comptes_a_creer").select("prenom,nom").eq("etat", "prepare");
         if ((deja.data || []).some(x => motsPresta(x.prenom + " " + x.nom) === motsPresta(prenom + " " + nom))) { err.textContent = "Sa fiche est déjà préparée : ouvre-la dans la liste des intervenants."; return; } }
-      const boutons = [...f.querySelectorAll("[type=submit]")], fiche = { email: email || null, prenom, nom, telephone: telephone || null, statut: f.statut.value, ae_a_creer: f.statut.value === "sous-traitant" && f.ae.checked, etat: garder ? "prepare" : "a_faire", ...(garder ? {} : { message: null }) };
+      const boutons = [...f.querySelectorAll("[type=submit]")], fiche = { email: email || null, prenom, nom, telephone: telephone || null, statut: f.statut.value, ae_a_creer: f.statut.value === "sous-traitant" && f.ae.checked, etat: garder ? "prepare" : "a_faire", ...(f.equipe ? { equipe_id: f.equipe.value || null } : {}), ...(garder ? {} : { message: null }) };
       boutons.forEach(x => x.disabled = true);
       const { error } = await (b ? sb.from("comptes_a_creer").update(fiche).eq("id", b.id) : sb.from("comptes_a_creer").insert(fiche));
       if (error) { boutons.forEach(x => x.disabled = false); err.textContent = error.code === "23505" ? "Une invitation est déjà en attente pour cet e-mail." : error.code === "23514" || error.code === "23502" ? "La base n'est pas encore prête pour préparer une fiche (SQL 41 à lancer)." : error.message; return; }
@@ -4850,7 +4917,7 @@ async function ouvrirClientsNotes(p, lignes, apres) {
 }
 function piecesPour(p, pieces) {
   return pieces.filter(x => x.actif && (x.pour === "tous" || x.pour === p.statut)
-    && (!x.condition || (x.condition === "ae_a_creer" ? p.ae_a_creer : x.condition === "voiture" ? p.transport === "Voiture" : true)));
+    && (!x.condition || (x.condition === "ae_a_creer" ? p.ae_a_creer : x.condition === "voiture" ? p.transport === "Voiture" : x.condition === "cheffe" ? !!p.cheffe_reseau : false)));
 }
 function papiersDe(p, pieces, docs) {
   const liste = piecesPour(p, pieces).filter(x => x.obligatoire);
@@ -4884,7 +4951,7 @@ async function ficheIntervenante(id) {
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
-        ${cacheEquipes ? `<label class="f" style="margin-top:8px">Équipe ${aide("OIKOS en direct : il travaille pour OIKOS, sans cheffe. Équipe d'une cheffe : ses heures comptent pour elle dans Équipe › Réseau (part de la cheffe ou reversement à sa société).")}<select id="eqp"><option value="">OIKOS en direct</option>${cacheEquipes.filter(e => e.active || e.id === p.equipe).map(e => `<option value="${e.id}" ${e.id === p.equipe ? "selected" : ""}>Équipe de ${esc(e.cheffe_nom)} · ${esc(e.mode === "societe" ? nomSociete(e.societe) : "rattachée à OIKOS")}</option>`).join("")}</select></label>` : ""}
+        ${cacheEquipes ? `<div class="ligne" style="margin-top:8px"><span>Équipe : <b>${equipeActuelle(p) ? eqPoint(equipeActuelle(p)) + "équipe de " + esc(equipeActuelle(p).cheffe_nom) : "presta d'OIKOS"}</b></span><button class="btn flat" type="button" id="eqp-changer">Changer</button></div>` : ""}
         <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
         ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
         ${p.archive_le ? `<p style="margin-top:6px"><span class="tag off">${ico("archive")} archivé le ${jour(p.archive_le)}</span></p><p class="muted small" style="margin-top:4px">Accès coupé et compte bloqué. Pour le rouvrir : Presta › Archivés › Sortir des archives.</p>` : `<label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
@@ -4937,11 +5004,11 @@ async function ficheIntervenante(id) {
       if (await changerZone(a, s.value)) recharger(); else s.value = zoneAu(a, tfAujourdhui()) || "";
     });
     if (el.querySelector("#fm")) facturesDuPresta(el.querySelector("#fm"), p, factures, docs, recharger);
+    if (el.querySelector("#eqp-changer")) el.querySelector("#eqp-changer").onclick = () => { fermer(); changerEquipe(p); };
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
       await maj(sb.from("profils").update({ statut: el.querySelector("#st").value || null, ae_a_creer: el.querySelector("#ae").checked, ...(el.querySelector("#ac") ? { actif: el.querySelector("#ac").checked } : {}),
-        ...(el.querySelector("#fpo") ? { facture_par_oikos: el.querySelector("#fpo").checked } : {}),
-        ...(el.querySelector("#eqp") ? (v => ({ equipe: v || null, ...(v ? {} : { societe: "oikos" }) }))(el.querySelector("#eqp").value) : {}) }).eq("id", id));
+        ...(el.querySelector("#fpo") ? { facture_par_oikos: el.querySelector("#fpo").checked } : {}) }).eq("id", id));
       toast("Enregistré"); await chargerBase(); fermer(); afficher(); };
     el.querySelector("#nv-code").onclick = async () => {
       if (!p.mdp_provisoire && !confirm(`${nomPers(p)} a déjà choisi son mot de passe. Il ne marchera plus : il devra en rechoisir un avec le nouveau code. Continuer ?`)) return;
@@ -4982,8 +5049,9 @@ async function ficheIntervenante(id) {
    et EN SOCIÉTÉ (sa SAS ; OIKOS garde sa commission par heure et verse le reste du prix HT à la société, qui paie ses presta).
    Chaque presta est « OIKOS en direct » ou dans une équipe (profils.equipe) ; un client « apporté » par l'équipe (clients.apporte_par)
    prend le taux « apportés », les autres le taux « confiés ». Les taux sont datés (equipes.taux) : un changement ne touche jamais les mois passés.
-   Le prix client (« Ce que rapporte ce client ») est lu comme TTC avec TVA 10 %. Les cours (Benjamin enseignement) restent hors réseau. */
-const TVA_SAP = 0.10;
+   Le prix client (« Ce que rapporte ce client ») est lu comme TTC, avec la TVA de l'activité (onglet TVA de l'Excel : ménage 10 %, jardinage et bricolage 20 %). Les cours (Benjamin enseignement) restent hors réseau. */
+const TVA_SAP = 0.10, TVA_ACTIVITE = { "Ménage": 0.10, "Jardinage": 0.20, "Bricolage": 0.20 };   // comme l'onglet TVA de l'Excel
+const tvaDe = act => TVA_ACTIVITE[act] ?? TVA_SAP;
 const EQ_COULEURS = ["#7a8450", "#b5532f", "#3f6c8a", "#8a5a9e", "#c08a2c", "#2f7d6b", "#a33b5c", "#5b6470"];
 const couleurSure = c => /^#[0-9a-fA-F]{6}$/.test(c || "") ? c : "#7a8450";
 const equipeDe = id => (cacheEquipes || []).find(e => e.id === id) || null;
@@ -4996,6 +5064,14 @@ function tauxEquipeAu(e, date) {
   const l = ((e && e.taux) || []).filter(x => x.a_partir_du <= date).sort((x, y) => x.a_partir_du < y.a_partir_du ? -1 : 1);
   const x = l.pop(); return x ? { apporte: +x.apporte || 0, confie: +x.confie || 0, mode: x.mode || e.mode, depuis: x.a_partir_du } : null;
 }
+/* L'équipe d'un presta tel jour : d'après l'historique (SQL 55), sinon son équipe d'aujourd'hui (SQL 52 seul) */
+const periodesDe = pid => (cacheMembres || []).filter(m => m.intervenante_id === pid).sort((x, y) => x.debut < y.debut ? -1 : 1);
+const periodeAu = (pid, date) => periodesDe(pid).find(m => m.debut <= date && (!m.fin || m.fin >= date)) || null;
+function equipeAuJour(p, date) {
+  if (cacheMembres) { const m = periodeAu(p.id, date); return m ? equipeDe(m.equipe_id) : null; }
+  return p.equipe ? equipeDe(p.equipe) : null;
+}
+const equipeActuelle = p => equipeAuJour(p, ymd(new Date()));
 const LIB_TAUX = { rattachee: ["Part de la cheffe", "par heure de son équipe"], societe: ["Commission d'OIKOS", "par heure (le reste du prix HT va à sa société)"] };
 const reseauMois = { m: null };
 /* Calcule le mois : une ligne par presta, rangée dans « OIKOS en direct » ou dans son équipe */
@@ -5014,7 +5090,7 @@ async function calculReseau(m0, m1) {
     const act = x.activite || (a && a.activite) || activitePrincipale(activitesClient(c));
     const h = (new Date(x.depart) - new Date(x.arrivee)) / 36e5; if (!(h > 0)) return;
     if (act === "Cours") { cours.h += h; return; }
-    const e = p.equipe ? equipeDe(p.equipe) : null, g = groupe(e);
+    const e = equipeAuJour(p, date), g = groupe(e);
     const r = g.prestas[p.id] || (g.prestas[p.id] = { presta: p, h: 0, hc: 0, ht: 0, paye: 0, cheffe: 0, verser: 0, oikos: 0, apporte: 0, manque: new Set() });
     r.h += h;
     const t = tarifAu(tarifs, p.id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
@@ -5023,7 +5099,7 @@ async function calculReseau(m0, m1) {
     if (!prix) r.manque.add("prix client");
     if (e && !tx) r.manque.add("taux de l'équipe");
     if (!(t.taux > 0) || !prix || (e && !tx)) return;
-    const ht = h * prix / (1 + TVA_SAP), paye = h * t.taux;
+    const ht = h * prix / (1 + tvaDe(act)), paye = h * t.taux;
     r.hc += h; r.ht += ht; r.paye += paye;
     if (!e) { r.oikos += ht - paye; return; }
     const apporte = c.apporte_par === e.id || (c.societe && c.societe !== "oikos"), taux = apporte ? tx.apporte : tx.confie;
@@ -5038,12 +5114,13 @@ async function vueReseau() {
   await chargerBase();
   if (cacheEquipes === null) { contenu(`<h1>Réseau</h1><p class="muted">Il faut d'abord lancer le SQL 52 (sociétés et équipes) et le SQL 54 (couleur et commission) dans Supabase.</p>`); return; }
   const auj = new Date(), m0 = reseauMois.m || new Date(auj.getFullYear(), auj.getMonth(), 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
-  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque cheffe a son équipe de presta. Rattachée : pas de société, son équipe travaille pour OIKOS et elle touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. Un presta sans équipe est « OIKOS en direct ». Pour mettre un presta dans une équipe : sa fiche (Presta) › Réglages › Équipe.")}</h1>
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque cheffe a son équipe de presta. Rattachée : pas de société, son équipe travaille pour OIKOS et elle touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. Un presta sans équipe est un presta d'OIKOS. Pour mettre un presta dans une équipe ou l'en retirer : Équipe › Presta, bouton « Équipe » sur sa carte (le passé ne bouge pas).")}</h1>
       <button class="btn primary" id="nv-cheffe">${ico("plus")} Nouvelle cheffe</button></div>
     <div class="row" style="justify-content:space-between;margin:10px 0"><button class="btn" data-rm="-1" aria-label="Mois précédent">‹</button>
       <b style="text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
       <button class="btn" data-rm="1" aria-label="Mois suivant" ${m1 > auj ? "disabled" : ""}>›</button></div>
-    <div id="rs"><p class="muted small">Calcul…</p></div>`);
+    <div id="rs"><p class="muted small">Calcul…</p></div>
+    <section class="card" style="margin-top:12px"><b>${ico("feuille")} Onglet RÉSEAU de l'Excel</b> ${aide("Un onglet du TABLEAU DE BORD OFFICIEL, au même format que SAISIE SERVICES : chaque ligne d'heures d'un presta qui était dans l'équipe d'une cheffe ce jour-là, avec la part de la cheffe ou la commission d'OIKOS, ce qu'il faut verser et ce qui reste à OIKOS, plus un récapitulatif par mois et par cheffe. Il est entièrement réécrit à chaque mise à jour : n'y tape rien. Les autres onglets ne sont pas touchés. Comme toute écriture par programme, ouvre et enregistre l'Excel dans WPS avant de lancer les factures.")}<div id="rs-xl" style="margin-top:6px"><p class="muted small" style="margin:0">Lecture de l'Excel…</p></div></section>`);
   el.onclick = e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.rm) { reseauMois.m = new Date(m0.getFullYear(), m0.getMonth() + +b.dataset.rm, 1); return afficher(); }
@@ -5052,12 +5129,13 @@ async function vueReseau() {
     if (b.dataset.eqClients) return clientsApportes(equipeDe(b.dataset.eqClients));
     if (b.dataset.p) return ficheIntervenante(b.dataset.p);
   };
+  ongletReseauExcel(el.querySelector("#rs-xl")).catch(x => { el.querySelector("#rs-xl").innerHTML = `<p class="err small" style="margin:0">${esc(x.message || x)}</p>`; });
   const res = await calculReseau(m0, m1), zone = el.querySelector("#rs");
   if (res.erreur) { zone.innerHTML = `<p class="muted">${esc(res.erreur)}</p>`; return; }
   const somme = (rs, f) => rs.reduce((t, r) => t + r[f], 0);
   const manqueHtml = r => r.manque.size ? `<br><span class="tag warn">${ico("alerte")} ${heures((r.h - r.hc) * 60)} pas comptée(s) : ${esc([...r.manque].join(", "))} manquant</span>` : "";
   const prestaCell = r => `<button class="lien-pc" data-p="${r.presta.id}">${esc(nomPers(r.presta))}</button>${manqueHtml(r)}`;
-  const membres = e => cacheProfils.filter(p => p.role === "intervenante" && !p.archive_le && (e ? p.equipe === e.id : !p.equipe));
+  const membres = e => cacheProfils.filter(p => p.role === "intervenante" && !p.archive_le && (e ? (equipeActuelle(p) || {}).id === e.id : !equipeActuelle(p)));
   let totVerser = 0, totOikos = 0, totHt = 0, totH = 0;
   const carteEquipe = e => {
     const g = res.groupes[e.id], rs = g ? Object.values(g.prestas).sort((x, y) => norm(nomPers(x.presta)) < norm(nomPers(y.presta)) ? -1 : 1) : [];
@@ -5077,7 +5155,7 @@ async function vueReseau() {
         : `<p class="muted small" style="margin:8px 0 0">Aucun passage terminé ce mois-ci.</p>`}
       ${modesMois.length > 1 ? `<p class="muted small" style="margin:6px 0 0">Elle a changé de sorte ce mois-ci : chaque passage est compté avec la sorte et le taux de son jour.</p>` : ""}
       ${modesMois.length === 1 && modesMois[0] === "societe" && rs.length ? `<p class="muted small" style="margin:6px 0 0">Sa société paie elle-même ses presta (${suEuros(somme(rs, "paye"))}) sur ce que tu lui verses.</p>` : ""}
-      ${sans.length ? `<p class="muted small" style="margin:6px 0 0">Aussi dans l'équipe : ${sans.map(p => esc(nomPers(p))).join(", ")}</p>` : membres(e).length ? "" : `<p class="muted small" style="margin:6px 0 0">Aucun presta dans l'équipe : ouvre la fiche d'un presta › Réglages › Équipe.</p>`}</section>`;
+      ${sans.length ? `<p class="muted small" style="margin:6px 0 0">Aussi dans l'équipe : ${sans.map(p => esc(nomPers(p))).join(", ")}</p>` : membres(e).length ? "" : `<p class="muted small" style="margin:6px 0 0">Aucun presta dans l'équipe : Équipe › Presta, bouton « Équipe » sur la carte d'un presta.</p>`}</section>`;
   };
   const direct = res.groupes.direct ? Object.values(res.groupes.direct.prestas).sort((x, y) => norm(nomPers(x.presta)) < norm(nomPers(y.presta)) ? -1 : 1) : [];
   const actives = cacheEquipes.filter(e => e.active), arretees = cacheEquipes.filter(e => !e.active);
@@ -5090,8 +5168,47 @@ async function vueReseau() {
       : `<p class="muted small" style="margin:8px 0 0">Aucun passage terminé ce mois-ci.</p>`}</section>`;
   zone.innerHTML = `<div class="su-chiffres" style="margin-bottom:12px">${[["Heures du réseau", heures(totH * 60)], ["Facturé HT", suEuros(totHt)], ["À verser aux cheffes et sociétés", suEuros(totVerser)], ["Reste à OIKOS", suEuros(totOikos)]].map(([n, v]) => `<div class="card"><span class="muted small">${n}</span><b>${v}</b></div>`).join("")}</div>
     ${cartes || `<section class="card" style="margin-bottom:12px"><p class="muted" style="margin:0">Aucune cheffe pour l'instant : touche « Nouvelle cheffe ».</p></section>`}${carteDirect}
-    <p class="muted small">Facturé HT = heures × prix de l'heure du client (« Ce que rapporte ce client », lu comme TTC avec TVA ${Math.round(TVA_SAP * 100)} %), divisé par ${(1 + TVA_SAP).toLocaleString("fr-FR")}. Payé au presta = son tarif à l'heure du jour du passage.
-      Un presta est compté dans son équipe d'aujourd'hui. « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
+    <p class="muted small">Facturé HT = heures × prix de l'heure du client (« Ce que rapporte ce client », lu comme TTC), divisé par la TVA de l'activité comme dans l'onglet TVA de l'Excel (ménage 10 %, jardinage et bricolage 20 %). Payé au presta = son tarif à l'heure du jour du passage.
+      Chaque passage compte pour l'équipe du presta ce jour-là. « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
+}
+/* Onglet RÉSEAU de l'Excel : lignes de SAISIE SERVICES des presta qui étaient dans une équipe ce jour-là, calculées ici
+   (les équipes et leurs taux sont dans la base), écrites par le programme du PC (reseau_excel.py). Rien n'est écrit s'il est à jour. */
+function lignesReseauExcel(xl) {
+  const prestas = cacheProfils.filter(p => p.role === "intervenante"), lignes = [], inconnus = new Set();
+  (xl.services || []).forEach(l => {
+    if (!l.date || !l.intervenant) return;   // les lignes archivées comptent aussi : ce sont des heures faites
+    const p = prestas.find(x => memeIntervenant(l.intervenant, x)); if (!p) return;
+    const e = equipeAuJour(p, l.date); if (!e) return;
+    const c = cacheClients.find(k => norm(k.nom) === norm(l.client)) || null, tx = tauxEquipeAu(e, l.date), h = +l.heures || 0;
+    if (!c) inconnus.add(l.client);
+    const apporte = !!c && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos")), taux = tx ? (apporte ? tx.apporte : tx.confie) : null, soc = (tx ? tx.mode : e.mode) === "societe";
+    const ht = l.ht == null ? null : +l.ht, cout = l.cout == null ? null : +l.cout, part = taux == null ? null : Math.round(h * taux * 100) / 100;
+    lignes.push({ date: l.date, mois: l.mois || "", cheffe: e.cheffe_nom + " · " + e.nom, sorte: soc ? "En société" : "Rattachée", couleur: couleurSure(e.couleur), intervenant: l.intervenant, client: l.client, activite: l.activite,
+      apporte, heures: h, ttc: l.ttc == null ? null : +l.ttc, ht, cout, taux_eq: taux, part,
+      verser: part == null || ht == null ? null : Math.round((soc ? ht - part : part) * 100) / 100,
+      oikos: part == null || ht == null ? null : Math.round((soc ? part : ht - (cout || 0) - part) * 100) / 100, ligne: l.ligne });
+  });
+  return { lignes, inconnus: [...inconnus].filter(Boolean) };
+}
+async function ongletReseauExcel(boite) {
+  let xl;
+  try { xl = lgP = await pc("/lignes", null, 30000); }
+  catch (e) { boite.innerHTML = `<p class="muted small" style="margin:0">PC pas relié : relie-le (bouton « Relier le PC » à droite) pour voir et mettre à jour l'onglet RÉSEAU.</p>`; return; }
+  const { lignes, inconnus } = lignesReseauExcel(xl);
+  const etat = await pc("/reseau", { version: xl.version, lignes, comparer: true }, 60000);
+  const note = inconnus.length ? `<br><span class="muted small">Client(s) de l'Excel pas retrouvé(s) dans la base, comptés comme « confiés » : ${esc(inconnus.slice(0, 6).join(", "))}${inconnus.length > 6 ? "…" : ""}</span>` : "";
+  boite.innerHTML = etat.a_jour ? `<p class="small" style="margin:0"><span style="color:var(--go)">${ico("ok")}</span> À jour : ${lignes.length} ligne(s) d'heures des équipes.${note}</p>`
+    : `<div class="row" style="justify-content:space-between"><span class="small">${etat.existe ? "Pas à jour" : "L'onglet n'existe pas encore"} : ${lignes.length} ligne(s) d'heures des équipes à écrire.${note}</span>
+      <button class="btn primary" id="rs-xl-maj">${ico("feuille")} Mettre à jour l'onglet RÉSEAU</button></div>`;
+  const b = boite.querySelector("#rs-xl-maj"); if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true; b.textContent = "Écriture…";
+    try {
+      const r = await pc("/reseau", { version: xl.version, lignes }, 120000);
+      toast(r.ecrit ? "Onglet RÉSEAU mis à jour (copie de sécurité faite avant). Ouvre et enregistre l'Excel dans WPS avant de lancer les factures." : "Déjà à jour");
+      ongletReseauExcel(boite).catch(() => {});
+    } catch (x) { b.disabled = false; b.textContent = "Mettre à jour l'onglet RÉSEAU"; souci(x); }
+  };
 }
 /* Nouvelle cheffe / modifier : nom, structure, sorte, couleur, son compte presta éventuel, taux datés */
 function ficheCheffe(e) {
@@ -5100,10 +5217,15 @@ function ficheCheffe(e) {
   const tx = e ? tauxEquipeAu(e, auj) : null;
   const partenaires = (cacheSocietes || []).filter(s => s.genre === "partenaire");
   const comptes = cacheProfils.filter(p => p.role === "intervenante" && !p.archive_le);
+  const lieCompte = !!(e && e.cheffe), mots = String(v.cheffe_nom || "").trim().split(/\s+/), prenom0 = mots.length > 1 ? mots[0] : "", nom0 = mots.length > 1 ? mots.slice(1).join(" ") : mots[0] || "";
   fenetre(`<h2 style="margin:0">${neuf ? "Nouvelle cheffe" : "Modifier " + esc(e.cheffe_nom)}</h2>
     <form id="fc" style="display:grid;gap:10px;margin-top:10px">
-      <div class="deux"><label class="f">Prénom et nom de la cheffe<input name="cheffe_nom" required maxlength="120" autocomplete="off" value="${esc(v.cheffe_nom || "")}"></label>
-        <label class="f">Nom de la structure ou de l'équipe<input name="nom" required maxlength="120" autocomplete="off" placeholder="ex. Équipe Nadia" value="${esc(v.nom || "")}"></label></div>
+      <div class="deux"><label class="f">Prénom de la cheffe<input name="prenom" required maxlength="60" autocomplete="off" value="${esc(prenom0)}"></label>
+        <label class="f">Nom de la cheffe<input name="nomc" required maxlength="60" autocomplete="off" value="${esc(nom0)}"></label></div>
+      <label class="f">Nom de la structure ou de l'équipe<input name="nom" required maxlength="120" autocomplete="off" placeholder="ex. Équipe Nadia" value="${esc(v.nom || "")}"></label>
+      ${lieCompte ? "" : `<div class="deux"><label class="f">Son e-mail<input name="email" type="email" autocomplete="off" autocapitalize="none" spellcheck="false" value="${esc(v.cheffe_email || "")}"></label>
+        <label class="f">Son portable<input name="telephone" type="tel" autocomplete="off" placeholder="06 12 34 56 78"></label></div>
+      <label class="chk"><input type="checkbox" name="espace" ${neuf ? "checked" : ""}>Lui créer son espace maintenant : compte et invitation, dossier Drive (Papiers, Juridique, Factures, Autres documents) et papiers à envoyer depuis son appli ${aide("Comme pour un presta : le pont crée son compte et lui envoie le mail d'invitation dans les 5 minutes, puis son dossier dans COLLABORATEURS. Elle est mise dans sa propre équipe : si elle fait aussi des heures, elles comptent pour son équipe.")}</label>`}
       <fieldset style="border:0;padding:0;margin:0;display:grid;gap:6px"><legend class="muted small" style="margin-bottom:4px">Sorte de cheffe</legend>
         <label class="chk"><input type="radio" name="mode" value="rattachee" ${v.mode === "rattachee" ? "checked" : ""}>Rattachée à OIKOS : pas de société, son équipe travaille pour OIKOS, elle touche une part par heure</label>
         <label class="chk"><input type="radio" name="mode" value="societe" ${v.mode === "societe" ? "checked" : ""}>En société : sa SAS reçoit le prix HT moins la commission d'OIKOS et paie ses presta</label></fieldset>
@@ -5133,7 +5255,12 @@ function ficheCheffe(e) {
     f.onsubmit = async ev => {
       ev.preventDefault(); err.textContent = "";
       const net = t => t.trim().replace(/\s+/g, " "), mode = f.mode.value, apporte = tfNombre(f.apporte.value), confie = tfNombre(f.confie.value), depuis = f.depuis.value;
-      if (!net(f.cheffe_nom.value) || !net(f.nom.value)) { err.textContent = "Il manque le nom de la cheffe ou de la structure."; return; }
+      const cheffeNom = [net(f.prenom.value), net(f.nomc.value)].filter(Boolean).join(" "), email = f.email ? f.email.value.trim().toLowerCase() : "", tel = f.telephone ? f.telephone.value.trim() : "", espace = !!(f.espace && f.espace.checked) && !f.cheffe.value;
+      if (!net(f.prenom.value) || !net(f.nomc.value) || !net(f.nom.value)) { err.textContent = "Il manque le prénom, le nom de la cheffe ou le nom de la structure."; return; }
+      if (/[\/:*?"<>|]/.test(cheffeNom)) { err.textContent = "Son nom sert aussi pour son dossier : retire les caractères \ / : * ? \" < > |."; return; }
+      if (espace && !email) { err.textContent = "Il faut son e-mail pour lui créer son espace (ou décoche la case)."; return; }
+      if (email && cacheProfils.some(p => (p.email || "").toLowerCase() === email)) { err.textContent = "Cet e-mail a déjà un compte : choisis-le dans « Son compte »."; return; }
+      if (tel && !numeroSms(tel)) { err.textContent = "Portable non reconnu : écris-le comme 06 12 34 56 78."; return; }
       if (apporte === null || confie === null) { err.textContent = "Taux non reconnu : écris par exemple 3 ou 1,50."; return; }
       if (!depuis) { err.textContent = "Choisis la date de début du taux."; return; }
       const modeAvant = tx ? tx.mode : v.mode, tauxChange = neuf ? apporte !== "" || confie !== "" : (apporte !== "" || confie !== "") && (!tx || +apporte !== tx.apporte || +confie !== tx.confie || mode !== modeAvant);
@@ -5153,15 +5280,22 @@ function ficheCheffe(e) {
           if (error) { err.textContent = error.message; return; }
         }
       }
-      const fiche = { cheffe_nom: net(f.cheffe_nom.value), nom: net(f.nom.value), mode, societe, couleur: couleurSure(f.couleur.value), cheffe: f.cheffe.value || null, ...(neuf ? { debut: depuis } : { active: f.active.checked }) };
+      const fiche = { cheffe_nom: cheffeNom, nom: net(f.nom.value), ...(f.email ? { cheffe_email: email || null } : {}), mode, societe, couleur: couleurSure(f.couleur.value), cheffe: f.cheffe.value || null, ...(neuf ? { debut: depuis } : { active: f.active.checked }) };
       if (tauxChange) {
         const garder = ((e && e.taux) || []).filter(x => x.a_partir_du < depuis || x.a_partir_du <= tfAujourdhui());   // un taux pas encore commencé à la même date ou après est remplacé
         fiche.taux = [...garder.filter(x => x.a_partir_du !== depuis), { a_partir_du: depuis, apporte: apporte === "" ? 0 : apporte, confie: confie === "" ? 0 : confie, mode }];
       }
       const bouton = f.querySelector("[type=submit]"); bouton.disabled = true;
-      const { error } = await (neuf ? sb.from("equipes").insert(fiche) : sb.from("equipes").update(fiche).eq("id", e.id));
-      if (error) { bouton.disabled = false; err.textContent = error.code === "PGRST204" || error.code === "42703" ? "La base n'est pas encore prête : lance le SQL 54 dans Supabase." : error.message; return; }
-      toast(neuf ? "Cheffe créée : mets ses presta dans son équipe depuis leur fiche" : "Enregistré"); fermer(); await chargerBase(); afficher();
+      const { data: ecrit, error } = await (neuf ? sb.from("equipes").insert(fiche).select() : sb.from("equipes").update(fiche).eq("id", e.id).select());
+      if (error) { bouton.disabled = false; err.textContent = error.code === "PGRST204" || error.code === "42703" ? "La base n'est pas encore prête : lance les SQL 54 et 55 dans Supabase." : error.message; return; }
+      const id = neuf ? ((ecrit || [])[0] || {}).id : e.id;
+      // elle a déjà un compte de presta : elle entre dans sa propre équipe (si elle n'est dans aucune)
+      if (f.cheffe.value && cacheMembres && id && !periodeAu(f.cheffe.value, tfAujourdhui())) await sb.from("equipe_membres").insert({ intervenante_id: f.cheffe.value, equipe_id: id, debut: neuf ? depuis : tfAujourdhui() });
+      if (espace && id) {
+        const r = await sb.from("comptes_a_creer").insert({ email, prenom: net(f.prenom.value), nom: net(f.nomc.value), telephone: tel || null, statut: "sous-traitant", etat: "a_faire", cheffe_de: id });
+        if (r.error) { toast(r.error.code === "23505" ? "Équipe enregistrée, mais une invitation attend déjà pour cet e-mail" : "Équipe enregistrée, mais son espace n'a pas pu être demandé : " + r.error.message); fermer(); await chargerBase(); return afficher(); }
+      }
+      toast(espace ? "Cheffe enregistrée : son compte, son invitation et son dossier Drive arrivent dans 5 minutes" : neuf ? "Cheffe créée : mets ses presta dans son équipe (bouton « Équipe »)" : "Enregistré"); fermer(); await chargerBase(); afficher();
     };
   });
 }
@@ -5233,7 +5367,7 @@ async function beneficePresta(boite, p, attrib) {
   const corps = bloc("OIKOS", "OIKOS") + bloc("BE", "Benjamin enseignement");
   boite.innerHTML = nav + (corps || `<p class="muted small" style="margin:0">Aucun passage terminé ce mois-ci.</p>`)
     + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`
-    + (p.equipe && equipeDe(p.equipe) ? `<p class="small" style="margin:6px 0 0">${eqPoint(equipeDe(p.equipe))}Dans l'équipe de <b>${esc(equipeDe(p.equipe).cheffe_nom)}</b> : la part de la cheffe et ce qui reste à OIKOS sont dans Équipe › Réseau (en HT).</p>` : "");
+    + (equipeActuelle(p) ? `<p class="small" style="margin:6px 0 0">${eqPoint(equipeActuelle(p))}Dans l'équipe de <b>${esc(equipeActuelle(p).cheffe_nom)}</b> : la part de la cheffe et ce qui reste à OIKOS sont dans Équipe › Réseau (en HT).</p>` : "");
 }
 
 /* Factures du mois (SQL 49) : ce que le presta envoie depuis son appli, comparé à ses heures déclarées dans l'appli
@@ -7190,7 +7324,7 @@ async function vuePapiers() {
       <input type="text" name="mots" value="${esc(p.mots || "")}" placeholder="Mots pour le reconnaître dans le Drive : rib, iban…" title="Mots ou expressions séparés par des virgules, cherchés dans le nom du fichier puis dans le texte lu" style="margin-top:4px;font-size:13px">
       <label class="small muted row" style="margin-top:4px">Valable <input type="number" name="validite_mois" min="1" max="120" value="${p.validite_mois || ""}" placeholder="—" style="width:70px"> mois (vide = sans limite)</label></td>
     <td><select name="pour">${[["tous", "Tous"], ["sous-traitant", "Auto-entrepreneurs"], ["salarie", "Salariés"]].map(([k, t]) => `<option value="${k}" ${p.pour === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
-    <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "S'il a une voiture"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><select name="condition">${[["", "Toujours"], ["ae_a_creer", "Si OIKOS crée l'AE"], ["voiture", "S'il a une voiture"], ["cheffe", "Cheffes de réseau seulement"]].map(([k, t]) => `<option value="${k}" ${(p.condition || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
     <td><label class="chk"><input type="checkbox" name="obligatoire" ${p.obligatoire ? "checked" : ""}>obligatoire</label><label class="chk"><input type="checkbox" name="actif" ${p.actif ? "checked" : ""}>demandé</label></td>
     <td>${p.modele ? `<span class="row"><button class="btn" data-mvoir>Voir</button><button class="btn" data-mdep>Remplacer</button><button class="btn flat stop" data-mret>Retirer</button></span>`
       : `<button class="btn" data-mdep>${ico("trombone")} Ajouter</button>`}</td>
