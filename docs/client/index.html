@@ -181,6 +181,47 @@ details.mois .passage{display:flex;justify-content:space-between;gap:10px;paddin
 @keyframes monte{from{transform:translateY(40px);opacity:0}}
 @keyframes trace{to{stroke-dashoffset:-100}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+/* Couleurs franches (12/11/2026), comme le pilote : en-tête et barre d'onglets olive sombre, olive = action, terracotta = urgent, ocre = à décider, vert = validé */
+:root{--bg:#F2EEE1;--surface:#FFFFFF;--sunk:#E9E4D3;--ink:#1F2119;--muted:#55574B;--line:#CFCAB5;--accent:#46572B;--accent-fort:#34421E;--accent-ink:#FFFFFF;--accent-soft:#E2E8CC;--go:#2F7D32;--go-ink:#FFFFFF;--go-soft:#DCF0D8;--stop:#B3411F;--stop-ink:#FFFFFF;--stop-soft:#F9E2D8;--warn:#8A5700;--warn-vif:#C98A16;--warn-soft:#FBE8BC;--info:#2B6170;--info-soft:#D9EAEC;--tete:#2E3622;--carte-bord:#DED9C6;--bouton:#FFFFFF;--ombre-btn:0 4px 12px rgb(52 66 30 / .35)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1B1D15;--surface:#2A2E21;--sunk:#14160F;--ink:#F6F4EA;--muted:#C4C5B5;--line:#4F5441;--accent:#C8DE85;--accent-fort:#DCEBA9;--accent-ink:#1B1D15;--accent-soft:#3B4326;--go:#86D178;--go-ink:#14160F;--go-soft:#26381F;--stop:#F2805F;--stop-ink:#1B1D15;--stop-soft:#4A2519;--warn:#F0C35C;--warn-vif:#F0C35C;--warn-soft:#42360F;--info:#85C9D6;--info-soft:#1F3A40;--tete:#2F3722;--carte:rgb(243 241 231 / .09);--carte-bord:rgb(243 241 231 / .2);--bouton:rgb(243 241 231 / .06);--ombre-btn:0 4px 14px rgb(0 0 0 / .4)}}
+:root[data-theme="dark"]{--bg:#1B1D15;--surface:#2A2E21;--sunk:#14160F;--ink:#F6F4EA;--muted:#C4C5B5;--line:#4F5441;--accent:#C8DE85;--accent-fort:#DCEBA9;--accent-ink:#1B1D15;--accent-soft:#3B4326;--go:#86D178;--go-ink:#14160F;--go-soft:#26381F;--stop:#F2805F;--stop-ink:#1B1D15;--stop-soft:#4A2519;--warn:#F0C35C;--warn-vif:#F0C35C;--warn-soft:#42360F;--info:#85C9D6;--info-soft:#1F3A40;--tete:#2F3722;--carte:rgb(243 241 231 / .09);--carte-bord:rgb(243 241 231 / .2);--bouton:rgb(243 241 231 / .06);--ombre-btn:0 4px 14px rgb(0 0 0 / .4)}
+/* Boutons : plein = l'action à faire, contour = une autre action, texte seul = secondaire */
+.btn{background:var(--bouton);border:1.5px solid var(--accent);color:var(--accent);font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);box-shadow:var(--ombre-btn)}
+.btn.primary:hover:not(:disabled){background:var(--accent-fort);border-color:var(--accent-fort)}
+.btn.go{background:var(--go);border-color:var(--go);color:var(--go-ink)}
+.btn.flat{background:none;border-color:transparent;color:var(--accent);box-shadow:none}
+.chip{border:1.5px solid var(--line);color:var(--accent-fort)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+/* Titres et étiquettes */
+h1,h2{color:var(--accent-fort)}
+.tag{background:var(--accent-soft);color:var(--accent-fort);font-weight:600}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+label.f input,label.f select,label.f textarea{border:1.5px solid var(--line)}
+.voile{background:rgb(20 22 14 / .6)}
+.entete{--ink:#F7F5EE;--muted:#D3D9BE;--accent:#C8DE85;--accent-ink:#1B1D15;--accent-soft:rgb(255 255 255 / .16);--line:rgb(255 255 255 / .28);--mono:#6F7C4B;background:var(--tete);color:var(--ink);box-shadow:0 2px 10px rgb(0 0 0 / .22);-webkit-backdrop-filter:none;backdrop-filter:none}
+.compte-btn{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.contour{background:var(--bouton)}
+.btn.stop{background:var(--bouton);border-color:var(--stop);color:var(--stop)}
+h3{color:var(--accent)}
+.rond{background:var(--accent-soft);color:var(--accent-fort)}
+.card.note{border-left:5px solid var(--warn-vif)}
+.card.alerte{border-left:5px solid var(--stop)}
+.tag.ok{background:var(--go-soft);color:var(--go)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.rdv .jour{background:var(--accent);color:var(--accent-ink)}
+.rdv .jour small{color:inherit;opacity:.85}
+.etoile[aria-pressed="true"]{background:var(--warn-vif);color:#1F2119}
+.resume .item.prio{border-left:5px solid var(--warn-vif)}
+.carte-doc:hover,.doc:hover b{color:var(--accent-fort)}
+.nav{--ink:#F7F5EE;--muted:#D3D9BE;--accent:#C8DE85;--accent-ink:#1B1D15;--accent-soft:rgb(255 255 255 / .16);--line:rgb(255 255 255 / .28);--mono:#6F7C4B;background:var(--tete);border-top:0;box-shadow:0 -2px 12px rgb(0 0 0 / .2);-webkit-backdrop-filter:none;backdrop-filter:none}
+.nav button{color:var(--muted)}
+.nav button[aria-current="page"]{color:var(--ink)}
+.nav button[aria-current="page"]::before{background:#C8DE85}
+.nav button[aria-current="page"] .ico{color:#1B1D15}
+.badge{background:#D2502A}
+.bulle.moi{background:var(--accent);color:var(--accent-ink)}
+.bulle .de{color:var(--accent-fort)}
 </style>
 </head>
 <body>
@@ -240,7 +281,9 @@ function feuille(html, brancher) {
   if (brancher) brancher(v.querySelector(".feuille"), fermer);
   return fermer;
 }
-function page(html, solo) { app.innerHTML = `<main class="page${solo ? " solo" : ""}">${html}</main>`; window.scrollTo(0, 0); }
+/* Barre du téléphone : olive sombre sous l'en-tête de l'appli, couleur du fond sur les écrans d'accès */
+const couleurBarre = v => { const c = getComputedStyle(document.documentElement).getPropertyValue(v).trim(), m = document.querySelector('meta[name="theme-color"]'); if (m && c) m.content = c; };
+function page(html, solo) { couleurBarre("--bg"); app.innerHTML = `<main class="page${solo ? " solo" : ""}">${html}</main>`; window.scrollTo(0, 0); }
 /* Appel d'une fonction de la base. Rend { ok, motif } ; un accès coupé ramène à l'écran de fin. */
 async function appel(nom, args) {
   const { data, error } = await sb.rpc(nom, args || {});
@@ -362,6 +405,7 @@ function dessiner(silencieux) {
   if (!D) return;
   const l = onglets();
   const haut = window.scrollY;
+  couleurBarre("--tete");
   app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}<div>OIKOS<small>Espace client</small></div></div>
       <button class="compte-btn" id="vers-compte" type="button">${ico("personne")}<span>Mon compte</span></button></header>
     <main class="page" id="page"></main>

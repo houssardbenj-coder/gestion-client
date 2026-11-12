@@ -1,6 +1,6 @@
 /* Garde seulement le code de l'appli (jamais les données) pour qu'elle s'ouvre vite.
    Toujours le réseau d'abord : une nouvelle version arrive dès qu'il y a Internet. */
-const VERSION = "oikos-client-1";
+const VERSION = "oikos-client-2";
 const FICHIERS = ["./", "index.html", "manifest.webmanifest", "icone-192.png", "icone-512.png", "logo-oikos.png"];
 
 self.addEventListener("install", e => {
