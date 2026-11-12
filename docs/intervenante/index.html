@@ -2506,7 +2506,11 @@ async function facturesDues() {
   if (!faitSaFacture()) return null;
   const { data, error } = await sb.from("factures_mois").select("*").eq("intervenante_id", moi.id).order("mois", { ascending: false });
   if (error) return null;   // SQL 49 pas encore lancé : rien n'apparaît
-  const debut = new Date(Math.max(FACTURES_DEPUIS, new Date(new Date(moi.cree_le || FACTURES_DEPUIS).getFullYear(), new Date(moi.cree_le || FACTURES_DEPUIS).getMonth(), 1)));
+  // Depuis son arrivée : création du compte, ou son premier passage s'il est plus ancien (passages ajoutés par OIKOS avant son compte)
+  const cree = new Date(moi.cree_le || FACTURES_DEPUIS);
+  const prem = await sb.from("pointages").select("arrivee").eq("intervenante_id", moi.id).gte("arrivee", FACTURES_DEPUIS.toISOString()).order("arrivee").limit(1);
+  const pa = prem.data && prem.data[0] ? new Date(prem.data[0].arrivee) : cree, tot = pa < cree ? pa : cree;
+  const debut = new Date(Math.max(FACTURES_DEPUIS, new Date(tot.getFullYear(), tot.getMonth(), 1)));
   const auj = new Date(), dues = [];
   for (let d = new Date(debut); d < new Date(auj.getFullYear(), auj.getMonth(), 1); d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
     const iso = moisIso(d), f = data.find(x => x.mois === iso);
