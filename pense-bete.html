@@ -477,7 +477,7 @@ function agItems(a,b,evenements){
   projects.forEach(p=>{if(p.calId)mine.add(String(p.calId));
     if(p.rdv&&p.rdv>=a&&p.rdv<b)items.push({t:p.rdv,end:p.rdv+durOf("projects",p)*6e4,title:fullName(p),sub:p.address||"RDV client",kind:"rdv",ref:"proj:"+p.id})});
   appts.forEach(x=>{if(x.calId)mine.add(String(x.calId));
-    if(!x.done&&x.when&&x.when>=a&&x.when<b)items.push({t:x.when,end:x.when+durOf("appts",x)*6e4,title:apptName(x),sub:x.address||x.note||"RDV",kind:"rdv",ref:"appt:"+x.id})});
+    if(!x.cancelled&&x.when&&x.when>=a&&x.when<b)items.push({t:x.when,end:x.when+durOf("appts",x)*6e4,title:apptName(x),sub:x.address||x.note||"RDV",kind:"rdv",ref:"appt:"+x.id})});   // un RDV coché « fait » a eu lieu : il reste dans l'agenda (v36), seul un RDV annulé en sort
   occCalIds().forEach(id=>mine.add(id));
   occList(a,b).forEach(o=>items.push({t:o.t,end:o.end,title:"🔁 "+occName(o),sub:o.c.address||slotText(o.s),kind:"occ",ref:"occ:"+o.key}));
   (evenements||agEvents||[]).forEach(e=>{const end=e.endDate||e.startDate+3600e3;
@@ -590,6 +590,18 @@ function feries(y){
 const ferieOf=day=>feries(Number(day.slice(0,4)))[day]||"";
 const slotsOf=c=>Array.isArray(c.slots)?c.slots.filter(s=>s&&s.id&&s.time&&s.wd!==""&&s.wd!=null):[];
 const dejaCreneau=(c,wd,time,from)=>slotsOf(c).some(s=>Number(s.wd)===Number(wd)&&s.time===time&&(!s.until||s.until>=from));   // déjà répété ce jour-là à cette heure : pas de doublon
+/* Répétition demandée par le pilote (v36) : un créneau du même jour, même heure, chaque semaine, encore valable à cette date, est réutilisé
+   au lieu d'en créer un 2e ; s'il commence plus tard ou a une date de fin, il est étendu (la dernière demande compte : plus de séances qui
+   s'arrêtent sans raison). false = déjà bon, null = aucun, sinon les créneaux à enregistrer. */
+function creneauEtendu(c,wd,time,from){
+  const sl=slotsOf(c).find(s=>Number(s.wd)===Number(wd)&&s.time===time&&Number(s.every||1)===1&&(!s.until||s.until>=from));
+  if(!sl)return null;
+  if((!sl.from||sl.from<=from)&&!sl.until)return false;
+  return slotsOf(c).map(s=>s===sl?{...s,from:sl.from&&sl.from>from?from:sl.from,until:""}:s);
+}
+/* Le pilote programme ce client : il est donc actif. Sinon ses séances ne s'affichent jamais (« client archivé », « client en pause »)
+   et le RDV disparaît du pilote dès que le téléphone l'a pris (cause des RDV qui disparaissaient, 12/11/2026). */
+const piloteActif=c=>c&&(c.status==="termine"||c.status==="pause")?{status:"actif",pauseUntil:null,touchedAt:Date.now()}:{};
 const occKey=(c,s,day)=>c.id+"_"+s.id+"_"+day;
 const RYTHME={1:"Chaque semaine",2:"Une semaine sur deux"};
 const slotText=s=>(Number(s.every)===2?"Un "+JOURS[s.wd]+" sur deux":"Chaque "+JOURS[s.wd])+" à "+s.time.replace(":","h")+" · "+durLabel(Number(s.dur)||60);
@@ -1152,7 +1164,12 @@ async function agendaPourPilote(){
   const annules=occList(a,b,true).filter(o=>o.why==="annulée").map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",ref:skips[o.key]&&skips[o.key].reason!=="deplace"?"occ:"+o.key:null}})
     .concat(appts.filter(x=>x.cancelled&&x.when&&x.when>=a&&x.when<b).map(x=>{const p=agendaPersonne({ref:"appt:"+x.id})||{};return {t:x.when,fin:x.when+durOf("appts",x)*6e4,titre:apptName(x),cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",ref:"appt:"+x.id}}))
     .concat(orphelins);
-  return {debut:a,fin:b,elements,annules};
+  // Séances qui n'ont pas lieu pour une autre raison (vacances, férié, absent, client en pause ou archivé) : le pilote les montre en gris
+  // avec la raison, au lieu de les laisser disparaître sans rien dire (v36). Client archivé : seulement un créneau récent ou né du pilote.
+  const recent=ymd(new Date(Date.now()-90*864e5));
+  const masques=occList(a,b,true).filter(o=>o.why&&o.why!=="annulée"&&o.why!=="déplacée"&&(o.why!=="client archivé"||String(o.s.id).startsWith("pil")||(o.s.from&&o.s.from>=recent)))
+    .map(o=>{const p=agendaPersonne({ref:"occ:"+o.key})||{};return {t:o.t,fin:o.end,titre:occName(o),cle:p.cle||null,nom:p.nom||null,ent:p.ent||"",occ:o.key,why:o.why}});
+  return {debut:a,fin:b,elements,annules,masques};
 }
 /* « Répéter chaque semaine » demandé dans le pilote (clé « recurrents », SQL 47) : le RDV devient une séance régulière
    du client, à partir de la semaine suivante (le RDV d'origine reste, pas de doublon ce jour-là). Lu à chaque envoi de
@@ -1170,9 +1187,10 @@ async function recurrentsDuPilote(jeton,s){
     const wd=Number(d.wd),dur0=Number(d.dur),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);   // une durée de la liste des séances
     if(!(Number.isInteger(wd)&&wd>=0&&wd<=6&&/^([01]\d|2[0-3]):[0-5]\d$/.test(d.heure||"")&&dur0>=15&&dur0<=600&&/^\d{4}-\d\d-\d\d$/.test(d.depuis||""))){etats[d.id]="illisible";continue}
     if(!c){etats[d.id]="introuvable";continue}
-    if(dejaCreneau(c,wd,d.heure,d.depuis)){faits.add(d.id);etats[d.id]="fait";continue}
-    const slots=slotsOf(c).concat({id:sid,wd,time:d.heure,dur,every:1,from:d.depuis,until:""});
-    try{await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots;faits.add(d.id);etats[d.id]="fait";ajoutes++}catch(e){etats[d.id]="echec"}
+    const ext=creneauEtendu(c,wd,d.heure,d.depuis),act=piloteActif(c);
+    if(ext===false&&!act.status){faits.add(d.id);etats[d.id]="fait";continue}
+    const maj={...act,...(ext===false?{}:{slots:ext||slotsOf(c).concat({id:sid,wd,time:d.heure,dur,every:1,from:d.depuis,until:""})})};
+    try{await db.doc("customers/"+c.id).set(custBody({...c,...maj}));Object.assign(c,maj);faits.add(d.id);etats[d.id]="fait";ajoutes++}catch(e){etats[d.id]="echec"}
   }
   // « Ne plus répéter » demandé dans le pilote : le créneau s'arrête la veille du jour choisi (les séances d'avant restent)
   const arrets=c0&&Array.isArray(c0.arrets)?c0.arrets.slice(-200):[];
@@ -1192,7 +1210,7 @@ async function recurrentsDuPilote(jeton,s){
   const motsTries=t=>fold(t).split(/\s+/).filter(Boolean).sort().join(" ");
   for(const n of nouveaux){
     if(!n||typeof n.id!=="string"||!/^[a-z0-9]{1,30}$/i.test(n.id))continue;
-    if(faits.has("rdv:"+n.id)){etats[n.id]="fait";continue}
+    if(faits.has("rdv:"+n.id)){etats[n.id]=faits.has("seul:"+n.id)?"seul":"fait";continue}
     const quand=Number(n.quand),dur0=Number(n.dur);
     if(!Number.isFinite(quand)||!(dur0>=15&&dur0<=600)){etats[n.id]="illisible";continue}
     const cle=typeof n.cle==="string"?n.cle:"";
@@ -1200,13 +1218,16 @@ async function recurrentsDuPilote(jeton,s){
       ||(n.nom?(l=>l.length===1?l[0]:null)(customers.filter(x=>motsTries(fullName(x))===motsTries(n.nom))):null)
       ||(l=>l.length===1?l[0]:null)(customers.filter(x=>{const w=motsTries(fullName(x)).split(" ").filter(Boolean),t=" "+fold(n.titre||"").replace(/[^a-z0-9]+/g," ")+" ";return w.length&&w.every(m=>m.length>2&&t.includes(" "+m+" "))}));   // fiche faite au nom de l'élève (ex. Bryan)
     try{
-      if(n.chaque_semaine&&c&&dejaCreneau(c,new Date(quand).getDay(),pad(new Date(quand).getHours())+":"+pad(new Date(quand).getMinutes()),ymd(new Date(quand)))){}   // déjà répété : rien à ajouter
-      else if(n.chaque_semaine&&c){const d=new Date(quand),dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60);
-        const slots=slotsOf(c).concat({id:"pil"+n.id,wd:d.getDay(),time:pad(d.getHours())+":"+pad(d.getMinutes()),dur,every:1,from:ymd(d),until:""});
-        await db.doc("customers/"+c.id).set(custBody({...c,slots}));c.slots=slots}
+      const d=new Date(quand),hhmm=pad(d.getHours())+":"+pad(d.getMinutes()),act=piloteActif(c);
+      if(n.chaque_semaine&&c){const dur=DURS.reduce((p,m)=>Math.abs(m-dur0)<Math.abs(p-dur0)?m:p,60),ext=creneauEtendu(c,d.getDay(),hhmm,ymd(d));   // déjà répété : réutilisé (étendu si besoin)
+        const maj={...act,...(ext===false?{}:{slots:ext||slotsOf(c).concat({id:"pil"+n.id,wd:d.getDay(),time:hhmm,dur,every:1,from:ymd(d),until:""})})};
+        if(Object.keys(maj).length){await db.doc("customers/"+c.id).set(custBody({...c,...maj}));Object.assign(c,maj)}}
       else{const a={id:"pil"+n.id,firstName:c?"":String(n.titre||n.nom||"RDV").slice(0,120),lastName:"",title:"",phone:"",address:"",when:quand,dur:dur0,note:"Ajouté depuis OIKOS Pilotage",customerId:c?c.id:"",done:false,createdAt:Date.now()};
-        await db.doc("appts/"+a.id).set(apptBody(a));if(!appts.some(x=>x.id===a.id))appts.push(a)}
-      faits.add("rdv:"+n.id);etats[n.id]="fait";ajoutes++;
+        await db.doc("appts/"+a.id).set(apptBody(a));if(!appts.some(x=>x.id===a.id))appts.push(a);
+        if(act.status){await db.doc("customers/"+c.id).set(custBody({...c,...act}));Object.assign(c,act)}}
+      // « Chaque semaine » sans fiche client ici : un seul RDV (une séance régulière a besoin d'une fiche) ; le pilote le dit au lieu de se taire
+      if(n.chaque_semaine&&!c)faits.add("seul:"+n.id);
+      faits.add("rdv:"+n.id);etats[n.id]=n.chaque_semaine&&!c?"seul":"fait";ajoutes++;
     }catch(e){etats[n.id]="echec"}
   }
   // « Modifier l'heure » demandé dans le pilote : même RDV, même jour, nouvelles heures de début et de fin (même passé).
@@ -1302,7 +1323,7 @@ function piloteRefA(r,annule){
   const t=Number(r.t);if(!Number.isFinite(t))return "";
   const cle=typeof r.cle==="string"?r.cle:"",memePers=ref=>!cle||(agendaPersonne({ref})||{}).cle===cle;
   const l=occList(dayStart(t),addDays(dayStart(t),1),true).filter(o=>o.t===t&&(annule?o.why==="annulée":!o.why)).map(o=>"occ:"+o.key)
-    .concat(appts.filter(a=>a.when===t&&(annule?a.cancelled:!a.cancelled&&!a.done)).map(a=>"appt:"+a.id)).filter(memePers);
+    .concat(appts.filter(a=>a.when===t&&(annule?a.cancelled:!a.cancelled)).map(a=>"appt:"+a.id)).filter(memePers);
   return l.length===1?l[0]:"";
 }
 let agendaAttente=null;

@@ -164,6 +164,9 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-env.em-hr{border-color:var(--line);color:var(--ink)}.em-env.em-hr:hover{background:var(--sunk);color:var(--ink)}
 .em-gev.ann{background:var(--stop-soft);border-color:var(--stop);color:var(--stop);cursor:pointer}.em-gev.ann s{opacity:.85}
 .em-gev.att{border-style:dashed;border-left-style:solid;opacity:.9}
+.em-gev.msq{background:var(--sunk);border-color:var(--line);border-left-color:var(--muted);color:var(--muted)}.em-gev.msq s{opacity:.8}.em-leg .em-msq i{background:var(--muted)}
+.em-gev.perdu{outline:2px dashed var(--stop);outline-offset:-2px}
+.em-jour .em-l.em-msq{color:var(--muted)}
 .em-gev.em-mod{cursor:grab;user-select:none}.em-gev.glisse{cursor:grabbing;z-index:5;opacity:.85;box-shadow:0 4px 14px rgb(0 0 0 / .25);outline:2px solid var(--em,var(--accent))}
 .em-gev.em-mod{padding-bottom:10px}.em-fr-t{font-size:14px;margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--line)}.em-fr-infos{display:flex;flex-direction:column;gap:4px}.em-fr-infos .ico{width:14px;height:14px;vertical-align:-2px}
 .em-poignee{position:absolute;left:0;right:0;bottom:0;height:10px;cursor:ns-resize;touch-action:none;z-index:2}.em-poignee::after{content:"";position:absolute;left:50%;top:4px;width:22px;margin-left:-11px;height:3px;border-radius:2px;background:currentColor;opacity:.35}.em-gev:hover .em-poignee::after{opacity:.7}
@@ -2629,10 +2632,29 @@ function emRecu(doc) {
   // Séances annulées sur le téléphone (« Annulée cette fois ») : plus des rendez-vous, une ligne rouge « Presta annulée » à leur jour
   const annules = (Array.isArray(c.annules) ? c.annules : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Rendez-vous"), cle: typeof x.cle === "string" ? x.cle : null, ref: typeof x.ref === "string" && /^(occ|appt):/.test(x.ref) ? x.ref : null, nom: x.nom || null, annule: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
     .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);   // s'il est rétabli entre-temps, c'est le rendez-vous qui compte
-  return { elements, annules, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {}, version: Number(c.version_appli) || null };
+  // Séances qui n'ont pas lieu pour une autre raison (vacances, férié, absent, client en pause ou archivé) : en gris avec la raison (Pense intelligent v36)
+  const masques = (Array.isArray(c.masques) ? c.masques : []).filter(x => x && Number.isFinite(x.t)).map(x => { const client = emClientDe(x); return { t: x.t, fin: Number.isFinite(x.fin) ? x.fin : x.t, titre: String(x.titre || x.nom || "Séance"), cle: typeof x.cle === "string" ? x.cle : null, nom: x.nom || null, occ: typeof x.occ === "string" ? x.occ : null, why: String(x.why || "n'a pas lieu"), masque: true, jour: ymd(new Date(x.t)), client, sections: emSectionsDe(client, x) }; })
+    .filter(a => !elements.some(x => x.cle && x.cle === a.cle && x.t === a.t)).sort((a, b) => a.t - b.t);
+  return { elements, annules, masques, debut: c.debut, fin: c.fin, recu: c.envoye_le || doc.maj_le, recurrents: c.recurrents && typeof c.recurrents === "object" ? c.recurrents : {}, version: Number(c.version_appli) || null };
 }
 const emAnnuleHtml = (a, avecHeure = true) => `<div class="em-annule" title="Annulé sur le téléphone">${ico("croix")} <b>Presta annulée</b>${avecHeure ? ` · ${esc(hm(a.t))}` : ""} · <s>${esc(sansEmoji(a.titre))}</s></div>`;
-const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "HP", "AUTRE"].map(k => `<span class="em-s-${k}"><i></i>${EM_NOM[k]}</span>`).join("")}<span class="em-ann"><i></i>Presta annulée</span></div>`;
+const emLegende = () => `<div class="em-leg">${["OIKOS", "BE", "PROSPECT", "HP", "AUTRE"].map(k => `<span class="em-s-${k}"><i></i>${EM_NOM[k]}</span>`).join("")}<span class="em-ann"><i></i>Presta annulée</span><span class="em-msq"><i></i>Pas de séance (raison écrite)</span></div>`;
+/* Pourquoi une séance régulière n'a pas lieu sur le téléphone, et comment la remettre */
+const EM_MSQ_AIDE = [[/archiv/, "Ce client est archivé dans Pense intelligent : ses séances ne s'affichent plus. Sur le téléphone, ouvre sa fiche et remets-le « Actif ». Un RDV ou un « Chaque semaine » posé depuis le pilote le remet actif tout seul."],
+  [/pause/, "Ce client est en pause dans Pense intelligent. Sur le téléphone, ouvre sa fiche et remets-le « Actif » (ou mets une date de reprise)."],
+  [/vacances/, "La fiche du client dit « Pas pendant les vacances scolaires ». Pour garder la séance, décoche-le dans sa fiche sur le téléphone."],
+  [/f.ri/, "Jour férié : la séance est sautée. Pour la garder, coche « y compris les jours fériés » dans la fiche du client sur le téléphone."],
+  [/absent/, "Une absence est notée dans la fiche du client sur le téléphone pour ce jour-là."]];
+const emMsqAide = why => (EM_MSQ_AIDE.find(([r]) => r.test(norm(why))) || [null, "La séance n'a pas lieu ce jour-là sur le téléphone."])[1];
+function emFicheMasque(a) {
+  const c = a.client || null;
+  fenetre(`<h2 style="margin:0 0 2px">${esc(sansEmoji(a.titre || ""))}</h2>
+    <p class="muted small" style="margin:0 0 10px">${esc(new Date(a.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${esc(hm(a.t))}${a.fin > a.t ? "–" + esc(hm(a.fin)) : ""} · séance régulière</p>
+    <p class="tag warn" style="display:block;white-space:normal;margin:0 0 10px">${ico("alerte")} Pas de séance ce jour-là : ${esc(a.why)}.</p>
+    <p class="muted small" style="margin:0 0 12px">${esc(emMsqAide(a.why))}</p>
+    <div class="row">${c ? `<button class="btn" type="button" data-mq-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}<button class="btn flat" type="button" data-fermer>Fermer</button></div>`,
+  (f, fermer) => { const b = f.querySelector("[data-mq-fiche]"); if (b) b.onclick = () => { fermer(); ficheClient(c.id); }; });
+}
 /* Répéter chaque semaine (SQL 47) : la demande va dans pilote_documents, clé « recurrents ». Tant que le téléphone ne l'a pas prise,
    le pilote montre lui-même le RDV les semaines suivantes (pointillés). Pense intelligent en fait une séance régulière du client
    à partir de la semaine d'après, puis le renvoie comme Séance. Seulement un RDV d'un client du téléphone (pas un prospect, pas l'agenda Google). */
@@ -3128,6 +3150,24 @@ async function vueEmploi() {
   emAgCour = ag;
   const recDem = emDemandes(docRec), recEtat = d => ag.recurrents[d.id] || "", arrets = emArrets(docRec);
   ag.elements = ag.elements.filter(x => !emArretee(x, arrets));
+  ag.masques = (ag.masques || []).filter(x => !emArretee(x, arrets));
+  /* Pris par le téléphone (« fait ») mais rien n'en est revenu dans son emploi du temps (12/11/2026) : avant, le RDV disparaissait
+     du pilote sans rien dire (ex. Théo Siegler, client archivé sur le téléphone). Maintenant il reste en pointillés, entouré de rouge, avec un avertissement. */
+  const identDe = x => (x.client && x.client.id) || x.cle || norm(sansEmoji(x.titre || ""));
+  const revenus = ag.elements.concat(ag.annules, ag.masques);
+  const dansFenetre = t => (!ag.debut || t >= ag.debut) && (!ag.fin || t < ag.fin);
+  const heuresDem = emHeures(docRec), annulDem = emAnnuler(docRec);
+  const nvPerdu = n => { if (!["fait", "seul"].includes(ag.recurrents[n.id]) || !dansFenetre(n.quand)) return false;
+    if (heuresDem.some(h => emMinuit(h.de) === emMinuit(n.quand)) || annulDem.some(r => r.t === n.quand)) return false;   // heure changée ou annulé depuis le pilote
+    const c = (n.client_id && cacheClients.find(k => k.id === n.client_id)) || emClientDe(n), id = (c && c.id) || n.cle || norm(sansEmoji(n.titre || "")), j = ymd(new Date(n.quand));
+    return !revenus.some(x => x.jour === j && identDe(x) === id); };
+  const demPerdue = d => { if (recEtat(d) !== "fait") return false;
+    const c = emClientDe(d), id = (c && c.id) || d.cle, wd = Number(d.wd);
+    let jourVu = false;   // un jour de la répétition tombe-t-il dans ce que le téléphone envoie ?
+    for (let j = new Date(Math.max(new Date(d.depuis + "T12:00").getTime(), ag.debut || 0)); ag.fin && j.getTime() < ag.fin; j = plusJours(j, 1)) if (j.getDay() === wd) { jourVu = true; break; }
+    return jourVu && !revenus.some(x => identDe(x) === id && x.jour >= d.depuis); };
+  const nvPerdus = emNouveaux(docRec).filter(nvPerdu), demPerdues = recDem.filter(demPerdue);
+  const nvSeuls = emNouveaux(docRec).filter(n => ag.recurrents[n.id] === "seul" && n.chaque_semaine);
   const recPb = recDem.filter(d => recEtat(d) === "introuvable" || recEtat(d) === "illisible");
   const aujourdhui = ymd(new Date()), vieux = Date.now() - new Date(ag.recu).getTime() > 864e5;
   const enSemaine = emVue === "semaine", jourD = new Date(emJour + "T12:00"), debutS = enSemaine ? emSemaine : lundi(jourD);
@@ -3136,22 +3176,23 @@ async function vueEmploi() {
   const cestMaintenant = enSemaine ? ymd(emSemaine) === ymd(lundi(new Date())) : emJour === aujourdhui;
   const borneA = enSemaine ? emSemaine.getTime() : new Date(emJour + "T00:00").getTime(), borneB = plusJours(new Date(borneA), enSemaine ? 7 : 1).getTime();
   // RDV à répéter que le téléphone n'a pas encore pris : montrés ici, aux semaines suivantes
-  recDem.filter(d => !recEtat(d) || recEtat(d) === "echec").forEach(d => {
-    const [h, m] = d.heure.split(":").map(Number), client = emClientDe(d), dur = Math.min(600, Math.max(15, Number(d.dur) || 60));
+  recDem.filter(d => !recEtat(d) || recEtat(d) === "echec" || demPerdues.includes(d)).forEach(d => {
+    const [h, m] = d.heure.split(":").map(Number), client = emClientDe(d), dur = Math.min(600, Math.max(15, Number(d.dur) || 60)), perdu = demPerdues.includes(d);
     for (let j = new Date(borneA); j.getTime() < borneB; j = plusJours(j, 1)) {
       if (j.getDay() !== Number(d.wd) || ymd(j) < d.depuis) continue;
       const t = new Date(j.getFullYear(), j.getMonth(), j.getDate(), h, m).getTime();
-      if (ag.elements.some(x => x.cle === d.cle && x.t === t) || ag.annules.some(x => x.cle === d.cle && x.t === t)) continue;
-      ag.elements.push({ t, fin: t + dur * 6e4, titre: d.titre || d.nom || "Rendez-vous", detail: "", sorte: "rec", jour_entier: false, cle: d.cle, nom: d.nom, rec: d, jour: ymd(j), client, sections: emSectionsDe(client, { cle: d.cle }) });
+      if (ag.elements.some(x => x.cle === d.cle && x.t === t) || ag.annules.some(x => x.cle === d.cle && x.t === t) || ag.masques.some(x => x.cle === d.cle && x.t === t)) continue;
+      ag.elements.push({ t, fin: t + dur * 6e4, titre: d.titre || d.nom || "Rendez-vous", detail: "", sorte: "rec", jour_entier: false, cle: d.cle, nom: d.nom, rec: d, perdu, jour: ymd(j), client, sections: emSectionsDe(client, { cle: d.cle }) });
     }
   });
   // RDV créés dans le pilote que le téléphone n'a pas encore pris : en pointillés (chaque semaine si demandé)
-  emNouveaux(docRec).filter(n => ag.recurrents[n.id] !== "fait").forEach(n => {
-    const c = (n.client_id && cacheClients.find(k => k.id === n.client_id)) || emClientDe(n), d0 = new Date(n.quand);
+  emNouveaux(docRec).filter(n => !["fait", "seul"].includes(ag.recurrents[n.id]) || nvPerdus.includes(n)).forEach(n => {
+    const c = (n.client_id && cacheClients.find(k => k.id === n.client_id)) || emClientDe(n), d0 = new Date(n.quand), perdu = nvPerdus.includes(n), id = (c && c.id) || n.cle || norm(sansEmoji(n.titre || ""));
     for (let k = 0; k < (n.chaque_semaine ? 60 : 1); k++) {
       const j = plusJours(d0, 7 * k), t = new Date(j.getFullYear(), j.getMonth(), j.getDate(), d0.getHours(), d0.getMinutes()).getTime();
       if (t >= borneB) break; if (t < borneA) continue;
-      ag.elements.push({ t, fin: t + Number(n.dur) * 6e4, titre: n.titre || n.nom || "Rendez-vous", detail: "", sorte: "nouveau", jour_entier: false, cle: n.cle, nom: n.nom, nv: n, jour: ymd(new Date(t)), client: c, sections: emSectionsDe(c, { cle: n.cle }) });
+      if (ag.annules.concat(ag.masques).some(x => x.t === t && identDe(x) === id)) continue;   // annulée ou sautée sur le téléphone : c'est elle qui compte
+      ag.elements.push({ t, fin: t + Number(n.dur) * 6e4, titre: n.titre || n.nom || "Rendez-vous", detail: "", sorte: "nouveau", jour_entier: false, cle: n.cle, nom: n.nom, nv: n, perdu, jour: ymd(new Date(t)), client: c, sections: emSectionsDe(c, { cle: n.cle }) });
     }
   });
   emAppliquerHeures(ag, docRec);   // « Modifier l'heure » pas encore pris par le téléphone : la nouvelle heure tout de suite
@@ -3165,7 +3206,7 @@ async function vueEmploi() {
   const envois = emEnvois(docRec);
   const horsFenetre = (ag.fin && borneA >= ag.fin) || (ag.debut && borneB <= ag.debut);
   const vus = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.t >= borneA && x.t < borneB);
-  const annVus = ag.annules.filter(a => a.t >= borneA && a.t < borneB);
+  const annVus = ag.annules.filter(a => a.t >= borneA && a.t < borneB), msqVus = ag.masques.filter(a => a.t >= borneA && a.t < borneB);
   // rendez-vous et annulés d'une case, dans l'ordre des heures
   const caseDe = (filtre, rdv, annule) => vus.filter(([x]) => filtre(x)).map(([x, i]) => [x.t, rdv(x, i)]).concat(annVus.filter(filtre).map(a => [a.t, annule(a)])).sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
   const dejaRegulier = x => recDem.some(d => emMemeRec(d, x)) || ag.elements.some(y => y.sorte === "occ" && y.cle === x.cle && y.t > x.t && new Date(y.t).getDay() === new Date(x.t).getDay() && emHeureTxt(y.t) === emHeureTxt(x.t));
@@ -3175,7 +3216,7 @@ async function vueEmploi() {
   const serie = x => ({
     dem: recDem.filter(d => (d.cle === x.cle || (x.client && emClientDe(d) === x.client)) && Number(d.wd) === new Date(x.t).getDay() && d.heure === emHeureTxt(x.t)),
     nv: nvTous.filter(n => n.chaque_semaine && ((n.client_id && x.client && n.client_id === x.client.id) || (n.cle && n.cle === x.cle)) && memeHeure(n.quand, x)),
-    occ: avantTri.filter(y => y.sorte === "occ" && typeof y.occ === "string" && y.occ.split("_").length === 3 && ident(y) === ident(x) && memeHeure(y.t, x)) });
+    occ: avantTri.filter(y => y.sorte === "occ" && typeof y.occ === "string" && y.occ.split("_").length === 3 && ident(y) === ident(x) && memeHeure(y.t, x) && (x.sorte === "occ" || x.rec || y.t >= x.t)) });
   const repete = x => { if (x.rec || x.sorte === "occ") return true; const r = serie(x); return r.dem.length + r.nv.length + r.occ.length > 0; };
   /* Enlever la répétition d'un clic : coupe toutes les répétitions de ce client à ce jour et cette heure, après ce RDV
      (ou à partir de cette séance si c'en est une) ; ce qui est avant reste */
@@ -3208,25 +3249,26 @@ async function vueEmploi() {
   const PX = 48;
   const grille = jl => {
     const ids = new Set(jl.map(ymd)), tim = vus.filter(([x]) => ids.has(x.jour) && !x.jour_entier && x.sorte !== "todo"), jent = vus.filter(([x]) => ids.has(x.jour) && (x.jour_entier || x.sorte === "todo"));
-    const an = annVus.filter(a => ids.has(a.jour));
+    const an = annVus.filter(a => ids.has(a.jour)), mq = msqVus.filter(a => ids.has(a.jour));
     let h0 = 8, h1 = 20;
-    tim.map(([x]) => x).concat(an).forEach(x => { const d = new Date(x.t), f = new Date(Math.max(x.t + 18e5, x.fin || x.t) - 1); h0 = Math.min(h0, d.getHours()); h1 = Math.max(h1, Math.min(24, f.getHours() + 1)); });
+    tim.map(([x]) => x).concat(an, mq).forEach(x => { const d = new Date(x.t), f = new Date(Math.max(x.t + 18e5, x.fin || x.t) - 1); h0 = Math.min(h0, d.getHours()); h1 = Math.max(h1, Math.min(24, f.getHours() + 1)); });
     const H = (h1 - h0) * PX, minDe = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
     const colonne = j => {
       // Plus de boutons dans les cases : un clic ouvre la fenêtre du RDV (adresse, téléphone, reporting, heure)
-      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => ({ t: x.t, f: Math.max(x.fin || x.t, x.t + 18e5), x, i, env: "", nb: 0 })).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).sort((p, q) => p.t - q.t || q.f - p.f);
+      const k = ymd(j), l = tim.filter(([x]) => x.jour === k).map(([x, i]) => ({ t: x.t, f: Math.max(x.fin || x.t, x.t + 18e5), x, i, env: "", nb: 0 })).concat(an.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), a }))).concat(mq.filter(a => a.jour === k).map(a => ({ t: a.t, f: Math.max(a.fin || a.t, a.t + 18e5), m: a }))).sort((p, q) => p.t - q.t || q.f - p.f);
       // couloirs : deux RDV qui se chevauchent se partagent la largeur
       let groupe = [], finG = 0; const groupes = [];
       l.forEach(o => { if (groupe.length && o.t >= finG) { groupes.push(groupe); groupe = []; finG = 0; } const fins = []; groupe.forEach(g => fins[g.c] = Math.max(fins[g.c] || 0, g.f)); let c = 0; while (fins[c] > o.t) c++; o.c = c; groupe.push(o); finG = Math.max(finG, o.f); });
       if (groupe.length) groupes.push(groupe);
       groupes.forEach(g => { const n = Math.max(...g.map(o => o.c)) + 1; g.forEach(o => o.n = n); });
       const tuiles = l.map(o => { const top = (minDe(o.t) - h0 * 60) / 60 * PX, haut = Math.max(22, (o.f - o.t) / 36e5 * PX - 2), pos = `top:${top}px;height:${haut}px;left:calc(${o.c * 100 / o.n}% + 2px);width:calc(${100 / o.n}% - 4px)`;
+        if (o.m) return `<div class="em-gev msq" style="${pos}" data-em-msq="${ag.masques.indexOf(o.m)}" title="Séance qui n'a pas lieu sur le téléphone : ${esc(o.m.why)}. Clic pour savoir comment la remettre"><b>${esc(hm(o.t))}</b> Pas de séance · ${esc(o.m.why)}<br><s>${esc(sansEmoji(o.m.titre))}</s></div>`;
         if (o.a) { const ia = ag.annules.indexOf(o.a), rt = emRetabliEnAttente(o.a, docRec, ag);
           return rt ? `<div class="em-gev ${emClasse(o.a)} att" style="${pos}" data-em-ann="${ia}" title="Rétabli, en attente du téléphone"><b>${esc(hm(o.t))}</b> ${ico("retour")} Rétabli<br>${esc(sansEmoji(o.a.titre))}<br><span class="muted small">en attente du téléphone</span></div>`
             : `<div class="em-gev ann" style="${pos}" data-em-ann="${ia}" title="Annulé sur le téléphone : clic pour le rétablir"><b>${esc(hm(o.t))}</b> ${ico("croix")} Presta annulée<br><s>${esc(sansEmoji(o.a.titre))}</s></div>`; }
-        const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.nv ? "en attente du téléphone" : x.hmod ? "nouvelle heure, en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
+        const x = o.x, bulle = x.sections.map(k2 => EM_NOM[k2]).join(" + ") + " · " + (x.perdu ? "pris par le téléphone mais pas revenu dans son emploi du temps" : x.nv ? "en attente du téléphone" : x.hmod ? "nouvelle heure, en attente du téléphone" : esc(EM_SORTES[x.sorte] || "Agenda")) + (x.detail ? " · " + esc(sansEmoji(x.detail)) : "");
         const mod = emHeureModifiable(x), fv = x.fin > x.t ? x.fin : x.t + 36e5, aa = emAnnulEnAttente(x, docRec, ag);
-        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${aa ? `<s>${esc(sansEmoji(x.titre))}</s><br><span class="small">${ico("croix")} annulation en attente</span>` : esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
+        return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${x.perdu ? " perdu" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b><br>${aa ? `<s>${esc(sansEmoji(x.titre))}</s><br><span class="small">${ico("croix")} annulation en attente</span>` : esc(sansEmoji(x.titre))}${rond(x, o.i)}${o.env}${mod ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
     return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
@@ -3246,6 +3288,9 @@ async function vueEmploi() {
     ${emAnnuler(docRec).filter(r => ["introuvable", "illisible", "echec"].includes(ag.recurrents[r.id])).map(r => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas annulé sur le téléphone : ${esc(r.titre || "")}, ${esc(new Date(r.t).toLocaleDateString("fr-FR"))} à ${esc(hm(r.t))}, ${ag.recurrents[r.id] === "introuvable" ? "plus trouvé dans Pense intelligent" : "à faire sur le téléphone"}</span><button class="btn flat" data-em-aret="${esc(r.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${emRetablir(docRec).filter(r => ["introuvable", "illisible", "echec"].includes(ag.recurrents[r.id])).map(r => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas rétabli sur le téléphone : ${esc(r.titre || "")}, ${esc(new Date(r.t).toLocaleDateString("fr-FR"))} à ${esc(hm(r.t))}, ${ag.recurrents[r.id] === "introuvable" ? "plus trouvé dans Pense intelligent" : "à refaire sur le téléphone"}</span><button class="btn flat" data-em-rret="${esc(r.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${emHeuresPb(ag, docRec).map(({ h, pb }) => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Heure pas changée sur le téléphone : ${esc(h.titre || "")}, ${esc(new Date(h.de).toLocaleDateString("fr-FR"))} à ${esc(hm(h.quand))}, ${esc(pb)}</span><button class="btn flat" data-em-hret="${esc(h.id)}">${ico("croix")} Retirer</button></p>`).join("")}
+    ${nvPerdus.map(n => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pris par le téléphone mais absent de son emploi du temps : ${esc(sansEmoji(n.titre || n.nom || "RDV"))}, ${esc(new Date(n.quand).toLocaleDateString("fr-FR"))} à ${esc(hm(n.quand))}. Il reste ici en pointillés rouges. ${(ag.version || 0) < 36 ? "Mets Pense intelligent en version 36 puis ouvre-le : il dira pourquoi (client archivé, en pause…)." : "Supprimé sur le téléphone ? Sinon ouvre Pense intelligent puis Actualiser."}</span><button class="btn flat" data-em-nvret="${esc(n.id)}">${ico("croix")} Retirer</button></p>`).join("")}
+    ${demPerdues.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Répétition prise par le téléphone mais aucune séance revenue : ${esc(sansEmoji(d.titre || d.nom || ""))}, chaque ${esc(JOURS_FR[Number(d.wd)])} à ${esc(d.heure.replace(":", "h"))}. Elle reste ici en pointillés rouges. ${(ag.version || 0) < 36 ? "Mets Pense intelligent en version 36 puis ouvre-le : il dira pourquoi." : "Ouvre Pense intelligent puis Actualiser."}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
+    ${nvSeuls.map(n => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété chaque semaine : ${esc(sansEmoji(n.titre || n.nom || "RDV"))} n'a pas de fiche client dans Pense intelligent, un seul RDV a été créé (le ${esc(new Date(n.quand).toLocaleDateString("fr-FR"))}). Crée ou relie sa fiche sur le téléphone, puis remets « Chaque semaine » sur ce RDV.</span><button class="btn flat" data-em-seulok="${esc(n.id)}">${ico("ok")} Compris</button></p>`).join("")}
     ${recPb.map(d => `<p class="row" style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Pas répété sur le téléphone : ${esc(sansEmoji(d.titre || d.nom || ""))}, ${recEtat(d) === "introuvable" ? "ce client n'est plus dans Pense intelligent" : "demande illisible"}</span><button class="btn flat" data-em-stop="${esc(d.id)}">${ico("croix")} Retirer</button></p>`).join("")}
     ${vieux ? `<p style="margin:0 0 12px"><span class="tag warn">${ico("alerte")} Reçu il y a plus d'un jour : ouvre Pense intelligent sur le téléphone pour le mettre à jour.</span></p>` : ""}
     ${horsFenetre ? `<p class="muted" style="margin:0 0 12px">Le téléphone envoie de la semaine dernière à 8 semaines : rien de reçu pour cette période.</p>` : ""}
@@ -3258,10 +3303,12 @@ async function vueEmploi() {
       const o = e.target.closest("[data-em-ouvrir]");
       if (o) { const x = ag.elements[Number(o.dataset.emOuvrir)]; if (!x) return;
         if (!x.nv && !x.jour_entier && x.sorte !== "todo") return emFicheRdv(x, envois, () => { if (onglet === "emploi") afficher("emploi"); });
-        if (x.nv) return fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre))}</h2><p>${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)}${x.nv.chaque_semaine ? ", chaque semaine" : ""}</p><p class="muted small">Pas encore pris par Pense intelligent : il arrive à sa prochaine ouverture.</p><div class="row"><button class="btn" data-nv-ret="1">${ico("croix")} Retirer ce RDV</button><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => { f.querySelector("[data-nv-ret]").onclick = () => { fermer(); emRetirerNouveau(x.nv.id); }; });
+        if (x.nv) return fenetre(`<h2 style="margin-top:0">${esc(sansEmoji(x.titre))}</h2><p>${esc(new Date(x.t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}, ${emHeure(x)}${x.nv.chaque_semaine ? ", chaque semaine" : ""}</p><p class="${x.perdu ? "tag warn" : "muted small"}" style="display:block;white-space:normal">${x.perdu ? `${ico("alerte")} Pense intelligent l'a pris, mais il n'est pas revenu dans son emploi du temps. ${(ag.version || 0) < 36 ? "Mets le téléphone en version 36 et ouvre Pense intelligent : il dira pourquoi (client archivé, en pause…)." : "Il a peut-être été supprimé sur le téléphone."}` : "Pas encore pris par Pense intelligent : il arrive à sa prochaine ouverture."}</p><div class="row"><button class="btn" data-nv-ret="1">${ico("croix")} Retirer ce RDV</button><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => { f.querySelector("[data-nv-ret]").onclick = () => { fermer(); emRetirerNouveau(x.nv.id); }; });
         if (x.client) return ficheClient(x.client.id);
         return toast(sansEmoji(x.titre) + " · " + emHeure(x) + (x.detail ? " · " + sansEmoji(x.detail) : "") + " — à changer sur le téléphone");
       }
+      const mqEl = e.target.closest("[data-em-msq]");
+      if (mqEl) { const a = ag.masques[Number(mqEl.dataset.emMsq)]; if (a) emFicheMasque(a); return; }
       const an = e.target.closest("[data-em-ann]");
       if (an) { const a = ag.annules[Number(an.dataset.emAnn)]; if (a) emFicheAnnule(a, docRec, ag, () => { if (onglet === "emploi") afficher("emploi"); }); return; }
       const v = e.target.closest("[data-em-vide]");
@@ -3276,6 +3323,7 @@ async function vueEmploi() {
     if (b.dataset.emRret) return emEcrireRec(l => l, l => l, l => l, l => l, l => l, l => l.filter(r => r.id !== b.dataset.emRret)).then(ok => { toast(ok ? "Retiré." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi"); });
     if (b.dataset.emPlus) { const d = new Date(); return emNouveau(enSemaine ? (cestMaintenant ? aujourdhui : ymd(emSemaine)) : emJour, Math.min(23 * 60, (d.getHours() + 1) * 60)); }
     if (b.dataset.emNvret) return emRetirerNouveau(b.dataset.emNvret);
+    if (b.dataset.emSeulok) return emEcrireRec(l => l, l => l, l => l.map(n => n.id === b.dataset.emSeulok ? { ...n, chaque_semaine: false } : n)).then(ok => { toast(ok ? "Noté." : "Pas enregistré : la base ne répond pas, réessaie."); if (ok) afficher("emploi"); });
     if (b.dataset.emCouper !== undefined) { const x = ag.elements[Number(b.dataset.emCouper)]; if (x) return emCouper(x); }
     if (b.dataset.emNvrep) return emNvRepeter(b.dataset.emNvrep);
     if (b.id === "em-maj") return afficher("emploi");
@@ -3295,6 +3343,7 @@ function emAujourdhuiHtml(ag, envois = []) {
   const auj = ymd(new Date()), el = ag.elements.map((x, i) => [x, i]).filter(([x]) => x.jour === auj), an = ag.annules.filter(a => a.jour === auj);
   const blocs = el.map(([x, i]) => [x.t, `<div class="em-l ${emClasse(x)}"><b>${emHeure(x)}</b><span>${esc(sansEmoji(x.titre))} <span class="muted small">· ${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}${EM_SORTES[x.sorte] && x.sorte !== "rdv" && emSection(x) !== "TACHE" ? " · " + esc(EM_SORTES[x.sorte]) : ""}${x.hmod ? " · nouvelle heure, en attente du téléphone" : ""}</span></span>${emHeureBouton(x, i)}${emEnvoiBouton(x, i, envois)}</div>`])
     .concat(an.map(a => [a.t, `<div class="em-l em-annule"><b>${esc(hm(a.t))}</b><span>${ico("croix")} Presta annulée · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
+    .concat((ag.masques || []).filter(a => a.jour === auj).map(a => [a.t, `<div class="em-l em-msq"><b>${esc(hm(a.t))}</b><span>Pas de séance (${esc(a.why)}) · <s>${esc(sansEmoji(a.titre))}</s></span></div>`]))
     .sort((p, q) => p[0] - q[0]).map(p => p[1]).join("");
   return `<section class="card em-jour" aria-label="Emploi du temps d'aujourd'hui"><h2>${ico("agenda")} Emploi du temps d'aujourd'hui</h2>
     ${blocs || `<p class="muted small" style="margin:0">Aucun rendez-vous aujourd'hui.</p>`}

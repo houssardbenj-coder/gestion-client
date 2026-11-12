@@ -1,4 +1,4 @@
 {
- "version": 35,
- "notes": "Changer le jour d'un RDV depuis le pilote OIKOS (le glisser d'un jour à l'autre)."
+ "version": 36,
+ "notes": "Emploi du temps fiable : un client archivé ou en pause qu'on programme depuis le pilote redevient actif, les séances sautées (vacances, férié, absence, pause) partent au pilote avec leur raison, un RDV coché fait reste dans l'agenda."
 }
