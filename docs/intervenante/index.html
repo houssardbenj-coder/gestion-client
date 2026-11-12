@@ -340,7 +340,7 @@ a.lien.muted{color:var(--muted)}
 /* Compte gelé : les actions disparaissent, il ne reste que la consultation, Moi et Mes papiers. La base refuse le reste (SQL 30). */
 .gel-bandeau{margin:12px 16px 0;padding:12px 14px;border-radius:14px;background:var(--warn-soft);color:var(--warn)}
 .gel-bandeau .btn{margin-top:8px;width:100%}
-body.gele :is(#ms-form,[data-ec-coche],#route-proposer,#declarer,[data-decl],#ajout-tache,button[data-coche],[data-ajout-route],#ajout-route,#ajout-photo,#fnote,#pr-oui,#pr-non,#creer,#ajout,#commenter,#suppr,#ajout-rdv,#annule,[data-c],[data-annule],#corr,#valider,#brouillon,#envoyer,#envoyer + p,h2:has(+ #brouillon),.card:has(> #dire),#ft [type=submit]){display:none!important}
+body.gele :is([data-dem],#ms-form,[data-ec-coche],#route-proposer,#declarer,[data-decl],#ajout-tache,button[data-coche],[data-ajout-route],#ajout-route,#ajout-photo,#fnote,#pr-oui,#pr-non,#creer,#ajout,#commenter,#suppr,#ajout-rdv,#annule,[data-c],[data-annule],#corr,#valider,#brouillon,#envoyer,#envoyer + p,h2:has(+ #brouillon),.card:has(> #dire),#ft [type=submit]){display:none!important}
 body.gele #ft{pointer-events:none}
 .alerte-mission{display:block;width:100%;text-align:left;border:0;border-radius:14px;background:#D0342C;color:#fff;padding:14px 16px;margin-bottom:14px;font-size:17px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgb(208 52 44 / .35)}
 .alerte-mission small{display:block;font-size:13px;font-weight:400;margin-top:2px}
@@ -2906,6 +2906,10 @@ async function vueMoi() {
     <dl class="info card"><dt>E-mail</dt><dd>${esc(moi.email || "")}</dd><dt>Téléphone</dt><dd>${esc(moi.telephone || "—")}</dd>
       <dt>Adresse</dt><dd>${esc(moi.adresse || "—")}</dd><dt>Activités</dt><dd>${esc((moi.activites || []).join(", ") || "—")}</dd>
       <dt>Zones</dt><dd>${esc((moi.zones || []).map(z => "Zone " + z).join(", ") || "—")}</dd></dl>
+    ${moi.cheffe_reseau ? `<section class="card" style="margin-top:14px"><b>Mon réseau</b>
+      <p class="muted small" style="margin:4px 0 10px">Préviens OIKOS : il fait passer un presta ou des clients d'un réseau à l'autre.</p>
+      <div class="stack" id="mon-reseau"><button class="btn" data-dem="presta"><span class="ic">${ico("personne")}</span>J'ai trop de clients : je veux un presta</button>
+        <button class="btn" data-dem="clients"><span class="ic">${ico("clients")}</span>J'ai trop de presta : je veux des clients</button></div></section>` : ""}
     <div class="stack" style="margin-top:14px">
       ${!estInstalle() && (surTelephone() || invitInstall) ? `<button class="btn doux" id="installer-appli"><span class="ic">${ico("telecharger")}</span>Installer l'appli sur ce téléphone</button>` : ""}
       <button class="btn" id="infos"><span class="ic">${ico("stylo")}</span>Modifier mes informations</button>
@@ -2917,6 +2921,7 @@ async function vueMoi() {
     <button class="btn primary" id="papiers" style="margin-top:14px;width:100%"><span class="ic">${ico("doc")}</span>Mes papiers pour OIKOS</button>
     <p class="muted small" style="margin-top:18px">Mes factures arriveront ici prochainement.</p>`);
   document.getElementById("papiers").onclick = () => accueil("papiers");
+  if (moi.cheffe_reseau) monReseau();
   document.getElementById("revoir").onclick = () => lancerDidacticiel();
   const inst = document.getElementById("installer-appli");
   if (inst) inst.onclick = installerAppli;
@@ -2927,6 +2932,33 @@ async function vueMoi() {
     <button class="btn stop big" id="ok">Me déconnecter</button><button class="btn flat" data-fermer>Annuler</button>`, (el, fermer) => {
     el.querySelector("#ok").onclick = async () => { fermer(); await sortir(); ecranCode(); };
   });
+}
+
+/* Chef de réseau (SQL 58) : « J'ai trop de clients, je veux un presta » / « J'ai trop de presta, je veux des clients ».
+   La base retrouve son équipe ; une seule demande ouverte de chaque sorte, jusqu'à ce qu'OIKOS la traite. */
+const DEMANDES_CHEF = { presta: ["J'ai trop de clients : je veux un presta", "OIKOS cherche un presta d'un autre réseau pour tes clients."], clients: ["J'ai trop de presta : je veux des clients", "OIKOS cherche des clients pour tes presta."] };
+async function monReseau() {
+  const zone = document.getElementById("mon-reseau"); if (!zone) return;
+  const r = await sb.from("demandes_reseau").select("sorte,cree_le").neq("etat", "traitee");
+  (r.error ? [] : r.data || []).forEach(d => {
+    const b = zone.querySelector(`[data-dem="${d.sorte}"]`); if (!b) return;
+    b.outerHTML = `<p class="small" style="margin:0"><span class="ic">${ico("ok")}</span>${esc(DEMANDES_CHEF[d.sorte][0])} : envoyée le ${new Date(d.cree_le).toLocaleDateString("fr-FR")}, OIKOS s'en occupe.</p>`;
+  });
+  zone.onclick = e => {
+    const b = e.target.closest("[data-dem]"); if (!b) return;
+    const sorte = b.dataset.dem, [titre, suite] = DEMANDES_CHEF[sorte];
+    feuille(`<h2 style="margin:0">${esc(titre)}</h2><p class="muted">${esc(suite)} Tu peux préciser (secteur, jours, nombre d'heures…).</p>
+      <label class="f">Précision (facultatif)<textarea id="dem-msg" maxlength="500" rows="3"></textarea></label>
+      <p class="err" id="dem-err"></p>
+      <button class="btn primary big" id="dem-ok">Envoyer à OIKOS</button><button class="btn flat" data-fermer>Annuler</button>`, (el, fermer) => {
+      el.querySelector("#dem-ok").onclick = async ev => {
+        ev.target.disabled = true;
+        const { error } = await sb.rpc("demander_au_reseau", { p_sorte: sorte, p_message: el.querySelector("#dem-msg").value.trim() || null });
+        if (error) { ev.target.disabled = false; el.querySelector("#dem-err").textContent = error.code === "PGRST202" || error.code === "42883" ? "Pas encore prêt chez OIKOS : réessaie plus tard." : error.message; return; }
+        fermer(); toast("Envoyé : OIKOS est prévenu."); monReseau();
+      };
+    });
+  };
 }
 
 /* ===================== Didacticiel : Olive fait visiter l'appli, une seule fois ===================== */
