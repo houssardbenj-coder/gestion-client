@@ -5662,7 +5662,9 @@ function ficheCheffe(e) {
         <label class="chk"><input type="radio" name="mode" value="societe" ${v.mode === "societe" ? "checked" : ""}>En société : sa SAS reçoit le prix HT moins la commission d'OIKOS et paie ses presta</label></fieldset>
       <div id="fc-soc" class="deux" ${v.mode === "societe" ? "" : "hidden"}><label class="f">Sa société<select name="societe"><option value="">— nouvelle société —</option>${partenaires.map(s => `<option value="${esc(s.code)}" ${s.code === v.societe ? "selected" : ""}>${esc(s.nom)}</option>`).join("")}</select></label>
         <label class="f" id="fc-socnom">Nom de la nouvelle société<input name="societe_nom" maxlength="120" autocomplete="off" placeholder="ex. Nadia Services SAS"></label></div>
-      <div class="deux"><label class="f">Couleur<input type="color" name="couleur" value="${couleurSure(v.couleur)}" style="height:40px;padding:2px"></label>
+      <div id="fc-ids" class="deux" ${v.mode === "societe" ? "" : "hidden"}><label class="f">SIRET de la société (facultatif)<input name="siret" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="pas encore connu ? laisse vide"></label>
+        <label class="f">N° de TVA (facultatif)<input name="tva" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ex. FR12345678901"></label></div>
+      <div class="deux"><div style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);align-items:flex-start"><span>Couleur</span><input type="color" name="couleur" aria-label="Couleur" value="${couleurSure(v.couleur)}" style="height:40px;width:64px;padding:2px;cursor:pointer"></div>
         <label class="f">Son compte, si c'est aussi un presta (facultatif)<select name="cheffe"><option value="">— aucun —</option>${comptes.map(p => `<option value="${p.id}" ${p.id === v.cheffe ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label></div>
       <div class="card" style="padding:10px"><b id="fc-taux-titre"></b> <span class="muted small" id="fc-taux-sous"></span>
         <div class="deux" style="margin-top:6px"><label class="f">Clients apportés par son équipe (€ HT / h)<input name="apporte" inputmode="decimal" placeholder="—" value="${tx ? esc(tfVirgule(tx.apporte)) : ""}"></label>
@@ -5674,8 +5676,13 @@ function ficheCheffe(e) {
       <div class="row"><button class="btn primary" type="submit">${neuf ? "Créer le chef" : "Enregistrer"}</button><button class="btn flat" type="button" data-fermer>Annuler</button></div>
     </form>`, (el, fermer) => {
     const f = el.querySelector("#fc"), err = el.querySelector("#fc-err");
-    let modeAffiche = f.mode.value;
+    let modeAffiche = f.mode.value, socAffichee = null;
     const majVue = () => { const m = f.mode.value, s = m === "societe";
+      if (f.societe.value !== socAffichee) {   // société choisie : on montre son SIRET et sa TVA déjà connus
+        socAffichee = f.societe.value; const so = (cacheSocietes || []).find(x => x.code === socAffichee);
+        f.siret.value = so && so.siret ? so.siret : ""; f.tva.value = so && so.tva ? so.tva : "";
+      }
+      el.querySelector("#fc-ids").hidden = !s;
       if (m !== modeAffiche) {   // les taux changent de sens (part de la cheffe / commission d'OIKOS) : on les réécrit
         modeAffiche = m;
         if (!neuf) { f.apporte.value = m === (tx ? tx.mode : v.mode) && tx ? tfVirgule(tx.apporte) : ""; f.confie.value = m === (tx ? tx.mode : v.mode) && tx ? tfVirgule(tx.confie) : ""; f.depuis.value = auj; }
@@ -5699,16 +5706,29 @@ function ficheCheffe(e) {
       if (!neuf && mode !== modeAvant && !tauxChange) { err.textContent = "Changement de sorte : écris les nouveaux taux (ils commencent à la date choisie)."; return; }
       if (!neuf && tauxChange && depuis < tfAujourdhui()) { err.textContent = "Un nouveau taux commence au plus tôt aujourd'hui."; return; }
       if (!neuf && mode !== v.mode && !confirm(mode === "societe" ? `${v.cheffe_nom} passe en société.\n\nSes presta passent dans sa société (c'est elle qui les paie). Ses clients restent à OIKOS : tu choisis ensuite lesquels suivent son équipe.\nLes mois passés restent calculés comme avant.` : `${v.cheffe_nom} redevient ${femme(v) ? "rattachée" : "rattaché"} à OIKOS.\n\nSes presta repassent chez OIKOS. Les mois passés restent calculés comme avant.`)) return;
-      let societe = "oikos";
+      let societe = "oikos", sansTva = false;
       if (mode === "societe") {
+        // SIRET et TVA : facultatifs (vides = pas encore connus), vérifiés seulement s'ils sont écrits
+        const siret = f.siret.value.replace(/\s+/g, ""), tva = f.tva.value.replace(/\s+/g, "").toUpperCase();
+        if (siret && !/^[0-9]{14}$/.test(siret)) { err.textContent = "Le SIRET a 14 chiffres (ou laisse la case vide s'il n'est pas encore connu)."; return; }
+        if (tva && !/^[A-Z]{2}[A-Z0-9]{2,13}$/.test(tva)) { err.textContent = "N° de TVA non reconnu : écris-le comme FR12345678901 (ou laisse la case vide)."; return; }
+        const ids = { siret: siret || null, tva: tva || null };
+        // la base n'a pas encore la colonne tva (SQL 63 pas lancé) : on enregistre sans, et on prévient
+        const ecrireSoc = async (requete) => { let r = await requete(ids); if (r.error && (r.error.code === "PGRST204" || r.error.code === "42703") && /tva/i.test(r.error.message || "")) { sansTva = !!tva; const { tva: _t, ...sans } = ids; r = await requete(sans); } return r; };
         societe = f.societe.value;
         if (!societe) {
           const nomS = net(f.societe_nom.value); if (!nomS) { err.textContent = "Écris le nom de sa société, ou choisis-la dans la liste."; return; }
           const base = nomS.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 34) || "societe";
           societe = base.length < 2 ? base + "-x" : base;
           for (let i = 2; (cacheSocietes || []).some(s => s.code === societe); i++) societe = base + "-" + i;
-          const { error } = await sb.from("societes").insert({ code: societe, nom: nomS, genre: "partenaire" });
+          const code = societe, { error } = await ecrireSoc(x => sb.from("societes").insert({ code, nom: nomS, genre: "partenaire", ...x }));
           if (error) { err.textContent = error.message; return; }
+        } else {
+          const so = (cacheSocietes || []).find(x => x.code === societe) || {};
+          if ((so.siret || null) !== ids.siret || (so.tva || null) !== ids.tva) {
+            const code = societe, { error } = await ecrireSoc(x => sb.from("societes").update(x).eq("code", code));
+            if (error) { err.textContent = error.message; return; }
+          }
         }
       }
       const fiche = { cheffe_nom: cheffeNom, nom: net(f.nom.value), civilite: f.civilite.value || null, ...(f.email ? { cheffe_email: email || null } : {}), mode, societe, couleur: couleurSure(f.couleur.value), cheffe: f.cheffe.value || null, ...(neuf ? { debut: depuis } : { active: f.active.checked }) };
@@ -5726,7 +5746,8 @@ function ficheCheffe(e) {
         const r = await sb.from("comptes_a_creer").insert({ email, prenom: net(f.prenom.value), nom: net(f.nomc.value), telephone: tel || null, statut: "sous-traitant", etat: "a_faire", cheffe_de: id });
         if (r.error) { toast(r.error.code === "23505" ? "Équipe enregistrée, mais une invitation attend déjà pour cet e-mail" : "Équipe enregistrée, mais son espace n'a pas pu être demandé : " + r.error.message); fermer(); await chargerBase(); return afficher(); }
       }
-      toast(espace ? `${femme(fiche) ? "Cheffe enregistrée" : "Chef enregistré"} : son compte, son invitation et son dossier Drive arrivent dans 5 minutes` : neuf ? `${femme(fiche) ? "Cheffe créée" : "Chef créé"} : mets ses presta dans son équipe (bouton « Équipe »)` : "Enregistré"); fermer(); await chargerBase(); afficher();
+      toast(espace ? `${femme(fiche) ? "Cheffe enregistrée" : "Chef enregistré"} : son compte, son invitation et son dossier Drive arrivent dans 5 minutes` : neuf ? `${femme(fiche) ? "Cheffe créée" : "Chef créé"} : mets ses presta dans son équipe (bouton « Équipe »)` : "Enregistré"); if (sansTva) setTimeout(() => toast("Le n° de TVA n'a pas été gardé : lance d'abord le SQL 63 dans Supabase, puis réécris-le"), 3000);
+      fermer(); await chargerBase(); afficher();
     };
   });
 }
