@@ -320,7 +320,7 @@
     const zone = el.querySelector("#dz-zone");
     const ligneEnvoi = (e, avecNom) => { const w = qui(e), apres = envois.find(v => v.remplace === e.id && v.etat !== "retire");
       return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span>${e.note ? `<span class="dz-m" style="font-style:italic">Note : ${E(e.note.length > 120 ? e.note.slice(0, 120) + "…" : e.note)}</span>` : ""}</span>
-        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
+        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat" data-note-envoi="${e.id}">${e.note ? "Modifier la note" : "Ajouter une note"}</button>` : ""}${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
     const dessinerSuivi = () => {
       const l = envois.filter(filtres[filtreSuivi][1]);
       let corps = "";
@@ -372,6 +372,19 @@
         if (b.hasAttribute("data-envoyer-choix")) return mettreADisposition([...choisis].map(id => M[id]).filter(Boolean), x);
         if (b.dataset.pdf) { const v = envois.find(z => z.id === b.dataset.pdf); return window.open(await lienSigne(v.pdf_seau, v.pdf_chemin), "_blank", "noopener"); }
         if (b.dataset.voir) return voirEnvoi(b.dataset.voir);
+        if (b.dataset.noteEnvoi) {   // note d'un document pas encore signé : modifiable (une fois signé, elle est figée)
+          const v = envois.find(z => z.id === b.dataset.noteEnvoi);
+          return fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Note pour la personne</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
+            <p class="muted small" style="margin:0">« ${E(v.titre)} » pour ${E(qui(v).nom)}. Elle la voit en haut du document, tout de suite.</p>
+            <textarea id="ne-texte" rows="4" style="width:100%;box-sizing:border-box" placeholder="Ex. : coche ménage et jardinage.">${E(v.note || "")}</textarea>
+            <div class="dz-boutons" style="justify-content:flex-end"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="ne-ok">Enregistrer</button></div>`, (f, fermer) => {
+            f.querySelector("#ne-texte").focus();
+            f.querySelector("#ne-ok").onclick = async () => {
+              try { await q(sb.from("doc_envois").update({ note: f.querySelector("#ne-texte").value.trim().slice(0, 2000) || null }).eq("id", v.id)); toast("Note enregistrée"); fermer(); afficher("documents"); }
+              catch (err) { toast("Pas enregistré : " + (err.message || err)); }
+            };
+          });
+        }
         if (b.dataset.version) return nouvelleVersion(b.dataset.version);
         if (b.dataset.retirer) { if (!confirm("Retirer ce document ? La personne ne le verra plus.")) return; await q(sb.from("doc_envois").update({ etat: "retire" }).eq("id", b.dataset.retirer)); toast("Retiré"); return afficher("documents"); }
         if (b.dataset.renvoyer) {
