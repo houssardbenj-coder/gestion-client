@@ -778,7 +778,14 @@ async function chargerMoi() {
   const { data, error } = await sb.from("profils").select("*").eq("id", u.user.id).maybeSingle();
   if (error) { if (reseau(error)) { ecranHorsLigne(); return false; } souci(error); return false; }
   if (!data || !data.actif) { await sortir(); ecranFin(); return false; }
-  moi = data; document.body.classList.toggle("gele", !!moi.gele); return true;
+  moi = data;
+  // Attestation de vigilance (SQL 72) : demandée à 5 mois, gel automatique à 6 mois. SQL pas lancé : rien ne change.
+  const v = await sb.rpc("ma_vigilance").then(r => r.error ? null : (r.data || [])[0], () => null);
+  moi.vig = v && v.concerne ? v : null;
+  moi.gele_main = !!moi.gele;
+  moi.gele_vig = !!(moi.vig && moi.vig.gele);   // calculé par la base : 6 mois passés, pas de répit de 7 jours, pas dégelé par OIKOS
+  moi.gele = moi.gele_main || moi.gele_vig;
+  document.body.classList.toggle("gele", !!moi.gele); return true;
 }
 
 /* ===================== Écrans d'accès ===================== */
@@ -1042,7 +1049,26 @@ async function accueil(o) {
   try {
     if (!(await chargerMoi())) return;
     if (notifAVerifier) { notifAVerifier = false; if (await nbMessagesNonLus()) return accueil("messages"); }
-    if (moi.gele) {
+    const dateLongue = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    const vigOuvre = () => accueil("papiers");
+    if (moi.gele_vig && !moi.gele_main) {
+      document.getElementById("contenu").insertAdjacentHTML("beforebegin", moi.vig.attente_le
+        ? `<div class="gel-bandeau"><b>${ico("cadenas")} Ton compte est gelé : attestation de vigilance en attente</b><br>OIKOS n'a pas encore validé l'attestation que tu as envoyée. Ton compte se débloque dès qu'elle est validée. Si tu t'es trompé de fichier, envoie la bonne.
+            <button class="btn" id="gel-completer">Voir mes papiers ›</button></div>`
+        : `<div class="gel-bandeau"><b>${ico("cadenas")} Ton compte est gelé : attestation de vigilance URSSAF manquante</b><br>Ta dernière attestation a plus de 6 mois. Tu peux tout regarder, mais rien modifier tant que la nouvelle n'est pas envoyée et validée par OIKOS (elle se télécharge sur ton espace URSSAF). Dès que tu l'envoies, tu as 7 jours de répit, le temps qu'OIKOS la vérifie.
+            <button class="btn" id="gel-completer">Envoyer mon attestation ›</button></div>`);
+      document.getElementById("gel-completer").onclick = vigOuvre;
+    } else if (!moi.gele && moi.vig && moi.vig.attente_le && new Date() >= new Date(moi.vig.demande_le)) {
+      document.getElementById("contenu").insertAdjacentHTML("beforebegin", `<div class="gel-bandeau vig-bandeau"><b>${ico("ok")} Attestation de vigilance envoyée, OIKOS la vérifie</b><br>${new Date() >= new Date(moi.vig.gel_le) ? `Ton compte reste ouvert jusqu'au <b>${dateLongue(moi.vig.attente_fin)}</b> le temps de la vérification.` : "Merci ! Rien d'autre à faire si c'est le bon fichier."}</div>`);
+    } else if (!moi.gele && moi.vig && moi.vig.libre_jusqu_au && new Date() >= new Date(moi.vig.gel_le)) {
+      document.getElementById("contenu").insertAdjacentHTML("beforebegin", `<div class="gel-bandeau vig-bandeau"><b>${ico("alerte")} Attestation de vigilance URSSAF à envoyer</b><br>OIKOS te laisse jusqu'au <b>${dateLongue(moi.vig.libre_jusqu_au)}</b> pour envoyer la nouvelle : après, ton compte sera gelé.
+        <button class="btn" id="vig-envoyer">Envoyer mon attestation ›</button></div>`);
+      document.getElementById("vig-envoyer").onclick = vigOuvre;
+    } else if (!moi.gele && moi.vig && new Date() >= new Date(moi.vig.demande_le)) {
+      document.getElementById("contenu").insertAdjacentHTML("beforebegin", `<div class="gel-bandeau vig-bandeau"><b>${ico("alerte")} Nouvelle attestation de vigilance URSSAF à envoyer</b><br>Envoie-la avant le <b>${dateLongue(moi.vig.gel_le)}</b> : sans elle, ton compte sera gelé ce jour-là. Elle se télécharge sur ton espace URSSAF (autoentrepreneur.urssaf.fr).
+        <button class="btn" id="vig-envoyer">Envoyer mon attestation ›</button></div>`);
+      document.getElementById("vig-envoyer").onclick = () => accueil("papiers");
+    } else if (moi.gele) {
       document.getElementById("contenu").insertAdjacentHTML("beforebegin", `<div class="gel-bandeau"><b>${ico("cadenas")} Ton compte est gelé par OIKOS</b><br>Tu peux tout regarder, mais rien modifier tant que tes informations et tes papiers ne sont pas complets.
         <button class="btn" id="gel-completer">Compléter mes informations et mes papiers ›</button></div>`);
       document.getElementById("gel-completer").onclick = () => accueil("moi");
@@ -2855,10 +2881,14 @@ const etatPapier = d => !d ? `<span class="tag warn">à envoyer</span>` : d.etat
   : d.etat === "refuse" ? `<span class="tag warn">refusé</span>` : `<span class="tag">reçu, OIKOS vérifie</span>`;
 async function vuePapiers() {
   const { liste, autres } = await chargerPapiers();
+  // Attestation de vigilance de 5 mois ou plus (SQL 72) : à renouveler, comme si elle manquait
+  const aRenouveler = p => !!(moi.vig && !moi.vig.attente_le && /vigilance/i.test(p.libelle) && p.doc && p.doc.etat !== "refuse" && new Date() >= new Date(moi.vig.demande_le));
+  liste.forEach(p => { if (aRenouveler(p)) { p.renouv = moi.vig.gel_le; p.doc = null; } });
   const reste = liste.filter(p => p.obligatoire && (!p.doc || p.doc.etat === "refuse")).length;
   contenu(`<button class="btn flat" id="retour" style="padding-left:0">‹ Moi</button>
     <h1>Mes papiers</h1><p class="muted" style="margin:6px 0 14px">${reste ? `Il en manque ${reste}. Touche « Envoyer » : une photo nette suffit.` : "Tout est envoyé, merci !"} OIKOS les range dans ton dossier.</p>
-    <div class="stack">${liste.map(p => `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(p.libelle)}${p.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</b>${etatPapier(p.doc)}</div>
+    <div class="stack">${liste.map(p => `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(p.libelle)}${p.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</b>${p.renouv ? `<span class="tag warn">à renouveler</span>` : etatPapier(p.doc)}</div>
+      ${p.renouv ? `<p class="err" style="min-height:0">${moi.vig.libre_jusqu_au && !moi.gele_vig && new Date() >= new Date(p.renouv) ? "OIKOS te laisse jusqu'au " + new Date(moi.vig.libre_jusqu_au).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) + " pour envoyer la nouvelle." : new Date() >= new Date(p.renouv) ? "Plus de 6 mois : ton compte est gelé. Dès que tu envoies la nouvelle, tu as 7 jours, le temps qu'OIKOS la valide." : "Ta dernière a 5 mois : envoie la nouvelle avant le " + new Date(p.renouv).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) + ", sinon ton compte sera gelé."}</p>` : ""}
       ${p.aide ? `<p class="muted small">${esc(p.aide)}</p>` : ""}
       ${p.doc && p.doc.etat === "refuse" && p.doc.motif ? `<p class="err" style="min-height:0">${esc(p.doc.motif)}</p>` : ""}
       ${p.modele && (!p.doc || p.doc.etat !== "valide") ? `<button class="btn" data-modele="${esc(p.modele)}"><span class="ic">${ico("telecharger")}</span>Télécharger le modèle à imprimer</button>` : ""}
