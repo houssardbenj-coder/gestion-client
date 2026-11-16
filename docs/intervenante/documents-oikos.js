@@ -130,7 +130,9 @@
     let valeurs = Object.assign({}, d.valeurs || {});
     const aRemplir = (d.champs || []).some(c => (c.qui || "destinataire") === "destinataire"), fait = d.etat === "fait" || d.etat === "refuse";
     cible.innerHTML = `<div class="dz-boutons" style="margin-bottom:10px"><button class="btn flat" type="button" data-retour>‹ ${tu("Mes documents", "Retour")}</button></div>
-      <h1 style="margin:0 0 4px">${E(d.titre)}</h1>
+      <h1 style="margin:0 0 4px">${E(d.titre)}${d.numero > 1 ? ` <span class="dz-tag">version ${d.numero}</span>` : ""}</h1>
+      ${d.numero > 1 && !fait ? `<p class="small" style="margin:0 0 6px">${tu("Cette version remplace celle que tu avais déjà signée : relis-la, l'ancienne reste gardée telle quelle.", "Cette version remplace celle que vous aviez déjà signée : relisez-la, l'ancienne reste gardée telle quelle.")}</p>` : ""}
+      ${d.etat === "fait" ? `<p class="small" style="margin:0 0 6px">${IC("cadenas")} ${tu("Document signé : il ne peut plus être modifié.", "Document signé : il ne peut plus être modifié.")}${d.remplace_par ? tu(" Une nouvelle version t'a été envoyée.", " Une nouvelle version vous a été envoyée.") : ""}</p>` : ""}
       <p class="muted small" style="margin:0 0 12px">${fait ? (d.etat === "fait" ? (d.action === "signer" ? "Signé" : d.action === "accepter" ? "Accepté" : "Lu") + " le " + heureFr(d.fait_le) : "Refusé le " + heureFr(d.fait_le)) : "Document " + ACTIONS[d.action] + (d.echeance ? " avant le " + dateFr(d.echeance) : "")}</p>
       ${!fait && aRemplir ? `<section class="card" style="margin-bottom:12px"><b>${tu("À remplir par toi", "À remplir")}</b><p class="muted small" style="margin:2px 0 10px">${tu("Ce que tu écris apparaît dans le document en dessous.", "Ce que vous écrivez apparaît dans le document en dessous.")}</p><div class="dz-champs" id="dz-champs">${champsHtml(d.champs, valeurs, "destinataire")}</div></section>` : ""}
       ${d.fichier ? `<button class="btn" type="button" data-fichier style="margin-bottom:10px">${IC("doc")} Ouvrir le document joint</button>` : ""}
@@ -188,7 +190,7 @@
   async function mesDocs() { const { data, error } = await sb.rpc("mes_docs"); if (error) throw error; return data || []; }
   const aFaire = d => d.etat === "envoye" || d.etat === "vu";
   const ligneRecue = d => `<button class="dz-ligne" type="button" data-ouvrir="${d.id}" style="text-align:left;width:100%;cursor:pointer">
-      <span><b>${E(d.titre)}</b><span class="dz-m">${aFaire(d) ? "Envoyé le " + dateFr(d.envoye_le) + (d.echeance ? " · avant le " + dateFr(d.echeance) : "")
+      <span><b>${E(d.titre)}${d.numero > 1 ? ` <span class="dz-tag">version ${d.numero}</span>` : ""}${d.remplace_par ? ` <span class="dz-tag">remplacé par une nouvelle version</span>` : ""}</b><span class="dz-m">${aFaire(d) ? "Envoyé le " + dateFr(d.envoye_le) + (d.echeance ? " · avant le " + dateFr(d.echeance) : "")
         : d.etat === "fait" ? (d.action === "signer" ? "Signé" : d.action === "accepter" ? "Accepté" : "Lu") + " le " + dateFr(d.fait_le) : "Refusé le " + dateFr(d.fait_le)}</span></span>
       ${aFaire(d) ? `<span class="dz-tag att">${ACTIONS[d.action]}</span>` : d.etat === "fait" ? `<span class="dz-tag ok">${IC("ok")} fait</span>` : `<span class="dz-tag non">refusé</span>`}</button>`;
 
@@ -246,7 +248,7 @@
     styles();
     const [modeles, envois, profils, clientsL, comptes, pieces] = await Promise.all([
       q(sb.from("doc_modeles").select("*").order("ordre").order("titre")),
-      q(sb.from("doc_envois").select("id,modele_id,titre,action,etat,intervenante_id,client_id,envoye_le,vu_le,fait_le,motif,echeance,pdf_etat,pdf_seau,pdf_chemin,pdf_erreur,signe_nom").order("envoye_le", { ascending: false }).limit(500)),
+      q(sb.from("doc_envois").select("id,modele_id,titre,action,etat,intervenante_id,client_id,envoye_le,vu_le,fait_le,motif,echeance,pdf_etat,pdf_seau,pdf_chemin,pdf_erreur,signe_nom,numero,remplace").order("envoye_le", { ascending: false }).limit(500)),
       q(sb.from("profils").select("id,prenom,nom,email,telephone,adresse,siret,activites,actif,role,statut,cheffe_reseau").neq("role", "gerant")),
       q(sb.from("clients").select("id,nom,adresse,email,telephone,etat").order("nom")),
       sb.from("comptes_clients").select("id,client_id,actif").then(r => r.data || [], () => []),
@@ -269,8 +271,8 @@
     const dessinerSuivi = () => {
       const l = envois.filter(filtres[filtreSuivi][1]);
       zone.innerHTML = `<div class="sous-menu" style="margin-bottom:10px">${Object.entries(filtres).map(([k, [t, f]]) => `<button class="chip" data-filtre="${k}" aria-pressed="${k === filtreSuivi}">${t} (${envois.filter(f).length})</button>`).join("")}</div>
-        ${l.length ? `<div class="dz-liste">${l.map(e => { const w = qui(e); return `<div class="dz-ligne"><span><b>${E(e.titre)}</b><span class="dz-m">${E(w.type)} : ${E(w.nom)} · envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span></span>
-          <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; }).join("")}</div>`
+        ${l.length ? `<div class="dz-liste">${l.map(e => { const w = qui(e), apres = envois.find(v => v.remplace === e.id && v.etat !== "retire"); return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${E(w.type)} : ${E(w.nom)} · envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span></span>
+          <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; }).join("")}</div>`
           : `<div class="card"><p class="muted">Rien ici. Pour envoyer un document : Bibliothèque › Mettre à disposition.</p></div>`}`;
     };
     const dessinerBiblio = () => {
@@ -291,6 +293,7 @@
         if (b.dataset.filtre) { filtreSuivi = b.dataset.filtre; return dessinerSuivi(); }
         if (b.dataset.pdf) { const x = envois.find(v => v.id === b.dataset.pdf); return window.open(await lienSigne(x.pdf_seau, x.pdf_chemin), "_blank", "noopener"); }
         if (b.dataset.voir) return voirEnvoi(b.dataset.voir);
+        if (b.dataset.version) return nouvelleVersion(b.dataset.version);
         if (b.dataset.retirer) { if (!confirm("Retirer ce document ? La personne ne le verra plus.")) return; await q(sb.from("doc_envois").update({ etat: "retire" }).eq("id", b.dataset.retirer)); toast("Retiré"); return afficher("documents"); }
         if (b.dataset.renvoyer) {
           const x = envois.find(v => v.id === b.dataset.renvoyer);
@@ -306,6 +309,35 @@
     };
   }
   const nomP = p => p ? (((p.prenom || "") + " " + (p.nom || "")).trim() || p.email || "?") : "?";
+
+  /* ---------- Nouvelle version d'un document signé (le signé ne bouge jamais : SQL 68) ---------- */
+  async function nouvelleVersion(id) {
+    const d = await q(sb.from("doc_envois").select("*").eq("id", id).single());
+    const n = (d.numero || 1) + 1;
+    const vals = Object.assign({}, d.valeurs || {});
+    fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Nouvelle version (version ${n})</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
+      <p class="muted small" style="margin:0">« ${E(d.titre)} » signé le ${heureFr(d.fait_le)} reste gardé tel quel, avec son PDF. Corrige le texte ci-dessous : la personne recevra la version ${n} à relire et signer, avec ses cases déjà remplies comme la dernière fois.</p>
+      ${d.contenu ? `<textarea id="nv-contenu" rows="14" style="width:100%;box-sizing:border-box;font:13px/1.45 ui-monospace,Consolas,monospace">${E(d.contenu)}</textarea>` : `<p class="small">Document à partir d'un fichier : la même pièce jointe repart à accepter.</p>`}
+      ${(d.champs || []).some(c => c.qui === "oikos") ? `<section class="card"><b>À remplir par OIKOS</b><div class="dz-champs" id="nv-oikos" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(d.champs, vals, "oikos")}</div></section>` : ""}
+      <label class="dz-champs" style="max-width:260px"><span>À faire avant le (facultatif)</span><input type="date" id="nv-echeance"></label>
+      <div class="dz-boutons" style="justify-content:flex-end"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="nv-ok">Envoyer la version ${n}</button></div>`, (f, fermer) => {
+      f.querySelector("#nv-ok").onclick = async ev => {
+        const bouton = ev.currentTarget;
+        try {
+          const zo = f.querySelector("#nv-oikos"), vo = zo ? lireChamps(zo) : {};
+          const mq = manque(d.champs, vo, "oikos"); if (mq) return toast("Case à remplir : " + mq.libelle);
+          const contenuN = f.querySelector("#nv-contenu") ? f.querySelector("#nv-contenu").value.trim() : null;
+          if (d.contenu && !contenuN) return toast("Le texte ne peut pas être vide");
+          bouton.disabled = true;
+          await q(sb.from("doc_envois").insert({ modele_id: d.modele_id, version: d.version, titre: d.titre, categorie: d.categorie, action: d.action,
+            contenu: d.contenu ? contenuN : null, fichier: d.fichier, fichier_seau: d.fichier_seau, champs: d.champs, valeurs: Object.assign({}, vals, vo),
+            intervenante_id: d.intervenante_id, client_id: d.client_id, piece_id: d.piece_id, echeance: f.querySelector("#nv-echeance").value || null,
+            remplace: d.id, numero: n }));
+          toast("Version " + n + " envoyée"); fermer(); vuePilote = "suivi"; filtreSuivi = "attente"; afficher("documents");
+        } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
+      };
+    });
+  }
 
   async function voirEnvoi(id) {
     const d = await q(sb.from("doc_envois").select("*").eq("id", id).single());
