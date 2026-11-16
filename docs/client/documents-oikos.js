@@ -243,19 +243,40 @@
   }
 
   /* ===================== Pilote : page « Documents » ===================== */
-  let vuePilote = "suivi", filtreSuivi = "attente";
-  async function pilote() {
-    styles();
+  // Trois entrées : « Envoyer à une personne » (le pilote propose selon son profil), le Suivi (par personne ou par document)
+  // et la Bibliothèque (rangée par destinataire puis par moment : à l'arrivée, selon le cas, quand il se passe quelque chose).
+  let vuePilote = "suivi", filtreSuivi = "attente", rangSuivi = "personne", pourBiblio = "presta";
+  const choisis = new Set();
+  const QUAND = { arrivee: "À l'arrivée", cas: "Selon le cas", evenement: "Quand il se passe quelque chose" };
+  const QUAND_AIDE = { arrivee: "proposés d'office à une nouvelle personne", cas: "proposés sans être cochés", evenement: "à envoyer seulement le jour où ça arrive (clés, transfert, nouvelle grille, avenant…)" };
+  const CONDITIONS = { ae_a_creer: "si OIKOS crée son auto-entreprise" };
+  const roleDe = p => p && p.cheffe_reseau ? "chef" : "presta";
+  async function chargerDocs() {
     const [modeles, envois, profils, clientsL, comptes, pieces] = await Promise.all([
       q(sb.from("doc_modeles").select("*").order("ordre").order("titre")),
-      q(sb.from("doc_envois").select("id,modele_id,titre,action,etat,intervenante_id,client_id,envoye_le,vu_le,fait_le,motif,echeance,pdf_etat,pdf_seau,pdf_chemin,pdf_erreur,signe_nom,numero,remplace").order("envoye_le", { ascending: false }).limit(500)),
-      q(sb.from("profils").select("id,prenom,nom,email,telephone,adresse,siret,activites,actif,role,statut,cheffe_reseau").neq("role", "gerant")),
+      q(sb.from("doc_envois").select("id,modele_id,titre,action,etat,intervenante_id,client_id,envoye_le,vu_le,fait_le,motif,echeance,pdf_etat,pdf_seau,pdf_chemin,pdf_erreur,signe_nom,numero,remplace").order("envoye_le", { ascending: false }).limit(1000)),
+      q(sb.from("profils").select("id,prenom,nom,email,telephone,adresse,siret,activites,actif,role,statut,cheffe_reseau,ae_a_creer").neq("role", "gerant")),
       q(sb.from("clients").select("id,nom,adresse,email,telephone,etat").order("nom")),
       sb.from("comptes_clients").select("id,client_id,actif").then(r => r.data || [], () => []),
       q(sb.from("pieces_demandees").select("id,libelle").order("ordre"))]);
     const parId = l => Object.fromEntries(l.map(x => [x.id, x]));
-    const P = parId(profils), C = parId(clientsL), M = parId(modeles);
-    const avecCompte = new Set(comptes.filter(k => k.actif).map(k => k.client_id));
+    return { modeles, envois, profils, clientsL, pieces, P: parId(profils), C: parId(clientsL), M: parId(modeles), avecCompte: new Set(comptes.filter(k => k.actif).map(k => k.client_id)) };
+  }
+  // Tout le monde à qui on peut envoyer : presta, chefs, clients (ceux qui ont un espace client)
+  function lesGens(x) {
+    return x.profils.filter(p => p.actif).map(p => ({ cle: "i:" + p.id, id: p.id, type: roleDe(p), nom: nomP(p), p, ok: true }))
+      .concat(x.clientsL.filter(c => c.etat !== "termine").map(c => ({ cle: "c:" + c.id, id: c.id, type: "client", nom: c.nom, p: c, ok: x.avecCompte.has(c.id) })))
+      .sort((a, b) => a.nom.localeCompare(b.nom));
+  }
+  const envoisDe = (x, g) => x.envois.filter(e => e.etat !== "retire" && (g.type === "client" ? e.client_id === g.id : e.intervenante_id === g.id));
+  // Où en est ce modèle pour cette personne : dernier envoi (signé, en attente, refusé) ou rien
+  const etatModele = (x, g, m) => envoisDe(x, g).filter(e => e.modele_id === m.id).sort((a, b) => (b.numero || 1) - (a.numero || 1) || new Date(b.envoye_le) - new Date(a.envoye_le))[0] || null;
+  const aProposer = (m, g, dernier) => !dernier || dernier.etat === "refuse" ? (m.quand === "arrivee" || (m.condition === "ae_a_creer" && g.p && g.p.ae_a_creer)) : false;
+
+  async function pilote() {
+    styles();
+    const x = await chargerDocs();
+    const { modeles, envois, P, C, M } = x;
     const qui = e => e.intervenante_id ? { nom: nomP(P[e.intervenante_id]), type: P[e.intervenante_id] && P[e.intervenante_id].cheffe_reseau ? "Chef" : "Presta" } : { nom: (C[e.client_id] || {}).nom || "Client", type: "Client" };
     const etatTag = e => e.etat === "fait" ? `<span class="dz-tag ok">${e.action === "signer" ? "Signé" : e.action === "accepter" ? "Accepté" : "Lu"} le ${dateFr(e.fait_le)}</span>`
       : e.etat === "refuse" ? `<span class="dz-tag non" title="${E(e.motif || "")}">Refusé${e.motif ? " : " + E(e.motif.slice(0, 40)) : ""}</span>`
@@ -263,48 +284,77 @@
     const pdfTag = e => e.pdf_etat === "fait" && e.pdf_chemin ? `<button class="btn" data-pdf="${e.id}">${IC("doc")} PDF</button>` : e.pdf_etat === "erreur" ? `<span class="dz-tag non" title="${E(e.pdf_erreur || "")}">PDF en erreur</span>` : e.pdf_etat ? `<span class="dz-tag att">PDF en préparation</span>` : "";
     const filtres = { attente: ["À signer", e => e.etat === "envoye" || e.etat === "vu"], fait: ["Signés", e => e.etat === "fait"], refuse: ["Refusés", e => e.etat === "refuse"], tous: ["Tous", e => e.etat !== "retire"] };
     const nbAtt = envois.filter(filtres.attente[1]).length;
-    const el = contenu(`<h1>Documents</h1>
-      <p class="muted small" style="margin:6px 0 12px">Ta bibliothèque de modèles (contrats, mandats, règlements…) et ce que chaque presta, chef ou client doit lire ou signer. Une fois signé, le PDF part tout seul dans son dossier Drive.</p>
-      <div class="sous-menu" style="margin-bottom:12px"><button class="chip" data-vue="suivi" aria-pressed="${vuePilote === "suivi"}">Suivi des envois${nbAtt ? " (" + nbAtt + ")" : ""}</button><button class="chip" data-vue="biblio" aria-pressed="${vuePilote === "biblio"}">Bibliothèque (${modeles.filter(m => m.actif).length})</button></div>
+    const el = contenu(`<div class="dz-boutons" style="justify-content:space-between;align-items:center"><h1 style="margin:0">Documents</h1><button class="btn primary" data-a-une-personne>${IC("personne")} Envoyer à une personne</button></div>
+      <p class="muted small" style="margin:6px 0 12px">Choisis une personne : le pilote te dit quels documents lui envoyer selon son profil et ce qu'elle a déjà signé. Une fois signé, le PDF part tout seul dans son dossier Drive et ne se modifie plus.</p>
+      <div class="sous-menu" style="margin-bottom:12px"><button class="chip" data-vue="suivi" aria-pressed="${vuePilote === "suivi"}">Suivi${nbAtt ? " (" + nbAtt + " à signer)" : ""}</button><button class="chip" data-vue="biblio" aria-pressed="${vuePilote === "biblio"}">Bibliothèque (${modeles.filter(m => m.actif).length})</button></div>
       <div id="dz-zone"></div>`);
     const zone = el.querySelector("#dz-zone");
+    const ligneEnvoi = (e, avecNom) => { const w = qui(e), apres = envois.find(v => v.remplace === e.id && v.etat !== "retire");
+      return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span></span>
+        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
     const dessinerSuivi = () => {
       const l = envois.filter(filtres[filtreSuivi][1]);
-      zone.innerHTML = `<div class="sous-menu" style="margin-bottom:10px">${Object.entries(filtres).map(([k, [t, f]]) => `<button class="chip" data-filtre="${k}" aria-pressed="${k === filtreSuivi}">${t} (${envois.filter(f).length})</button>`).join("")}</div>
-        ${l.length ? `<div class="dz-liste">${l.map(e => { const w = qui(e), apres = envois.find(v => v.remplace === e.id && v.etat !== "retire"); return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${E(w.type)} : ${E(w.nom)} · envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span></span>
-          <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; }).join("")}</div>`
-          : `<div class="card"><p class="muted">Rien ici. Pour envoyer un document : Bibliothèque › Mettre à disposition.</p></div>`}`;
+      let corps = "";
+      if (!l.length) corps = `<div class="card"><p class="muted">Rien ici. Pour envoyer : « Envoyer à une personne », ou coche des modèles dans la Bibliothèque.</p></div>`;
+      else if (rangSuivi === "document") corps = `<div class="dz-liste">${l.map(e => ligneEnvoi(e, true)).join("")}</div>`;
+      else {   // par personne : une carte repliable par personne, ceux qui ont du retard en premier
+        const groupes = {};
+        l.forEach(e => { const k = e.intervenante_id ? "i:" + e.intervenante_id : "c:" + e.client_id; (groupes[k] = groupes[k] || []).push(e); });
+        const cartes = Object.entries(groupes).map(([k, liste]) => { const w = qui(liste[0]), tous = envois.filter(e => e.etat !== "retire" && (k[0] === "i" ? e.intervenante_id === k.slice(2) : e.client_id === k.slice(2)));
+          const nbF = tous.filter(e => e.etat === "fait").length, nbA = tous.filter(e => e.etat === "envoye" || e.etat === "vu").length, nbR = tous.filter(e => e.etat === "refuse").length;
+          return { k, w, nbA, html: `<details class="card" style="padding:10px 12px" ${Object.keys(groupes).length <= 3 ? "open" : ""}><summary style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${E(w.nom)}</b><span class="dz-tag">${E(w.type)}</span>
+              <span class="dz-tag ok">${nbF} signé${nbF > 1 ? "s" : ""}</span>${nbA ? `<span class="dz-tag att">${nbA} en attente</span>` : ""}${nbR ? `<span class="dz-tag non">${nbR} refusé${nbR > 1 ? "s" : ""}</span>` : ""}
+              <button class="btn flat" data-completer="${k}" style="margin-left:auto">Que lui envoyer ?</button></summary>
+              <div class="dz-liste" style="margin-top:8px">${liste.map(e => ligneEnvoi(e, false)).join("")}</div></details>` }; })
+          .sort((a, b) => b.nbA - a.nbA || a.w.nom.localeCompare(b.w.nom));
+        corps = `<div class="dz-liste">${cartes.map(c => c.html).join("")}</div>`;
+      }
+      zone.innerHTML = `<div class="dz-boutons" style="margin-bottom:10px;justify-content:space-between"><div class="sous-menu">${Object.entries(filtres).map(([k, [t, f]]) => `<button class="chip" data-filtre="${k}" aria-pressed="${k === filtreSuivi}">${t} (${envois.filter(f).length})</button>`).join("")}</div>
+        <div class="sous-menu"><button class="chip" data-rang="personne" aria-pressed="${rangSuivi === "personne"}">Par personne</button><button class="chip" data-rang="document" aria-pressed="${rangSuivi === "document"}">Par document</button></div></div>${corps}`;
     };
     const dessinerBiblio = () => {
+      const visibles = modeles.filter(m => m.actif && (pourBiblio === "tous" || m.pour.includes(pourBiblio)));
       const ligne = m => { const n = envois.filter(e => e.modele_id === m.id && e.etat !== "retire"), s = n.filter(e => e.etat === "fait").length;
-        return `<div class="dz-ligne" style="${m.actif ? "" : "opacity:.6"}"><span><b>${E(m.titre)}</b><span class="dz-m">${CATEGORIES[m.categorie] || ""} · ${ACTIONS[m.action]} · pour ${m.pour.map(p => POUR[p]).join(", ")} · version ${m.version}${m.fichier ? " · fichier joint" : ""}${n.length ? " · " + n.length + " envoyé" + (n.length > 1 ? "s" : "") + ", " + s + " fait" + (s > 1 ? "s" : "") : ""}</span></span>
-          <span class="dz-boutons">${m.actif ? `<button class="btn primary" data-envoyer="${m.id}">Mettre à disposition</button>` : ""}<button class="btn" data-modifier="${m.id}">${IC("stylo")} Modifier</button><button class="btn flat" data-archiver="${m.id}">${m.actif ? "Archiver" : "Réactiver"}</button></span></div>`; };
-      zone.innerHTML = `<div class="dz-boutons" style="margin-bottom:10px"><button class="btn" data-nouveau="texte">${IC("plus")} Nouveau modèle à remplir</button><button class="btn" data-nouveau="fichier">${IC("trombone")} Nouveau modèle à partir d'un fichier (PDF)</button></div>
-        <div class="dz-liste">${modeles.filter(m => m.actif).map(ligne).join("") || `<div class="card"><p class="muted">Aucun modèle.</p></div>`}</div>
-        ${modeles.some(m => !m.actif) ? `<details style="margin-top:14px"><summary class="muted">Modèles archivés (${modeles.filter(m => !m.actif).length})</summary><div class="dz-liste" style="margin-top:8px">${modeles.filter(m => !m.actif).map(ligne).join("")}</div></details>` : ""}
+        return `<div class="dz-ligne" style="${m.actif ? "" : "opacity:.6"}"><label style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:220px;cursor:pointer">${m.actif ? `<input type="checkbox" data-sel="${m.id}" ${choisis.has(m.id) ? "checked" : ""} style="margin-top:4px">` : ""}<span><b>${E(m.titre)}</b><span class="dz-m">${CATEGORIES[m.categorie] || ""} · ${ACTIONS[m.action]} · pour ${m.pour.map(p => POUR[p]).join(", ")}${m.condition ? " · " + CONDITIONS[m.condition] : ""}${m.fichier ? " · fichier joint" : ""}${n.length ? " · " + n.length + " envoyé" + (n.length > 1 ? "s" : "") + ", " + s + " fait" + (s > 1 ? "s" : "") : ""}</span></span></label>
+          <span class="dz-boutons">${m.actif ? `<button class="btn" data-envoyer="${m.id}">Mettre à disposition</button>` : ""}<button class="btn flat" data-modifier="${m.id}">${IC("stylo")} Modifier</button><button class="btn flat" data-archiver="${m.id}">${m.actif ? "Archiver" : "Réactiver"}</button></span></div>`; };
+      const sections = Object.keys(QUAND).map(k => { const l = visibles.filter(m => (m.quand || "cas") === k);
+        return l.length ? `<h3 style="margin:16px 0 4px">${QUAND[k]} <span class="muted small" style="font-weight:normal">· ${QUAND_AIDE[k]}</span></h3><div class="dz-liste">${l.map(ligne).join("")}</div>` : ""; }).join("");
+      const archives = modeles.filter(m => !m.actif);
+      zone.innerHTML = `<div class="dz-boutons" style="margin-bottom:6px;justify-content:space-between"><div class="sous-menu">${[["presta", "Presta"], ["chef", "Chefs de réseau"], ["client", "Clients"], ["tous", "Tous"]].map(([k, t]) => `<button class="chip" data-pour-biblio="${k}" aria-pressed="${k === pourBiblio}">${t} (${modeles.filter(m => m.actif && (k === "tous" || m.pour.includes(k))).length})</button>`).join("")}</div>
+          <div class="dz-boutons"><button class="btn flat" data-nouveau="texte">${IC("plus")} Nouveau modèle</button><button class="btn flat" data-nouveau="fichier">${IC("trombone")} À partir d'un PDF</button></div></div>
+        <div id="dz-barre" class="dz-bandeau" style="position:sticky;top:8px;z-index:2;${choisis.size ? "" : "display:none"}"><span><b>${choisis.size} modèle${choisis.size > 1 ? "s" : ""} coché${choisis.size > 1 ? "s" : ""}</b></span><span class="dz-boutons"><button class="btn flat" data-decocher>Tout décocher</button><button class="btn primary" data-envoyer-choix>Mettre à disposition ensemble</button></span></div>
+        ${sections || `<div class="card"><p class="muted">Aucun modèle ici.</p></div>`}
+        ${archives.length ? `<details style="margin-top:14px"><summary class="muted">Modèles archivés (${archives.length})</summary><div class="dz-liste" style="margin-top:8px">${archives.map(ligne).join("")}</div></details>` : ""}
         <p class="muted small" style="margin-top:14px">Dans le texte : <b># Titre</b>, <b>## Article</b>, <b>- puce</b>, <b>**gras**</b>, <b>| case | case |</b> pour un tableau, <b>---</b> pour un saut de page, et <b>{{nom_de_case}}</b> pour une case à remplir. <b>{{date_signature}}</b> se remplit seul.</p>`;
     };
     const redessiner = () => { el.querySelectorAll("[data-vue]").forEach(b => b.setAttribute("aria-pressed", b.dataset.vue === vuePilote)); vuePilote === "suivi" ? dessinerSuivi() : dessinerBiblio(); };
     redessiner();
+    el.onchange = e => { const c = e.target.closest("[data-sel]"); if (!c) return; c.checked ? choisis.add(c.dataset.sel) : choisis.delete(c.dataset.sel); dessinerBiblio(); };
     el.onclick = async e => {
       const b = e.target.closest("button"); if (!b) return;
       try {
+        if (b.hasAttribute("data-a-une-personne")) return envoyerAUnePersonne(x, null);
+        if (b.dataset.completer) { e.preventDefault(); return envoyerAUnePersonne(x, b.dataset.completer); }
         if (b.dataset.vue) { vuePilote = b.dataset.vue; return redessiner(); }
         if (b.dataset.filtre) { filtreSuivi = b.dataset.filtre; return dessinerSuivi(); }
-        if (b.dataset.pdf) { const x = envois.find(v => v.id === b.dataset.pdf); return window.open(await lienSigne(x.pdf_seau, x.pdf_chemin), "_blank", "noopener"); }
+        if (b.dataset.rang) { rangSuivi = b.dataset.rang; return dessinerSuivi(); }
+        if (b.dataset.pourBiblio) { pourBiblio = b.dataset.pourBiblio; return dessinerBiblio(); }
+        if (b.hasAttribute("data-decocher")) { choisis.clear(); return dessinerBiblio(); }
+        if (b.hasAttribute("data-envoyer-choix")) return mettreADisposition([...choisis].map(id => M[id]).filter(Boolean), x);
+        if (b.dataset.pdf) { const v = envois.find(z => z.id === b.dataset.pdf); return window.open(await lienSigne(v.pdf_seau, v.pdf_chemin), "_blank", "noopener"); }
         if (b.dataset.voir) return voirEnvoi(b.dataset.voir);
         if (b.dataset.version) return nouvelleVersion(b.dataset.version);
         if (b.dataset.retirer) { if (!confirm("Retirer ce document ? La personne ne le verra plus.")) return; await q(sb.from("doc_envois").update({ etat: "retire" }).eq("id", b.dataset.retirer)); toast("Retiré"); return afficher("documents"); }
         if (b.dataset.renvoyer) {
-          const x = envois.find(v => v.id === b.dataset.renvoyer);
-          if (x.etat === "refuse") { if (!confirm("Le remettre à signer ? (le texte reste le même)")) return; await q(sb.from("doc_envois").update({ etat: "envoye", fait_le: null, motif: null, vu_le: null }).eq("id", x.id)); }
-          else await q(sb.from("doc_envois").update({ pdf_etat: "a_faire", pdf_erreur: null }).eq("id", x.id));
+          const v = envois.find(z => z.id === b.dataset.renvoyer);
+          if (v.etat === "refuse") { if (!confirm("Le remettre à signer ? (le texte reste le même)")) return; await q(sb.from("doc_envois").update({ etat: "envoye", fait_le: null, motif: null, vu_le: null }).eq("id", v.id)); }
+          else await q(sb.from("doc_envois").update({ pdf_etat: "a_faire", pdf_erreur: null }).eq("id", v.id));
           toast("C'est reparti"); return afficher("documents");
         }
-        if (b.dataset.archiver) { const m = M[b.dataset.archiver]; await q(sb.from("doc_modeles").update({ actif: !m.actif }).eq("id", m.id)); return afficher("documents"); }
-        if (b.dataset.nouveau) return editerModele(null, b.dataset.nouveau, pieces);
-        if (b.dataset.modifier) return editerModele(M[b.dataset.modifier], null, pieces);
-        if (b.dataset.envoyer) return mettreADisposition(M[b.dataset.envoyer], { profils, clientsL, avecCompte });
+        if (b.dataset.archiver) { const m = M[b.dataset.archiver]; choisis.delete(m.id); await q(sb.from("doc_modeles").update({ actif: !m.actif }).eq("id", m.id)); return afficher("documents"); }
+        if (b.dataset.nouveau) return editerModele(null, b.dataset.nouveau, x.pieces);
+        if (b.dataset.modifier) return editerModele(M[b.dataset.modifier], null, x.pieces);
+        if (b.dataset.envoyer) return mettreADisposition([M[b.dataset.envoyer]], x);
       } catch (err) { toast("Ça n'a pas marché : " + (err.message || err)); }
     };
   }
@@ -368,6 +418,8 @@
         <label>Titre<input type="text" id="m-titre" value="${E(m.titre)}"></label>
         <label>Sorte<select id="m-cat">${Object.entries(CATEGORIES).map(([k, t]) => `<option value="${k}" ${m.categorie === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Ce qu'on demande<select id="m-action">${[["signer", "Signer"], ["accepter", "Accepter (case à cocher)"], ["lire", "Lire seulement"]].map(([k, t]) => `<option value="${k}" ${m.action === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label>Quand l'envoyer<select id="m-quand">${Object.entries(QUAND).map(([k, t]) => `<option value="${k}" ${(m.quand || "cas") === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label>Seulement…<select id="m-condition"><option value="">pour tout le monde</option>${Object.entries(CONDITIONS).map(([k, t]) => `<option value="${k}" ${m.condition === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Papier de l'appli rempli une fois signé<select id="m-piece"><option value="">—</option>${pieces.map(p => `<option value="${p.id}" ${m.piece_id === p.id ? "selected" : ""}>${E(p.libelle)}</option>`).join("")}</select></label>
       </div>
       <div><b style="font-size:14px">Pour qui</b> ${Object.entries(POUR).map(([k, t]) => `<label style="margin-left:10px"><input type="checkbox" data-pour="${k}" ${m.pour.includes(k) ? "checked" : ""}> ${t}</label>`).join("")}</div>
@@ -402,7 +454,8 @@
         try {
           const ch = lireTable(), pour = [...f.querySelectorAll("[data-pour]:checked")].map(x => x.dataset.pour);
           const d = { titre: f.querySelector("#m-titre").value.trim(), categorie: f.querySelector("#m-cat").value, action: f.querySelector("#m-action").value, pour, champs: ch,
-            piece_id: f.querySelector("#m-piece").value || null, contenu: ta.value.trim() || null };
+            piece_id: f.querySelector("#m-piece").value || null, contenu: ta.value.trim() || null,
+            quand: f.querySelector("#m-quand").value, condition: f.querySelector("#m-condition").value || null };
           if (!d.titre) return toast("Donne un titre au modèle");
           if (!pour.length) return toast("Coche au moins « pour qui »");
           const doubles = ch.map(c => c.cle).filter((k, i, a) => a.indexOf(k) !== i); if (doubles.length) return toast("Nom de case en double : " + doubles[0]);
@@ -431,59 +484,129 @@
     if (src === "activites") { const a = (p.activites || []).map(x => String(x).toLowerCase()); const ch = (c.choix || []).filter(x => a.some(y => x.toLowerCase().includes(y.slice(0, 5)) || (/entretien|ménage|menage/.test(x.toLowerCase()) && /m[ée]nage/.test(y)) || (/jardin/.test(x.toLowerCase()) && /jardin/.test(y)) || (/bricol/.test(x.toLowerCase()) && /bricol/.test(y)))); return c.type === "cases" ? ch : ch.join(", "); }
     return p[src] || undefined;
   }
-  function mettreADisposition(m, { profils, clientsL, avecCompte }) {
-    const types = m.pour.slice();
+  // Une ligne doc_envois pour un modèle et une personne (copie figée ; cases de la personne préremplies depuis sa fiche)
+  async function envoyerUn(m, g, vo, echeance) {
+    const valeurs = Object.assign({}, vo);
+    (m.champs || []).filter(c => c.qui !== "oikos").forEach(c => { const v = c.source ? sourceDe(g.p, c.source, c) : undefined; if (!vide(v)) valeurs[c.cle] = v; else if (c.defaut) valeurs[c.cle] = c.defaut; });
+    const ligne = { modele_id: m.id, version: m.version, titre: m.titre, categorie: m.categorie, action: m.action, contenu: m.contenu, champs: m.champs, valeurs, echeance, piece_id: m.piece_id };
+    if (g.type === "client") {
+      ligne.client_id = g.id;
+      if (m.fichier) {   // le client ne lit que son propre espace : copie du fichier
+        const blob = await sb.storage.from("modeles").download(m.fichier); if (blob.error) throw blob.error;
+        const chemin = `${g.id}/documents/${crypto.randomUUID()}.pdf`;
+        const up = await sb.storage.from("espace-client").upload(chemin, blob.data, { contentType: "application/pdf" }); if (up.error) throw up.error;
+        await q(sb.from("client_documents").insert({ client_id: g.id, categorie: "autre", titre: m.titre, chemin, visible: true }));
+        ligne.fichier = chemin; ligne.fichier_seau = "espace-client";
+      }
+    } else { ligne.intervenante_id = g.id; if (m.fichier) { ligne.fichier = m.fichier; ligne.fichier_seau = "modeles"; } }
+    await q(sb.from("doc_envois").insert(ligne));
+  }
+  // Les cases d'OIKOS de plusieurs modèles : un bloc par modèle (même nom de case = valeur reprise d'un bloc à l'autre)
+  const blocsOikos = modeles => modeles.filter(m => (m.champs || []).some(c => c.qui === "oikos")).map(m => { const v = {}; (m.champs || []).forEach(c => { if (c.qui === "oikos" && c.defaut) v[c.cle] = c.defaut; });
+    return `<section class="card" data-oikos="${m.id}"><b>${E(m.titre)}</b> <span class="muted small">· à remplir par OIKOS</span><div class="dz-champs" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(m.champs, v, "oikos")}</div></section>`; }).join("");
+  async function lireOikos(f, modeles) {
+    const par = {};
+    for (const m of modeles) {
+      const z = f.querySelector(`[data-oikos="${m.id}"]`), vo = z ? lireChamps(z) : {};
+      const mq = manque(m.champs, vo, "oikos"); if (mq) { toast("« " + m.titre + " » : case à remplir : " + mq.libelle); return null; }
+      par[m.id] = vo;
+      const oikos = (m.champs || []).filter(c => c.qui === "oikos");   // valeurs gardées comme défaut pour la prochaine fois
+      if (oikos.some(c => typeof vo[c.cle] === "string" && (vo[c.cle] || "") !== (c.defaut || "")))
+        await q(sb.from("doc_modeles").update({ champs: m.champs.map(c => c.qui === "oikos" && typeof vo[c.cle] === "string" ? Object.assign({}, c, { defaut: vo[c.cle] || undefined }) : c) }).eq("id", m.id)).catch(() => {});
+    }
+    return par;
+  }
+  // Plusieurs modèles cochés → plusieurs personnes ; chaque personne ne reçoit que les modèles prévus pour son profil
+  function mettreADisposition(modeles, x) {
+    if (!modeles.length) return toast("Coche au moins un modèle");
+    const types = ["presta", "chef", "client"].filter(t => modeles.some(m => m.pour.includes(t)));
     let type = types[0];
-    const oikos = (m.champs || []).filter(c => c.qui === "oikos"), vals = {}; oikos.forEach(c => { if (c.defaut) vals[c.cle] = c.defaut; });
-    const gens = t => t === "client" ? clientsL.filter(c => c.etat !== "termine").map(c => ({ id: c.id, nom: c.nom, info: avecCompte.has(c.id) ? "" : "sans espace client", ok: avecCompte.has(c.id) }))
-      : profils.filter(p => p.actif && (t === "chef" ? p.cheffe_reseau : true)).map(p => ({ id: p.id, nom: nomP(p), info: p.cheffe_reseau ? "chef" : (p.statut === "salarie" ? "salarié" : ""), ok: true })).sort((a, b) => a.nom.localeCompare(b.nom));
+    const pour = t => modeles.filter(m => m.pour.includes(t));
     fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Mettre à disposition</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
-      <p class="muted small" style="margin:0"><b>${E(m.titre)}</b> · ${ACTIONS[m.action]} · version ${m.version}. La personne le voit tout de suite dans son appli ; le texte envoyé ne changera plus.</p>
-      ${types.length > 1 ? `<div class="sous-menu">${types.map(t => `<button class="chip" data-type="${t}" aria-pressed="${t === type}">${POUR[t]}</button>`).join("")}</div>` : ""}
+      <p class="muted small" style="margin:0">${modeles.length === 1 ? `<b>${E(modeles[0].titre)}</b> · ${ACTIONS[modeles[0].action]}` : `<b>${modeles.length} documents</b> : ${modeles.map(m => E(m.titre)).join(", ")}`}. La personne les voit tout de suite dans son appli ; le texte envoyé ne changera plus.</p>
+      ${types.length > 1 ? `<div class="sous-menu">${types.map(t => `<button class="chip" data-type="${t}" aria-pressed="${t === type}">${POUR[t]} (${pour(t).length} doc.)</button>`).join("")}</div>` : ""}
+      <p class="small" id="md-quoi" style="margin:0"></p>
       <input type="search" id="md-cherche" placeholder="Chercher un nom…" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid var(--line,#ccc)">
-      <div id="md-gens" style="max-height:34vh;overflow:auto;display:grid;gap:4px"></div>
-      ${oikos.length ? `<section class="card"><b>À remplir par OIKOS</b><div class="dz-champs" id="md-oikos" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(m.champs, vals, "oikos")}</div></section>` : ""}
+      <div id="md-gens" style="max-height:30vh;overflow:auto;display:grid;gap:4px"></div>
+      <div id="md-oikos" style="display:grid;gap:10px"></div>
       <label class="dz-champs" style="max-width:260px"><span>À faire avant le (facultatif)</span><input type="date" id="md-echeance"></label>
       <div class="dz-boutons" style="justify-content:flex-end"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="md-ok">Mettre à disposition</button></div>`, (f, fermer) => {
+      f.style.maxWidth = "900px";
       const zg = f.querySelector("#md-gens"), ch = f.querySelector("#md-cherche"), coches = new Set();
-      const dessiner = () => { const l = gens(type).filter(g => !ch.value || g.nom.toLowerCase().includes(ch.value.toLowerCase()));
-        zg.innerHTML = l.map(g => `<label style="display:flex;gap:8px;align-items:center;${g.ok ? "" : "opacity:.55"}"><input type="checkbox" value="${g.id}" ${coches.has(g.id) ? "checked" : ""} ${g.ok ? "" : "disabled"}> ${E(g.nom)} ${g.info ? `<span class="dz-tag">${E(g.info)}</span>` : ""}</label>`).join("") || `<p class="muted small">Personne.</p>`;
-        f.querySelector("#md-ok").textContent = "Mettre à disposition" + (coches.size ? " (" + coches.size + ")" : ""); };
-      dessiner();
+      const dessiner = () => {
+        const l = lesGens(x).filter(g => g.type === type && (!ch.value || g.nom.toLowerCase().includes(ch.value.toLowerCase())));
+        zg.innerHTML = l.map(g => { const deja = pour(type).filter(m => { const d = etatModele(x, g, m); return d && d.etat !== "refuse"; });
+          return `<label style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;${g.ok ? "" : "opacity:.55"}"><input type="checkbox" value="${g.id}" ${coches.has(g.id) ? "checked" : ""} ${g.ok ? "" : "disabled"}> ${E(g.nom)} ${g.ok ? "" : `<span class="dz-tag">sans espace client</span>`}${deja.length ? `<span class="dz-tag att" title="${E(deja.map(m => m.titre).join(", "))}">${deja.length} déjà envoyé${deja.length > 1 ? "s" : ""} ou signé${deja.length > 1 ? "s" : ""}</span>` : ""}</label>`; }).join("") || `<p class="muted small">Personne.</p>`;
+        f.querySelector("#md-quoi").innerHTML = modeles.length > 1 ? `Pour un ${POUR[type].toLowerCase()} : ${pour(type).map(m => "<b>" + E(m.titre) + "</b>").join(", ")}.` : "";
+        f.querySelector("#md-ok").textContent = "Mettre à disposition" + (coches.size ? " (" + coches.size + " personne" + (coches.size > 1 ? "s" : "") + ")" : "");
+      };
+      const dessinerOikos = () => { f.querySelector("#md-oikos").innerHTML = blocsOikos(pour(type)); };
+      dessiner(); dessinerOikos();
       ch.oninput = dessiner;
       zg.onchange = e => { const c = e.target; if (c.checked) coches.add(c.value); else coches.delete(c.value); dessiner(); };
-      f.onclick = e => { const b = e.target.closest("[data-type]"); if (!b) return; type = b.dataset.type; coches.clear(); f.querySelectorAll("[data-type]").forEach(x => x.setAttribute("aria-pressed", x === b)); dessiner(); };
+      f.addEventListener("click", e => { const b = e.target.closest("[data-type]"); if (!b) return; type = b.dataset.type; coches.clear(); f.querySelectorAll("[data-type]").forEach(y => y.setAttribute("aria-pressed", y === b)); dessiner(); dessinerOikos(); });
       f.querySelector("#md-ok").onclick = async ev => {
         const bouton = ev.currentTarget;
         try {
           if (!coches.size) return toast("Coche au moins une personne");
-          const zo = f.querySelector("#md-oikos"), vo = zo ? lireChamps(zo) : {};
-          const mq = manque(m.champs, vo, "oikos"); if (mq) return toast("Case à remplir : " + mq.libelle);
-          // les valeurs par défaut gardées dans le modèle pour la prochaine fois
-          if (oikos.length && oikos.some(c => (vo[c.cle] || "") !== (c.defaut || ""))) await q(sb.from("doc_modeles").update({ champs: m.champs.map(c => c.qui === "oikos" && typeof vo[c.cle] === "string" ? Object.assign({}, c, { defaut: vo[c.cle] || undefined }) : c) }).eq("id", m.id)).catch(() => {});
+          const liste = pour(type), vo = await lireOikos(f, liste); if (!vo) return;
           bouton.disabled = true;
-          const echeance = f.querySelector("#md-echeance").value || null;
+          const echeance = f.querySelector("#md-echeance").value || null, gens = lesGens(x);
           let n = 0;
-          for (const id of coches) {
-            const p = type === "client" ? clientsL.find(c => c.id === id) : profils.find(x => x.id === id);
-            const valeurs = Object.assign({}, vo);
-            (m.champs || []).filter(c => c.qui !== "oikos").forEach(c => { const v = c.source ? sourceDe(p, c.source, c) : undefined; if (!vide(v)) valeurs[c.cle] = v; else if (c.defaut) valeurs[c.cle] = c.defaut; });
-            const ligne = { modele_id: m.id, version: m.version, titre: m.titre, categorie: m.categorie, action: m.action, contenu: m.contenu, champs: m.champs, valeurs, echeance, piece_id: m.piece_id };
-            if (type === "client") {
-              ligne.client_id = id;
-              if (m.fichier) {   // le client ne lit que son propre espace : copie du fichier
-                const blob = await sb.storage.from("modeles").download(m.fichier); if (blob.error) throw blob.error;
-                const chemin = `${id}/documents/${crypto.randomUUID()}.pdf`;
-                const up = await sb.storage.from("espace-client").upload(chemin, blob.data, { contentType: "application/pdf" }); if (up.error) throw up.error;
-                await q(sb.from("client_documents").insert({ client_id: id, categorie: "autre", titre: m.titre, chemin, visible: true }));
-                ligne.fichier = chemin; ligne.fichier_seau = "espace-client";
-              }
-            } else { ligne.intervenante_id = id; if (m.fichier) { ligne.fichier = m.fichier; ligne.fichier_seau = "modeles"; } }
-            await q(sb.from("doc_envois").insert(ligne)); n++;
-          }
-          toast(n === 1 ? "Mis à disposition" : n + " documents mis à disposition"); fermer(); vuePilote = "suivi"; filtreSuivi = "attente"; afficher("documents");
+          for (const id of coches) { const g = gens.find(y => y.id === id && y.type === type); if (!g) continue; for (const m of liste) { await envoyerUn(m, g, vo[m.id] || {}, echeance); n++; } }
+          toast(n === 1 ? "Mis à disposition" : n + " documents mis à disposition"); fermer(); choisis.clear(); vuePilote = "suivi"; filtreSuivi = "attente"; afficher("documents");
         } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
       };
+    });
+  }
+
+  /* ---------- « Envoyer à une personne » : on choisit la personne, le pilote propose selon son profil ---------- */
+  function envoyerAUnePersonne(x, cleDepart) {
+    fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Envoyer à une personne</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div><div id="ep-corps"></div>`, (f, fermer) => {
+      f.style.maxWidth = "900px";
+      const corps = f.querySelector("#ep-corps");
+      const choisir = () => {
+        corps.innerHTML = `<p class="muted small" style="margin:0 0 8px">Presta, chef ou client : le pilote regarde son profil et ce qu'il a déjà signé.</p>
+          <input type="search" id="ep-cherche" placeholder="Chercher un nom…" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid var(--line,#ccc)">
+          <div id="ep-liste" style="max-height:52vh;overflow:auto;display:grid;gap:4px;margin-top:8px"></div>`;
+        const ch = corps.querySelector("#ep-cherche"), zl = corps.querySelector("#ep-liste");
+        const dessiner = () => { const l = lesGens(x).filter(g => !ch.value || g.nom.toLowerCase().includes(ch.value.toLowerCase()));
+          zl.innerHTML = l.map(g => { const manquent = x.modeles.filter(m => m.actif && m.pour.includes(g.type) && aProposer(m, g, etatModele(x, g, m))).length;
+            return `<button class="dz-ligne" type="button" data-qui="${g.cle}" ${g.ok ? "" : "disabled"} style="text-align:left;cursor:pointer;${g.ok ? "" : "opacity:.55"}"><span><b>${E(g.nom)}</b><span class="dz-m">${POUR[g.type]}${g.type !== "client" && g.p.ae_a_creer ? " · OIKOS crée son auto-entreprise" : ""}${g.ok ? "" : " · sans espace client"}</span></span>${manquent ? `<span class="dz-tag att">${manquent} à envoyer</span>` : `<span class="dz-tag ok">${IC("ok")} à jour</span>`}</button>`; }).join(""); };
+        dessiner(); ch.oninput = dessiner; ch.focus();
+        zl.onclick = e => { const b = e.target.closest("[data-qui]"); if (b) proposer(lesGens(x).find(g => g.cle === b.dataset.qui)); };
+      };
+      const proposer = g => {
+        if (!g) return choisir();
+        const liste = x.modeles.filter(m => m.actif && m.pour.includes(g.type));
+        const etat = m => etatModele(x, g, m);
+        const libEtat = d => !d ? "" : d.etat === "fait" ? `<span class="dz-tag ok">signé le ${dateFr(d.fait_le)}</span>` : d.etat === "refuse" ? `<span class="dz-tag non">refusé le ${dateFr(d.fait_le)}</span>` : `<span class="dz-tag att">envoyé le ${dateFr(d.envoye_le)}, en attente</span>`;
+        const ligne = m => { const d = etat(m), bloque = d && d.etat !== "refuse", coche = aProposer(m, g, d);
+          return `<label class="dz-ligne" style="cursor:${bloque ? "default" : "pointer"};${bloque ? "opacity:.7" : ""}"><span style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-m="${m.id}" ${coche ? "checked" : ""} ${bloque ? "disabled" : ""} style="margin-top:4px"><span><b>${E(m.titre)}</b><span class="dz-m">${ACTIONS[m.action]}${m.condition === "ae_a_creer" ? " · " + (g.p && g.p.ae_a_creer ? "proposé : OIKOS crée son auto-entreprise" : CONDITIONS[m.condition]) : ""}${d && d.etat === "fait" ? " · pour corriger : Suivi › Nouvelle version" : ""}</span></span></span>${libEtat(d)}</label>`; };
+        corps.innerHTML = `<div class="dz-boutons" style="justify-content:space-between;align-items:center"><span><b style="font-size:17px">${E(g.nom)}</b> <span class="dz-tag">${POUR[g.type]}</span>${g.type !== "client" && g.p.ae_a_creer ? ` <span class="dz-tag">OIKOS crée son auto-entreprise</span>` : ""}</span><button class="btn flat" data-autre>Changer de personne</button></div>
+          <p class="muted small" style="margin:6px 0 0">Cochés d'office : les documents d'arrivée qu'il n'a pas encore signés (et ceux de sa situation). Ce qui est déjà signé ou en attente ne repart pas.</p>
+          ${Object.keys(QUAND).map(k => { const l = liste.filter(m => (m.quand || "cas") === k); return l.length ? `<h3 style="margin:14px 0 4px">${QUAND[k]}</h3><div class="dz-liste">${l.map(ligne).join("")}</div>` : ""; }).join("") || `<p class="muted">Aucun modèle prévu pour ce profil.</p>`}
+          <div id="ep-oikos" style="display:grid;gap:10px;margin-top:12px"></div>
+          <label class="dz-champs" style="max-width:260px;margin-top:10px"><span>À faire avant le (facultatif)</span><input type="date" id="ep-echeance"></label>
+          <div class="dz-boutons" style="justify-content:flex-end;margin-top:10px"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="ep-ok"></button></div>`;
+        const coches = () => [...corps.querySelectorAll("[data-m]:checked")].map(c => x.M[c.dataset.m]).filter(Boolean);
+        const maj = () => { const l = coches(); corps.querySelector("#ep-oikos").innerHTML = blocsOikos(l); corps.querySelector("#ep-ok").textContent = l.length ? "Envoyer " + (l.length === 1 ? "ce document" : "ces " + l.length + " documents") : "Coche au moins un document"; corps.querySelector("#ep-ok").disabled = !l.length; };
+        maj();
+        corps.onchange = e => { if (e.target.closest("[data-m]")) maj(); };
+        corps.querySelector("[data-autre]").onclick = choisir;
+        corps.querySelector("#ep-ok").onclick = async ev => {
+          const bouton = ev.currentTarget;
+          try {
+            const l = coches(); if (!l.length) return;
+            const vo = await lireOikos(corps, l); if (!vo) return;
+            bouton.disabled = true;
+            const echeance = corps.querySelector("#ep-echeance").value || null;
+            for (const m of l) await envoyerUn(m, g, vo[m.id] || {}, echeance);
+            toast((l.length === 1 ? "Document envoyé à " : l.length + " documents envoyés à ") + g.nom); fermer(); vuePilote = "suivi"; filtreSuivi = "attente"; rangSuivi = "personne"; afficher("documents");
+          } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
+        };
+      };
+      cleDepart ? proposer(lesGens(x).find(g => g.cle === cleDepart)) : choisir();
     });
   }
 
