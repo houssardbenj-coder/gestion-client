@@ -35,7 +35,7 @@
 .dz-doc th{background:var(--accent-soft,#E7E8DA)}
 .dz-doc hr.dz-saut{border:0;border-top:2px dashed var(--line,#ccc);margin:18px 0}
 .dz-doc mark{background:var(--warn-soft,#F4E9CC);color:inherit;border-radius:4px;padding:0 3px}
-.dz-champs{display:grid;gap:10px}.dz-champs label{display:grid;gap:4px;font-size:14px}.dz-champs input[type=text],.dz-champs textarea,.dz-champs select{width:100%;box-sizing:border-box;font:inherit;padding:9px 10px;border-radius:10px;border:1px solid var(--line,#ccc);background:var(--bg,#fff);color:inherit}
+.dz-champs{display:grid;gap:10px;align-items:start}.dz-champs label{display:grid;gap:4px;font-size:14px;align-content:start}.dz-champs input[type=text],.dz-champs textarea,.dz-champs select{width:100%;box-sizing:border-box;font:inherit;padding:9px 10px;border-radius:10px;border:1px solid var(--line,#ccc);background:var(--bg,#fff);color:inherit}
 .dz-champs .dz-aide{font-size:12px;color:var(--muted,#666)}.dz-coches{display:grid;gap:6px}.dz-coches label{display:flex;gap:8px;align-items:flex-start}
 .dz-pad{position:relative;border:1.5px dashed var(--accent,#525A44);border-radius:12px;background:#fff;touch-action:none;height:170px}.dz-pad canvas{width:100%;height:100%;display:block;border-radius:12px;cursor:crosshair}
 .dz-pad span{position:absolute;left:12px;bottom:8px;font-size:12px;color:#8a8a80;pointer-events:none}
@@ -544,7 +544,15 @@
         ligne.fichier = chemin; ligne.fichier_seau = "espace-client";
       }
     } else { ligne.intervenante_id = g.id; if (m.fichier) { ligne.fichier = m.fichier; ligne.fichier_seau = "modeles"; } }
-    await q(sb.from("doc_envois").insert(ligne));
+    const r = await q(sb.from("doc_envois").insert(ligne).select("id"));
+    return r && r[0] ? r[0].id : null;
+  }
+  // Pour les autres pages du pilote (Équipe › Matériel) : envoyer un modèle par sa clé à un presta ou un chef.
+  // Rend l'id du document envoyé (pour le relier), ou null si le modèle n'existe pas ou est désactivé.
+  async function envoyerModele(cle, profil, valeursOikos, note) {
+    const m = (await q(sb.from("doc_modeles").select("*").eq("cle", cle).eq("actif", true).limit(1)))[0];
+    if (!m) return null;
+    return envoyerUn(m, { type: roleDe(profil), id: profil.id, p: profil }, valeursOikos || {}, null, note);
   }
   // Les cases d'OIKOS de plusieurs modèles : un bloc par modèle (même nom de case = valeur reprise d'un bloc à l'autre)
   const blocsOikos = modeles => modeles.filter(m => (m.champs || []).some(c => c.qui === "oikos")).map(m => { const v = {}; (m.champs || []).forEach(c => { if (c.qui === "oikos" && c.defaut) v[c.cle] = c.defaut; });
@@ -564,9 +572,9 @@
       const z = f.querySelector(`[data-oikos="${m.id}"]`), vo = z ? lireChamps(z) : {};
       const mq = manque(m.champs, vo, "oikos"); if (mq) { toast("« " + m.titre + " » : case à remplir : " + mq.libelle); return null; }
       par[m.id] = vo;
-      const oikos = (m.champs || []).filter(c => c.qui === "oikos");   // valeurs gardées comme défaut pour la prochaine fois
+      const oikos = (m.champs || []).filter(c => c.qui === "oikos" && c.garder !== false);   // valeurs gardées comme défaut pour la prochaine fois (sauf « garder: false » : client, liste remise…)
       if (oikos.some(c => typeof vo[c.cle] === "string" && (vo[c.cle] || "") !== (c.defaut || "")))
-        await q(sb.from("doc_modeles").update({ champs: m.champs.map(c => c.qui === "oikos" && typeof vo[c.cle] === "string" ? Object.assign({}, c, { defaut: vo[c.cle] || undefined }) : c) }).eq("id", m.id)).catch(() => {});
+        await q(sb.from("doc_modeles").update({ champs: m.champs.map(c => c.qui === "oikos" && c.garder !== false && typeof vo[c.cle] === "string" ? Object.assign({}, c, { defaut: vo[c.cle] || undefined }) : c) }).eq("id", m.id)).catch(() => {});
     }
     return par;
   }
@@ -665,5 +673,5 @@
     });
   }
 
-  window.DocsOikos = { pilote, presta, rappel, client, rendre, miseEnForme, remplacer };
+  window.DocsOikos = { pilote, presta, rappel, client, rendre, miseEnForme, remplacer, envoyerModele };
 })();
