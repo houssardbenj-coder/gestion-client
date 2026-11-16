@@ -1690,6 +1690,45 @@ document.addEventListener("click", async e => {
     await abonnerPush(); toast("Notifications activées ✓"); accueil();
   } catch (x) { toast(pushErreur(x)); }
 });
+/* Onglet Moi : où en sont les notifications de ce téléphone, et un essai de bout en bout */
+function carteNotif() {
+  const e = pushEtat(), ok = e === "granted" && !pushEchec;
+  const txt = { granted: pushEchec ? "Autorisées, mais ce téléphone n'est pas encore enregistré chez OIKOS : touche Activer." : "Activées sur ce téléphone. Touche Tester pour vérifier qu'elles arrivent.",
+    default: "Pas encore activées : tu ne sauras pas qu'une mission t'attend.", denied: "Bloquées sur ce téléphone : ouvre les réglages du téléphone › Notifications, autorise cette appli (ou Chrome), puis reviens ici.",
+    iphone: "Sur iPhone, elles ne marchent que dans l'appli installée sur l'écran d'accueil.", impossible: "Ce navigateur ne sait pas les afficher : ouvre l'appli avec Chrome." }[e];
+  return `<section class="card" style="margin-top:14px"><b><span class="ic">${ico(ok ? "cloche" : "clocheoff")}</span>Notifications</b>
+    <p class="${ok ? "muted " : ""}small" style="margin:4px 0 10px">${txt}</p><div class="stack">
+    ${e === "default" || (e === "granted" && pushEchec) ? `<button class="btn primary" data-activer-push><span class="ic">${ico("cloche")}</span>Activer les notifications</button>` : ""}
+    ${e === "iphone" ? `<button class="btn primary" data-guide-install><span class="ic">${ico("telecharger")}</span>Installer l'appli</button>` : ""}
+    ${e === "granted" ? `<button class="btn" id="tester-notif"><span class="ic">${ico("cloche")}</span>Tester sur ce téléphone</button>` : ""}</div></section>`;
+}
+/* 1) notification affichée tout de suite par le téléphone ; 2) téléphone réenregistré à neuf : le Pont photos lui envoie une vraie notification (5 min au plus) */
+async function testerNotif() {
+  try {
+    const r = await Promise.race([navigator.serviceWorker.ready, new Promise((_, non) => setTimeout(() => non(new Error("service worker absent")), 15000))]);
+    await r.showNotification("OIKOS : essai", { body: "Ton téléphone affiche bien les notifications d'OIKOS.", icon: "icone-192.png", badge: "icone-192.png", tag: "oikos-essai" });
+    const a = await r.pushManager.getSubscription();
+    if (a) await sb.from("push_abonnements").delete().eq("endpoint", a.endpoint);
+    await abonnerPush();
+    feuille(`<h2 style="margin:0">Essai lancé</h2>
+      <p><b>1.</b> Une notification « OIKOS : essai » vient de s'afficher en haut de l'écran.</p>
+      <p><b>2.</b> Dans 5 minutes au plus, OIKOS t'envoie une vraie notification « OIKOS : du nouveau ». Tu peux fermer l'appli en attendant.</p>
+      <p class="muted small">La 1re n'est pas arrivée : les notifications sont coupées dans les réglages du téléphone, ou le mode Ne pas déranger est actif. Seule la 2e manque : préviens OIKOS.</p>
+      <button class="btn primary big" data-fermer>J'ai compris</button>`);
+  } catch (x) { toast(pushErreur(x)); }
+}
+/* À l'ouverture : tant qu'elles ne sont pas activées, on le redemande (au plus tous les 2 jours) */
+let rappelNotifFait = false;
+function rappelNotif() {
+  if (rappelNotifFait || !moi || moi.role === "gerant") return; rappelNotifFait = true;
+  const e = pushEtat(); if (e !== "default" && e !== "iphone") return;
+  const dernier = LS.get("rappel-notif"); if (dernier && Date.now() - dernier < 2 * 864e5) return;
+  LS.set("rappel-notif", Date.now());
+  feuille(`<h2 style="margin:0">Active les notifications</h2>
+    <p>Sans elles, tu ne sais pas qu'une mission t'attend, et <b>la première personne qui accepte l'obtient</b>. Tu sauras aussi tout de suite quand OIKOS ou un client t'écrit.</p>
+    ${e === "iphone" ? `<button class="btn primary big" data-guide-install>Installer l'appli (iPhone)</button>` : `<button class="btn primary big" data-activer-push>Activer les notifications</button>`}
+    <button class="btn flat" data-fermer>Plus tard</button>`, (el, fermer) => el.addEventListener("click", ev => { if (ev.target.closest("[data-activer-push],[data-guide-install]")) setTimeout(fermer, 0); }));
+}
 if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "missions") nbMessagesNonLus().then(n => accueil(n ? "messages" : "missions")); });
 /* Mission acceptée ou confiée : le rappel reste dans l'emploi du temps tant qu'aucun passage n'est posé chez ce client */
 async function rappelsMission() {
@@ -2874,7 +2913,7 @@ async function chargerPapiers() {
   if (pi.error) throw pi.error; if (dc.error) throw dc.error;
   const pour = p => (p.pour === "tous" || p.pour === moi.statut)
     && (!p.condition || (p.condition === "ae_a_creer" ? moi.ae_a_creer : p.condition === "voiture" ? moi.transport === "Voiture" : p.condition === "cheffe" ? !!moi.cheffe_reseau : false));   // cheffe : papiers des cheffes de réseau (SQL 55)
-  const liste = pi.data.filter(pour).map(p => ({ ...p, doc: dc.data.find(d => d.piece_id === p.id) }));
+  const liste = pi.data.filter(pour).map(p => ({ ...p, doc: dc.data.find(d => d.piece_id === p.id), docs: dc.data.filter(d => d.piece_id === p.id) }));
   return { liste, autres: dc.data.filter(d => !d.facture_mois && (!d.piece_id || !liste.some(p => p.id === d.piece_id))) };   // ses factures sont dans Reporting
 }
 const etatPapier = d => !d ? `<span class="tag warn">à envoyer</span>` : d.etat === "valide" ? `<span class="tag">✓ validé</span>`
@@ -2886,16 +2925,17 @@ async function vuePapiers() {
   liste.forEach(p => { if (aRenouveler(p)) { p.renouv = moi.vig.gel_le; p.doc = null; } });
   const reste = liste.filter(p => p.obligatoire && (!p.doc || p.doc.etat === "refuse")).length;
   contenu(`<button class="btn flat" id="retour" style="padding-left:0">‹ Moi</button>
-    <h1>Mes papiers</h1><p class="muted" style="margin:6px 0 14px">${reste ? `Il en manque ${reste}. Touche « Envoyer » : une photo nette suffit.` : "Tout est envoyé, merci !"} OIKOS les range dans ton dossier.</p>
+    <h1>Mes papiers</h1>${blocPush()}<p class="muted" style="margin:6px 0 14px">${reste ? `Il en manque ${reste}. Touche « Envoyer » : une photo nette suffit.` : "Tout est envoyé, merci !"} OIKOS les range dans ton dossier.</p>
     <div class="stack">${liste.map(p => `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(p.libelle)}${p.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</b>${p.renouv ? `<span class="tag warn">à renouveler</span>` : etatPapier(p.doc)}</div>
       ${p.renouv ? `<p class="err" style="min-height:0">${moi.vig.libre_jusqu_au && !moi.gele_vig && new Date() >= new Date(p.renouv) ? "OIKOS te laisse jusqu'au " + new Date(moi.vig.libre_jusqu_au).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) + " pour envoyer la nouvelle." : new Date() >= new Date(p.renouv) ? "Plus de 6 mois : ton compte est gelé. Dès que tu envoies la nouvelle, tu as 7 jours, le temps qu'OIKOS la valide." : "Ta dernière a 5 mois : envoie la nouvelle avant le " + new Date(p.renouv).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) + ", sinon ton compte sera gelé."}</p>` : ""}
       ${p.aide ? `<p class="muted small">${esc(p.aide)}</p>` : ""}
       ${p.doc && p.doc.etat === "refuse" && p.doc.motif ? `<p class="err" style="min-height:0">${esc(p.doc.motif)}</p>` : ""}
       ${p.modele && (!p.doc || p.doc.etat !== "valide") ? `<button class="btn" data-modele="${esc(p.modele)}"><span class="ic">${ico("telecharger")}</span>Télécharger le modèle à imprimer</button>` : ""}
       ${!p.doc || p.doc.etat === "refuse" ? `<button class="btn primary" data-envoi="${p.id}"><span class="ic">${ico("photo")}</span>Envoyer${p.modele ? " le document signé" : ""}</button>`
-        : p.doc.etat === "recu" ? `<button class="btn flat" data-envoi="${p.id}">Ajouter une autre photo (page suivante…)</button>` : ""}</div>`).join("")}</div>
+        : p.doc.etat === "recu" ? `<button class="btn flat" data-envoi="${p.id}">Ajouter une autre photo (page suivante…)</button>` : ""}
+      ${p.docs.length ? `<div style="margin-top:8px"><p class="muted small" style="margin:0">Déjà envoyé${p.docs.length > 1 ? "s (" + p.docs.length + ")" : ""} :</p>${p.docs.map(ligneEnvoi).join("")}</div>` : ""}</div>`).join("")}</div>
     <h2>Autres documents envoyés</h2>
-    <div class="card">${autres.length ? autres.map(d => `<div class="ligne"><span>${esc(d.libelle)}<br><span class="muted small">${jourTxt(d.cree_le)}</span></span>${etatPapier(d)}</div>`).join("") : `<p class="muted small">Aucun.</p>`}</div>
+    <div class="card">${autres.length ? autres.map(d => ligneEnvoi(d, true)).join("") : `<p class="muted small">Aucun.</p>`}</div>
     <button class="btn" id="autre" style="margin-top:12px"><span class="ic">${ico("plus")}</span>Envoyer un autre document</button>
     <p class="muted small" style="margin-top:8px">Plusieurs pages ? Tu peux choisir plusieurs photos d'un coup.</p>
     <input type="file" id="fichier" accept="image/*,application/pdf" multiple hidden>`);
@@ -2910,6 +2950,7 @@ async function vuePapiers() {
       toast("Téléchargement du modèle…");
       return location.assign(data.signedUrl);   // le fichier arrive dans Téléchargements, l'appli reste ouverte
     }
+    const v = e.target.closest("[data-voir]"); if (v) return voirEnvoi(v.dataset.voir);
     const b = e.target.closest("[data-envoi]"); if (!b) return; cible = liste.find(p => p.id === b.dataset.envoi); champ.value = ""; champ.click();
   };
   document.getElementById("autre").onclick = () => feuille(`<h2 style="margin:0">Autre document</h2>
@@ -2923,6 +2964,17 @@ async function vuePapiers() {
     try { for (const f of fichiers) await envoyerPapier(cible, f); fermer(); toast("Envoyé à OIKOS ✓"); accueil("papiers"); }
     catch (e) { fermer(); refusDepot(e) ? toast(MSG_PLAFOND) : souci(e); accueil("papiers"); }
   };
+}
+/* Chaque fichier envoyé : sa date, son nom, son état, et « Voir » (lien privé valable 10 minutes) */
+const ligneEnvoi = (d, titre) => `<div class="ligne"><span>${titre ? esc(d.libelle) + "<br>" : ""}<span class="small">${ico(/\.pdf$/i.test(d.fichier || "") ? "doc" : "photo")} ${esc(d.nom_origine || "photo")}</span><br><span class="muted small">envoyé le ${jourTxt(d.cree_le)}</span>${d.etat === "refuse" && d.motif && titre ? `<br><span class="err small">${esc(d.motif)}</span>` : ""}</span>
+  <span class="row" style="gap:6px;flex-shrink:0">${etatPapier(d)}${d.fichier ? `<button class="btn flat" style="flex:0;min-height:32px;padding:4px 10px" data-voir="${esc(d.fichier)}">Voir</button>` : ""}</span></div>`;
+async function voirEnvoi(chemin) {
+  const { data, error } = await sb.storage.from("documents").createSignedUrl(chemin, 600);
+  if (error) return toast(/not found|404/i.test(error.message || "") ? "Ce fichier n'est plus disponible ici : OIKOS l'a rangé." : "Impossible d'ouvrir le fichier pour l'instant.");
+  const pdf = /\.pdf$/i.test(chemin);
+  feuille(`${pdf ? `<p>Document PDF.</p><a class="btn primary big" href="${esc(data.signedUrl)}" target="_blank" rel="noopener">Ouvrir le PDF</a>`
+    : `<img src="${esc(data.signedUrl)}" alt="" style="width:100%;max-height:70vh;object-fit:contain;border-radius:12px;background:var(--line)">`}
+    <button class="btn flat" data-fermer>Fermer</button>`);
 }
 /* Photo réduite (2000 px) pour un envoi rapide, PDF tel quel ; 10 Mo au plus */
 async function preparerFichier(f) {
@@ -2958,6 +3010,7 @@ async function vueMoi() {
       <p class="muted small" style="margin:4px 0 10px">Préviens OIKOS : il fait passer un presta ou des clients d'un réseau à l'autre.</p>
       <div class="stack" id="mon-reseau"><button class="btn" data-dem="presta"><span class="ic">${ico("personne")}</span>J'ai trop de clients : je veux un presta</button>
         <button class="btn" data-dem="clients"><span class="ic">${ico("clients")}</span>J'ai trop de presta : je veux des clients</button></div></section>` : ""}
+    ${carteNotif()}
     <div class="stack" style="margin-top:14px">
       ${!estInstalle() && (surTelephone() || invitInstall) ? `<button class="btn doux" id="installer-appli"><span class="ic">${ico("telecharger")}</span>Installer l'appli sur ce téléphone</button>` : ""}
       <button class="btn" id="infos"><span class="ic">${ico("stylo")}</span>Modifier mes informations</button>
@@ -2969,6 +3022,7 @@ async function vueMoi() {
     <button class="btn primary" id="papiers" style="margin-top:14px;width:100%"><span class="ic">${ico("doc")}</span>Mes papiers pour OIKOS</button>
     <p class="muted small" style="margin-top:18px">Mes factures arriveront ici prochainement.</p>`);
   document.getElementById("papiers").onclick = () => accueil("papiers");
+  const tn = document.getElementById("tester-notif"); if (tn) tn.onclick = testerNotif;
   if (moi.cheffe_reseau) monReseau();
   document.getElementById("revoir").onclick = () => lancerDidacticiel();
   const inst = document.getElementById("installer-appli");
@@ -3145,7 +3199,7 @@ async function installerAppli() {
 }
 
 function didacticielSiBesoin() {
-  if (did || !didacticielAFaire() || inviterInstall()) return;
+  if (did || !didacticielAFaire() || inviterInstall()) { if (!did && !didacticielAFaire()) rappelNotif(); return; }
   lancerDidacticiel();
 }
 /* Exemples de la visite : affichés seulement à l'écran, à la place d'une liste vide, jamais écrits dans la base.
