@@ -133,6 +133,7 @@
     const aRemplir = (d.champs || []).some(c => (c.qui || "destinataire") === "destinataire"), fait = d.etat === "fait" || d.etat === "refuse";
     cible.innerHTML = `<div class="dz-boutons" style="margin-bottom:10px"><button class="btn flat" type="button" data-retour>‹ ${tu("Mes documents", "Retour")}</button></div>
       <h1 style="margin:0 0 4px">${E(d.titre)}${d.numero > 1 ? ` <span class="dz-tag">version ${d.numero}</span>` : ""}</h1>
+      ${d.note ? `<div class="dz-bandeau" style="display:block;margin:6px 0 10px"><b>${IC("bulle")} Note d'OIKOS</b><br><span style="white-space:pre-line">${E(d.note)}</span></div>` : ""}
       ${d.numero > 1 && !fait ? `<p class="small" style="margin:0 0 6px">${tu("Cette version remplace celle que tu avais déjà signée : relis-la, l'ancienne reste gardée telle quelle.", "Cette version remplace celle que vous aviez déjà signée : relisez-la, l'ancienne reste gardée telle quelle.")}</p>` : ""}
       ${d.etat === "fait" ? `<p class="small" style="margin:0 0 6px">${IC("cadenas")} ${tu("Document signé : il ne peut plus être modifié.", "Document signé : il ne peut plus être modifié.")}${d.remplace_par ? tu(" Une nouvelle version t'a été envoyée.", " Une nouvelle version vous a été envoyée.") : ""}</p>` : ""}
       <p class="muted small" style="margin:0 0 12px">${fait ? (d.etat === "fait" ? (d.action === "signer" ? "Signé" : d.action === "accepter" ? "Accepté" : "Lu") + " le " + heureFr(d.fait_le) : "Refusé le " + heureFr(d.fait_le)) : "Document " + ACTIONS[d.action] + (d.echeance ? " avant le " + dateFr(d.echeance) : "")}</p>
@@ -219,7 +220,7 @@
   const aFaire = d => d.etat === "envoye" || d.etat === "vu";
   const ligneRecue = d => `<button class="dz-ligne" type="button" data-ouvrir="${d.id}" style="text-align:left;width:100%;cursor:pointer">
       <span><b>${E(d.titre)}${d.numero > 1 ? ` <span class="dz-tag">version ${d.numero}</span>` : ""}${d.remplace_par ? ` <span class="dz-tag">remplacé par une nouvelle version</span>` : ""}</b><span class="dz-m">${aFaire(d) ? "Envoyé le " + dateFr(d.envoye_le) + (d.echeance ? " · avant le " + dateFr(d.echeance) : "")
-        : d.etat === "fait" ? (d.action === "signer" ? "Signé" : d.action === "accepter" ? "Accepté" : "Lu") + " le " + dateFr(d.fait_le) : "Refusé le " + dateFr(d.fait_le)}</span></span>
+        : d.etat === "fait" ? (d.action === "signer" ? "Signé" : d.action === "accepter" ? "Accepté" : "Lu") + " le " + dateFr(d.fait_le) : "Refusé le " + dateFr(d.fait_le)}</span>${d.note && aFaire(d) ? `<span class="dz-m" style="font-style:italic">Note : ${E(d.note.length > 90 ? d.note.slice(0, 90) + "…" : d.note)}</span>` : ""}</span>
       ${aFaire(d) ? `<span class="dz-tag att">${ACTIONS[d.action]}</span>` : d.etat === "fait" ? `<span class="dz-tag ok">${IC("ok")} fait</span>` : `<span class="dz-tag non">refusé</span>`}</button>`;
 
   /* ---------- Appli presta / chef : écran « Mes documents » ---------- */
@@ -282,7 +283,7 @@
   async function chargerDocs() {
     const [modeles, envois, profils, clientsL, comptes, pieces] = await Promise.all([
       q(sb.from("doc_modeles").select("*").order("ordre").order("titre")),
-      q(sb.from("doc_envois").select("id,modele_id,titre,action,etat,intervenante_id,client_id,envoye_le,vu_le,fait_le,motif,echeance,pdf_etat,pdf_seau,pdf_chemin,pdf_erreur,signe_nom,numero,remplace").order("envoye_le", { ascending: false }).limit(1000)),
+      q(sb.from("doc_envois").select("id,modele_id,titre,action,etat,intervenante_id,client_id,envoye_le,vu_le,fait_le,motif,echeance,pdf_etat,pdf_seau,pdf_chemin,pdf_erreur,signe_nom,numero,remplace,note").order("envoye_le", { ascending: false }).limit(1000)),
       q(sb.from("profils").select("id,prenom,nom,email,telephone,adresse,siret,activites,actif,role,statut,cheffe_reseau,ae_a_creer").neq("role", "gerant")),
       q(sb.from("clients").select("id,nom,adresse,email,telephone,etat").order("nom")),
       sb.from("comptes_clients").select("id,client_id,actif").then(r => r.data || [], () => []),
@@ -318,7 +319,7 @@
       <div id="dz-zone"></div>`);
     const zone = el.querySelector("#dz-zone");
     const ligneEnvoi = (e, avecNom) => { const w = qui(e), apres = envois.find(v => v.remplace === e.id && v.etat !== "retire");
-      return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span></span>
+      return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span>${e.note ? `<span class="dz-m" style="font-style:italic">Note : ${E(e.note.length > 120 ? e.note.slice(0, 120) + "…" : e.note)}</span>` : ""}</span>
         <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
     const dessinerSuivi = () => {
       const l = envois.filter(filtres[filtreSuivi][1]);
@@ -343,7 +344,7 @@
     const dessinerBiblio = () => {
       const visibles = modeles.filter(m => m.actif && (pourBiblio === "tous" || m.pour.includes(pourBiblio)));
       const ligne = m => { const n = envois.filter(e => e.modele_id === m.id && e.etat !== "retire"), s = n.filter(e => e.etat === "fait").length;
-        return `<div class="dz-ligne" style="${m.actif ? "" : "opacity:.6"}"><label style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:220px;cursor:pointer">${m.actif ? `<input type="checkbox" data-sel="${m.id}" ${choisis.has(m.id) ? "checked" : ""} style="margin-top:4px">` : ""}<span><b>${E(m.titre)}</b><span class="dz-m">${CATEGORIES[m.categorie] || ""} · ${ACTIONS[m.action]} · pour ${m.pour.map(p => POUR[p]).join(", ")}${m.condition ? " · " + CONDITIONS[m.condition] : ""}${m.fichier ? " · fichier joint" : ""}${n.length ? " · " + n.length + " envoyé" + (n.length > 1 ? "s" : "") + ", " + s + " fait" + (s > 1 ? "s" : "") : ""}</span></span></label>
+        return `<div class="dz-ligne" style="${m.actif ? "" : "opacity:.6"}"><label style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:220px;cursor:pointer">${m.actif ? `<input type="checkbox" data-sel="${m.id}" ${choisis.has(m.id) ? "checked" : ""} style="margin-top:4px">` : ""}<span><b>${E(m.titre)}</b><span class="dz-m">${CATEGORIES[m.categorie] || ""} · ${ACTIONS[m.action]} · pour ${m.pour.map(p => POUR[p]).join(", ")}${m.condition ? " · " + CONDITIONS[m.condition] : ""}${m.fichier ? " · fichier joint" : ""}${n.length ? " · " + n.length + " envoyé" + (n.length > 1 ? "s" : "") + ", " + s + " fait" + (s > 1 ? "s" : "") : ""}</span>${m.note ? `<span class="dz-m" style="font-style:italic">Note : ${E(m.note.length > 120 ? m.note.slice(0, 120) + "…" : m.note)}</span>` : ""}</span></label>
           <span class="dz-boutons">${m.actif ? `<button class="btn" data-envoyer="${m.id}">Mettre à disposition</button>` : ""}<button class="btn flat" data-modifier="${m.id}">${IC("stylo")} Modifier</button><button class="btn flat" data-archiver="${m.id}">${m.actif ? "Archiver" : "Réactiver"}</button></span></div>`; };
       const sections = Object.keys(QUAND).map(k => { const l = visibles.filter(m => (m.quand || "cas") === k);
         return l.length ? `<h3 style="margin:16px 0 4px">${QUAND[k]} <span class="muted small" style="font-weight:normal">· ${QUAND_AIDE[k]}</span></h3><div class="dz-liste">${l.map(ligne).join("")}</div>` : ""; }).join("");
@@ -397,6 +398,7 @@
       <p class="muted small" style="margin:0">« ${E(d.titre)} » signé le ${heureFr(d.fait_le)} reste gardé tel quel, avec son PDF. Corrige le texte ci-dessous : la personne recevra la version ${n} à relire et signer, avec ses cases déjà remplies comme la dernière fois.</p>
       ${d.contenu ? `<textarea id="nv-contenu" rows="14" style="width:100%;box-sizing:border-box;font:13px/1.45 ui-monospace,Consolas,monospace">${E(d.contenu)}</textarea>` : `<p class="small">Document à partir d'un fichier : la même pièce jointe repart à accepter.</p>`}
       ${(d.champs || []).some(c => c.qui === "oikos") ? `<section class="card"><b>À remplir par OIKOS</b><div class="dz-champs" id="nv-oikos" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(d.champs, vals, "oikos")}</div></section>` : ""}
+      <label class="dz-champs"><span>Note pour la personne (facultatif)</span><textarea id="nv-note" rows="2" placeholder="Ex. : relis l'article 6, seul le tarif a changé.">${E(d.note || "")}</textarea></label>
       <label class="dz-champs" style="max-width:260px"><span>À faire avant le (facultatif)</span><input type="date" id="nv-echeance"></label>
       <div class="dz-boutons" style="justify-content:flex-end"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="nv-ok">Envoyer la version ${n}</button></div>`, (f, fermer) => {
       f.querySelector("#nv-ok").onclick = async ev => {
@@ -410,7 +412,7 @@
           await q(sb.from("doc_envois").insert({ modele_id: d.modele_id, version: d.version, titre: d.titre, categorie: d.categorie, action: d.action,
             contenu: d.contenu ? contenuN : null, fichier: d.fichier, fichier_seau: d.fichier_seau, champs: d.champs, valeurs: Object.assign({}, vals, vo),
             intervenante_id: d.intervenante_id, client_id: d.client_id, piece_id: d.piece_id, echeance: f.querySelector("#nv-echeance").value || null,
-            remplace: d.id, numero: n }));
+            remplace: d.id, numero: n, note: (f.querySelector("#nv-note").value || "").trim().slice(0, 2000) || null }));
           toast("Version " + n + " envoyée"); fermer(); vuePilote = "suivi"; filtreSuivi = "attente"; afficher("documents");
         } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
       };
@@ -453,6 +455,7 @@
       <div><b style="font-size:14px">Pour qui</b> ${Object.entries(POUR).map(([k, t]) => `<label style="margin-left:10px"><input type="checkbox" data-pour="${k}" ${m.pour.includes(k) ? "checked" : ""}> ${t}</label>`).join("")}</div>
       <div><b style="font-size:14px">Fichier joint</b> <span class="muted small">${m.fichier ? "un fichier est joint" : "aucun"}</span> <button class="btn" id="m-fic">${IC("trombone")} ${m.fichier ? "Remplacer" : "Joindre un PDF"}</button>${m.fichier ? ` <button class="btn flat" id="m-ficvoir">Voir</button> <button class="btn flat stop" id="m-ficret">Retirer</button>` : ""}<input type="file" id="m-fichier" accept=".pdf,application/pdf" hidden></div>
       <div class="dz-boutons"><button class="btn" id="m-onglet-t" aria-pressed="true">Texte</button><button class="btn flat" id="m-onglet-a">Aperçu</button><span class="muted small">Texte vide = seulement le fichier joint.</span></div>
+      <label class="dz-champs"><span>Note pour la personne <span class="muted small">(facultatif : reprise à chaque envoi, ex. « coche ménage et jardinage »)</span></span><textarea id="m-note" rows="2">${E(m.note || "")}</textarea></label>
       <textarea id="m-contenu" rows="16" style="width:100%;box-sizing:border-box;font:13px/1.45 ui-monospace,Consolas,monospace">${E(m.contenu || "")}</textarea>
       <div id="m-apercu" class="dz-doc" style="display:none;max-height:55vh;overflow:auto"></div>
       <div><b style="font-size:14px">Les cases à remplir</b> <span class="muted small">« La personne » : elle les remplit dans son appli (préremplies si une source est choisie). « OIKOS » : tu les remplis au moment de l'envoi (valeur par défaut gardée ici).</span>
@@ -483,7 +486,8 @@
           const ch = lireTable(), pour = [...f.querySelectorAll("[data-pour]:checked")].map(x => x.dataset.pour);
           const d = { titre: f.querySelector("#m-titre").value.trim(), categorie: f.querySelector("#m-cat").value, action: f.querySelector("#m-action").value, pour, champs: ch,
             piece_id: f.querySelector("#m-piece").value || null, contenu: ta.value.trim() || null,
-            quand: f.querySelector("#m-quand").value, condition: f.querySelector("#m-condition").value || null };
+            quand: f.querySelector("#m-quand").value, condition: f.querySelector("#m-condition").value || null,
+            note: (f.querySelector("#m-note").value || "").trim().slice(0, 2000) || null };
           if (!d.titre) return toast("Donne un titre au modèle");
           if (!pour.length) return toast("Coche au moins « pour qui »");
           const doubles = ch.map(c => c.cle).filter((k, i, a) => a.indexOf(k) !== i); if (doubles.length) return toast("Nom de case en double : " + doubles[0]);
@@ -513,10 +517,10 @@
     return p[src] || undefined;
   }
   // Une ligne doc_envois pour un modèle et une personne (copie figée ; cases de la personne préremplies depuis sa fiche)
-  async function envoyerUn(m, g, vo, echeance) {
+  async function envoyerUn(m, g, vo, echeance, note) {
     const valeurs = Object.assign({}, vo);
     (m.champs || []).filter(c => c.qui !== "oikos").forEach(c => { const v = c.source ? sourceDe(g.p, c.source, c) : undefined; if (!vide(v)) valeurs[c.cle] = v; else if (c.defaut) valeurs[c.cle] = c.defaut; });
-    const ligne = { modele_id: m.id, version: m.version, titre: m.titre, categorie: m.categorie, action: m.action, contenu: m.contenu, champs: m.champs, valeurs, echeance, piece_id: m.piece_id };
+    const ligne = { modele_id: m.id, version: m.version, titre: m.titre, categorie: m.categorie, action: m.action, contenu: m.contenu, champs: m.champs, valeurs, echeance, piece_id: m.piece_id, note: note === undefined ? (m.note || null) : (note || null) };
     if (g.type === "client") {
       ligne.client_id = g.id;
       if (m.fichier) {   // le client ne lit que son propre espace : copie du fichier
@@ -537,6 +541,10 @@
     const champsZ = `<div class="dz-champs" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(m.champs, v, "oikos")}</div>`;
     return complet ? `<details class="card" data-oikos="${m.id}" style="padding:10px 12px"><summary style="cursor:pointer"><b>${E(m.titre)}</b> <span class="dz-tag ok">${IC("ok")} déjà rempli</span> <span class="muted small">· changer pour cette fois</span></summary><p class="muted small" style="margin:6px 0 0">${resume || "—"}</p>${champsZ}</details>`
       : `<section class="card" data-oikos="${m.id}"><b>${E(m.titre)}</b> <span class="muted small">· à remplir par OIKOS (gardé ensuite pour les prochains envois)</span>${champsZ}</section>`; }).join("");
+  // Une note par document, reprise du modèle et modifiable pour cet envoi
+  const blocNotes = modeles => modeles.length ? `<details class="card" style="padding:10px 12px" ${modeles.some(m => m.note) ? "open" : ""}><summary style="cursor:pointer"><b>Notes pour la personne</b> <span class="muted small">· facultatif : ce qu'elle doit répondre, ce qui a changé…</span></summary>
+    <div class="dz-champs" style="margin-top:8px">${modeles.map(m => `<label><span class="small">${E(m.titre)}</span><textarea rows="2" data-note-de="${m.id}" placeholder="Ex. : coche ménage et jardinage.">${E(m.note || "")}</textarea></label>`).join("")}</div></details>` : "";
+  const lireNotes = f => { const o = {}; f.querySelectorAll("[data-note-de]").forEach(t => { o[t.dataset.noteDe] = t.value.trim().slice(0, 2000); }); return o; };
   async function lireOikos(f, modeles) {
     const par = {};
     for (const m of modeles) {
@@ -573,7 +581,7 @@
         f.querySelector("#md-quoi").innerHTML = modeles.length > 1 ? `Pour un ${POUR[type].toLowerCase()} : ${pour(type).map(m => "<b>" + E(m.titre) + "</b>").join(", ")}.` : "";
         f.querySelector("#md-ok").textContent = "Mettre à disposition" + (coches.size ? " (" + coches.size + " personne" + (coches.size > 1 ? "s" : "") + ")" : "");
       };
-      const dessinerOikos = () => { f.querySelector("#md-oikos").innerHTML = blocsOikos(pour(type)); };
+      const dessinerOikos = () => { f.querySelector("#md-oikos").innerHTML = blocsOikos(pour(type)) + blocNotes(pour(type)); };
       dessiner(); dessinerOikos();
       ch.oninput = dessiner;
       zg.onchange = e => { const c = e.target; if (c.checked) coches.add(c.value); else coches.delete(c.value); dessiner(); };
@@ -584,9 +592,9 @@
           if (!coches.size) return toast("Coche au moins une personne");
           const liste = pour(type), vo = await lireOikos(f, liste); if (!vo) return;
           bouton.disabled = true;
-          const echeance = f.querySelector("#md-echeance").value || null, gens = lesGens(x);
+          const echeance = f.querySelector("#md-echeance").value || null, gens = lesGens(x), notes = lireNotes(f);
           let n = 0;
-          for (const id of coches) { const g = gens.find(y => y.id === id && y.type === type); if (!g) continue; for (const m of liste) { await envoyerUn(m, g, vo[m.id] || {}, echeance); n++; } }
+          for (const id of coches) { const g = gens.find(y => y.id === id && y.type === type); if (!g) continue; for (const m of liste) { await envoyerUn(m, g, vo[m.id] || {}, echeance, notes[m.id]); n++; } }
           toast(n === 1 ? "Mis à disposition" : n + " documents mis à disposition"); fermer(); choisis.clear(); vuePilote = "suivi"; filtreSuivi = "attente"; afficher("documents");
         } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
       };
@@ -623,7 +631,7 @@
           <label class="dz-champs" style="max-width:260px;margin-top:10px"><span>À faire avant le (facultatif)</span><input type="date" id="ep-echeance"></label>
           <div class="dz-boutons" style="justify-content:flex-end;margin-top:10px"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="ep-ok"></button></div>`;
         const coches = () => [...corps.querySelectorAll("[data-m]:checked")].map(c => x.M[c.dataset.m]).filter(Boolean);
-        const maj = () => { const l = coches(); corps.querySelector("#ep-oikos").innerHTML = blocsOikos(l); corps.querySelector("#ep-ok").textContent = l.length ? "Envoyer " + (l.length === 1 ? "ce document" : "ces " + l.length + " documents") : "Coche au moins un document"; corps.querySelector("#ep-ok").disabled = !l.length; };
+        const maj = () => { const l = coches(); corps.querySelector("#ep-oikos").innerHTML = blocsOikos(l) + blocNotes(l); corps.querySelector("#ep-ok").textContent = l.length ? "Envoyer " + (l.length === 1 ? "ce document" : "ces " + l.length + " documents") : "Coche au moins un document"; corps.querySelector("#ep-ok").disabled = !l.length; };
         maj();
         corps.onchange = e => { if (e.target.closest("[data-m]")) maj(); };
         corps.querySelector("[data-autre]").onclick = choisir;
@@ -634,7 +642,8 @@
             const vo = await lireOikos(corps, l); if (!vo) return;
             bouton.disabled = true;
             const echeance = corps.querySelector("#ep-echeance").value || null;
-            for (const m of l) await envoyerUn(m, g, vo[m.id] || {}, echeance);
+            const notes = lireNotes(corps);
+            for (const m of l) await envoyerUn(m, g, vo[m.id] || {}, echeance, notes[m.id]);
             toast((l.length === 1 ? "Document envoyé à " : l.length + " documents envoyés à ") + g.nom); fermer(); vuePilote = "suivi"; filtreSuivi = "attente"; rangSuivi = "personne"; afficher("documents");
           } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
         };
