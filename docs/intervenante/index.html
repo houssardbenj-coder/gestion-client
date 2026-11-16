@@ -1308,6 +1308,7 @@ async function vueJour() {
       <summary><span><span class="quand">${heure(x.debut)} – ${heure(x.fin)}</span><span class="client-nom">${esc(c.nom || "Client")}</span></span><span class="chev">${ico("chevron")}</span></summary>
       <div class="passage-corps">${c.adresse ? `<a class="adresse" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener">${esc(c.adresse)}</a>` : ""}
       <button class="btn doux" data-route="${x.client_id}" data-min="${Math.round(minutesEntre(x.debut, x.fin))}">Feuille de route</button>
+      <button class="btn doux" data-cr="${x.client_id}"><span class="ic">${ico("stylo")}</span>Compte rendu du passage</button>
       <div class="actions3">${c.adresse ? `<a class="btn action" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("lieu")}</span>Y aller</a>` : `<span></span>`}
       <button class="btn action" data-fiche="${x.client_id}"><span class="ic">${ico("personne")}</span>Fiche</button>
       <button class="btn action" data-ajout-route="${x.client_id}" aria-label="Proposer un changement à la feuille de route"><span class="ic">${ico("plus")}</span>Proposer</button></div></div></details>`; };
@@ -1324,7 +1325,8 @@ async function vueJour() {
       <button class="btn" id="voir-agenda"><span class="ic">${ico("agenda")}</span>Voir mon agenda</button></div>`);
   const c = document.getElementById("contenu");
   c.onclick = e => {
-    const f = e.target.closest("[data-fiche]"), d = e.target.closest("[data-decl]"), rt = e.target.closest("[data-route]");
+    const f = e.target.closest("[data-fiche]"), d = e.target.closest("[data-decl]"), rt = e.target.closest("[data-route]"), cr = e.target.closest("[data-cr]");
+    if (cr) return compteRendu(cr.dataset.cr);
     if (rt) return feuilleRoute(rt.dataset.route, Number(rt.dataset.min) || 0);
     if (f) return ficheClient(f.dataset.fiche);
     if (d) {   // le passage prévu devient une ligne à vérifier dans Reporting
@@ -2013,6 +2015,7 @@ function ficheClient(id) {
   feuille(`<h2 style="margin:0">${esc(c.nom)}</h2>
     ${c.adresse ? `<div class="grid2"><a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("itineraire")}</span>Google Maps</a>
       <a class="btn" href="${lienWaze(c.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("voiture")}</span>Waze</a></div>` : ""}
+    <button class="btn primary" id="compte-rendu"><span class="ic">${ico("stylo")}</span>Compte rendu du passage</button>
     <div class="grid2"><button class="btn primary" id="ouvrir-route"><span class="ic">${ico("route")}</span>Feuille de route</button>
       <button class="btn" id="ajout-route"><span class="ic">${ico("plus")}</span>Proposer un changement</button></div>
     ${tel ? `<div class="grid3"><a class="btn" href="${lienTel(tel)}"><span class="ic">${ico("tel")}</span>Appeler</a>
@@ -2037,6 +2040,7 @@ function ficheClient(id) {
     brancherNotes(el, id, null);
     el.querySelector("#ouvrir-route").onclick = () => { fermer(); feuilleRoute(id, 0); };
     el.querySelector("#ajout-route").onclick = () => { fermer(); ajouterTacheRoute(id); };
+    el.querySelector("#compte-rendu").onclick = () => { fermer(); compteRendu(id); };
     infosOikos(el.querySelector("#infos-oikos"), id);
     ecClientsAvecAppli().then(avec => { const z = el.querySelector("#ec-ecrire"); if (!z || !z.isConnected || !avec.has(id)) return;
       z.innerHTML = `<button class="btn doux" type="button" style="width:100%"><span class="ic">${ico("bulle")}</span>Écrire au client dans son appli</button>`;
@@ -2257,6 +2261,76 @@ function ajouterPhoto(clientId, apres) {
       el.querySelector("#prendre").disabled = true; el.querySelector("#prendre").lastChild.textContent = "Envoi en cours…";
       try { for (const x of fichiers) await envoyerPhoto(x, d); fermer(); toast(fichiers.length > 1 ? fichiers.length + " photos envoyées ✓" : "Photo envoyée ✓"); apres(); }
       catch (e) { el.querySelector("#prendre").disabled = false; el.querySelector("#prendre").lastChild.textContent = "Prendre ou choisir"; refusDepot(e) ? toast(MSG_PLAFOND) : souci(e); }
+    };
+  });
+}
+/* ---------- Compte rendu du passage (SQL 75) : un seul écran en sortant de chez le client.
+   Les heures font un passage comme dans Reporting (ou reprennent celui déjà déclaré ce jour-là),
+   « ce qui a été fait » + « ce qui reste » font une note de terrain, les photos sont reliées au passage. ---------- */
+async function compteRendu(clientId, pointageId) {
+  const lu = await sb.from("notes_terrain").select("reste,cree_le").eq("client_id", clientId).eq("compte_rendu", true).not("reste", "is", null).order("cree_le", { ascending: false }).limit(1);
+  const avant = !lu.error && lu.data[0] ? lu.data[0] : null;
+  let jourDe = ymdTxt(new Date());
+  if (pointageId) { const p = await sb.from("pointages").select("arrivee").eq("id", pointageId).maybeSingle(); if (p.data) jourDe = ymdTxt(new Date(p.data.arrivee)); }
+  let photos = [];   // { f: fichier, categorie }
+  const actDefaut = ACTIVITES.find(a => a === (clients.find(c => c.id === clientId) || {}).activite) || ACTIVITES[0];
+  feuille(`<h2 style="margin:0">Compte rendu du passage</h2><p class="muted" style="margin:0">${esc(nomClient(clientId))}</p>
+    ${avant ? `<div class="card" style="border-color:var(--warn);gap:2px"><b>La dernière fois (${jourTxt(avant.cree_le)}), il restait :</b><span style="white-space:pre-wrap">${esc(avant.reste)}</span></div>` : ""}
+    <form class="stack" id="fcr">
+      <label class="f">Jour<input name="jour" type="date" value="${jourDe}" max="${ymdTxt(new Date())}" required></label>
+      <div id="cr-heures"></div>
+      <label class="f">Ce que j'ai fait<textarea name="fait" maxlength="2000" required placeholder="Ex. taille de la haie côté rue, débroussaillage du talus, évacuation des déchets verts"></textarea></label>
+      <label class="f">Ce qui reste à faire (facultatif)<textarea name="reste" maxlength="2000" placeholder="Ex. haie du fond à finir (2 h environ), prévoir la remorque"></textarea></label>
+      <h3 style="margin:6px 0 0">Photos</h3>
+      <p class="tag warn" style="padding:8px 12px;border-radius:12px">Photographie le travail seulement : jamais les personnes, les papiers ni les objets de valeur.</p>
+      <div class="grid2"><label class="f">C'est quoi ?<select id="cr-cat">${Object.entries(CATS).map(([k, t]) => `<option value="${k}" ${k === "apres" ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <button class="btn" type="button" id="cr-photo" style="align-self:end"><span class="ic">${ico("photo")}</span>Prendre ou choisir</button></div>
+      <input type="file" id="cr-fichiers" accept="image/*" multiple hidden>
+      <div id="cr-liste" class="muted small">Aucune photo pour l'instant.</div>
+      <p class="err" id="err"></p>
+      <button class="btn primary big" type="submit">Envoyer le compte rendu</button>
+      <p class="muted small">OIKOS reçoit tout d'un coup. Les heures vont dans ton Reporting, les photos dans le dossier du client.</p>
+      <button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    const f = el.querySelector("#fcr"), zoneH = el.querySelector("#cr-heures"), err = el.querySelector("#err");
+    let existant = null;   // le passage déjà déclaré ce jour-là chez ce client
+    const voirHeures = async () => {
+      const j = f.jour.value; if (!j) return;
+      const d0 = new Date(j + "T00:00"), d1 = ajouterJours(d0, 1);
+      const r = await sb.from("pointages").select("id,arrivee,depart,activite").eq("intervenante_id", moi.id).eq("client_id", clientId).gte("arrivee", d0.toISOString()).lt("arrivee", d1.toISOString()).order("arrivee");
+      existant = !r.error && r.data.length ? (r.data.find(p => p.id === pointageId) || r.data[0]) : null;
+      zoneH.innerHTML = existant
+        ? `<div class="card"><b>${ico("valide")} Heures déjà déclarées ce jour-là : ${existant.depart ? heuresTxt(minutesEntre(existant.arrivee, existant.depart)) : "à compléter"}</b><br><span class="muted small">${esc(existant.activite || "Ménage")} · le compte rendu s'ajoute à ce passage. Pour changer les heures : Reporting › le passage › Corriger.</span></div>`
+        : `<label class="f">Heures faites<input name="heures" inputmode="decimal" required placeholder="Ex. 6 ou 5h30"></label>
+           <div class="acts">${ACTIVITES.map(a => `<label><input type="radio" name="activite" value="${a}" ${a === actDefaut ? "checked" : ""}>${a}</label>`).join("")}</div>`;
+    };
+    voirHeures(); f.jour.onchange = voirHeures;
+    const champ = el.querySelector("#cr-fichiers"), liste = el.querySelector("#cr-liste");
+    const dessiner = () => { liste.innerHTML = photos.length ? Object.entries(photos.reduce((o, p) => (o[p.categorie] = (o[p.categorie] || 0) + 1, o), {})).map(([k, n]) => `<span class="tag">${CATS[k]} : ${n}</span>`).join(" ") + ` <button class="btn flat" type="button" id="cr-vider" style="min-height:32px">Retirer les photos</button>` : "Aucune photo pour l'instant.";
+      const v = liste.querySelector("#cr-vider"); if (v) v.onclick = () => { photos = []; dessiner(); }; };
+    el.querySelector("#cr-photo").onclick = () => { champ.value = ""; champ.click(); };
+    champ.onchange = () => { const cat = el.querySelector("#cr-cat").value; photos = photos.concat([...champ.files].map(x => ({ f: x, categorie: cat }))); dessiner(); };
+    f.onsubmit = async e => {
+      e.preventDefault(); err.textContent = "";
+      const fait = f.fait.value.trim(), reste = f.reste.value.trim();
+      if (!fait) { err.textContent = "Écris ce que tu as fait."; return; }
+      let minutes = 0;
+      if (!existant) { minutes = minutesSaisie(f.heures && f.heures.value); if (minutes <= 0 || minutes > 16 * 60) { err.textContent = "Indique les heures faites (ex. 6 ou 5h30)."; return; } }
+      if (photos.length && await palierDepot() === "rouge") { err.textContent = MSG_PLAFOND; return; }
+      const bouton = f.querySelector("[type=submit]"); bouton.disabled = true; bouton.textContent = "Envoi en cours…";
+      try {
+        let pid = existant && existant.id;
+        if (!pid) {
+          const act = (f.querySelector("[name=activite]:checked") || {}).value;
+          const r = await sb.from("pointages").insert(versPassage({ client_id: clientId, jour: f.jour.value, minutes, note: "", activite: act })).select("id").single();
+          if (r.error) throw r.error; pid = r.data.id; existant = { id: pid };   // pas de second passage si on renvoie
+        }
+        const n = await sb.from("notes_terrain").insert({ client_id: clientId, pointage_id: pid, texte: fait, reste: reste || null, compte_rendu: true });
+        if (n.error) throw n.error;
+        let rates = 0;
+        for (const p of photos) { try { await envoyerPhoto(p.f, { client_id: clientId, categorie: p.categorie, pointage_id: pid }); } catch (x) { rates++; } }
+        fermer();
+        toast(rates ? rates > 1 ? `Compte rendu envoyé, mais ${rates} photos n'ont pas pu partir : ajoute-les depuis la fiche du client.` : "Compte rendu envoyé, mais une photo n'a pas pu partir : ajoute-la depuis la fiche du client." : "Compte rendu envoyé à OIKOS ✓");
+      } catch (x) { bouton.disabled = false; bouton.textContent = "Envoyer le compte rendu"; refusDepot(x) ? toast(MSG_PLAFOND) : souci(x); }
     };
   });
 }
@@ -2874,9 +2948,11 @@ function feuillePassage(id) {
       ${p.note ? `<dt>Remarque</dt><dd>${esc(p.note)}</dd>` : ""}
       <dt>Rapport d'activité</dt><dd>${p.exporte_le ? "✓ écrit dans ta feuille d'heures" : "en attente (quelques minutes)"}</dd></dl>
     ${p.verrouille ? `<p class="muted small">Ce passage est validé par OIKOS : il ne se modifie plus. Une erreur ? Appelle OIKOS.</p>` : `<button class="btn" id="corr"><span class="ic">${ico("stylo")}</span>Corriger</button>`}
+    <button class="btn primary" id="cr-passage"><span class="ic">${ico("photo")}</span>Compte rendu : fait, reste, photos</button>
     ${blocNotes("Notes sur ce passage", "Une remarque pour OIKOS sur ce passage")}
     <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
     if (el.querySelector("#corr")) el.querySelector("#corr").onclick = () => { fermer(); corrigerPointage(id); };
+    el.querySelector("#cr-passage").onclick = () => { fermer(); compteRendu(p.client_id, p.id); };
     brancherNotes(el, p.client_id, p.id);
   });
 }

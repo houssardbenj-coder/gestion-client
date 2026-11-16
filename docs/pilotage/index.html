@@ -2227,7 +2227,7 @@ async function lignesDuJour() {
   if (nbMessages) faire.push({ icone: "bulle", quoi: nbMessages + (nbMessages > 1 ? " messages non lus" : " message non lu"), detail: "", action: "Lire", agir: () => afficher("messages"), autres: [] });
   docs.forEach(d => faire.push({ icone: "doc", quoi: d.libelle + " à vérifier", detail: nomInterv(d.intervenante_id) + " · " + jour(d.cree_le), action: "Voir le papier", agir: () => voirFichier(d.fichier),
     autres: [["Valider", async () => { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", d.id)); re(); }], ["Refuser", () => refuserDoc(d.id, re)]] }));
-  notes.forEach(n => faire.push({ icone: "bulle", quoi: nomInterv(n.intervenante_id) + " a laissé une note", detail: nomClient(n.client_id) + " · " + n.texte, action: "Fait", agir: async () => { await maj(vu("notes_terrain", n.id)); jourDernier = { texte: "Note marquée faite", defaire: () => pasVu("notes_terrain", n.id) }; re(); },
+  notes.forEach(n => faire.push({ icone: "bulle", quoi: nomInterv(n.intervenante_id) + " a laissé une note", detail: nomClient(n.client_id) + " · " + n.texte + (n.reste ? " · Reste : " + n.reste : ""), action: "Fait", agir: async () => { await maj(vu("notes_terrain", n.id)); jourDernier = { texte: "Note marquée faite", defaire: () => pasVu("notes_terrain", n.id) }; re(); },
     autres: [["Ouvrir le client", () => ficheClient(n.client_id, "fil")]] }));
   // Mes propres tâches (À faire › Moi) pour aujourd'hui ou en retard
   const miennes = await sb.from("taches").select("*").eq("intervenante_id", moi.id).is("fait_le", null).lte("echeance", ymd(new Date())).order("echeance").then(r => r.data || []);
@@ -6527,11 +6527,12 @@ async function dosEnsemble(c, corps, re) {
     q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("cree_le", { ascending: false }))]);
   const docs = taches.length ? await q(sb.from("tache_documents").select("*").in("tache_id", taches.map(t => t.id)).order("cree_le")) : [];
   const [urlsP, urlsT] = await Promise.all([urlsSignees(photos.map(p => p.apercu)), urlsDocs(docs)]);
-  const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
+  const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.filter(x => !x.compte_rendu).map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
+  const suivi = await blocSuiviDossier(notes, photos, urlsP);
   const reguliers = lignesRegulieres(c);
   corps.innerHTML = `${chefClientHtml(c)}${prestatairesActuels(c) ? `<p style="margin:0 0 6px"><b>Prestataire :</b> ${esc(prestatairesActuels(c))}${reguliers.length ? ` <button class="btn" type="button" data-changer-presta>${ico("mission")} Changer d'intervenante</button>` : ""}</p>` : ""}${prestaPotentiels(c) ? `<p style="margin:0 0 6px"><b>Prestataire potentiel :</b> ${esc(prestaPotentiels(c))}</p>` : ""}${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("etincelle")} Analyses (${analyses.length})</h2>
       ${analyses.map(a => `<div class="ligne"><span>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`).join("")}</section>` : ""}
-    <section class="card"><h2 style="margin-top:0">${ico("dossier")} Dossiers de tâches (${taches.length})</h2>
+    ${suivi}<section class="card"><h2 style="margin-top:0">${ico("dossier")} Dossiers de tâches (${taches.length})</h2>
       ${taches.map(t => { const l = docs.filter(d => d.tache_id === t.id); return `<div class="dos-tache" data-t="${t.id}"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow-wrap:anywhere">${esc(t.dossier_nom)}</b>
           <span class="row" style="flex:none">${t.fait_le ? `<span class="tag off">fait le ${jour(t.fait_le)}</span>` : `<span class="tag">à faire</span>`}${t.dossier_drive ? `<a class="btn flat" href="https://drive.google.com/drive/folders/${esc(t.dossier_drive)}" target="_blank" rel="noopener">Drive</a>` : `<span class="tag warn">rangement en cours</span>`}<button class="btn" data-ouvre>Ouvrir</button></span></div>
         ${t.commentaire ? `<p class="small" style="white-space:pre-wrap;margin:4px 0">${ico("bulle")} ${esc(t.commentaire)}</p>` : ""}
@@ -6548,6 +6549,25 @@ async function dosEnsemble(c, corps, re) {
     const v = e.target.closest("[data-voir]"); if (v) return ouvrirDocTache(v.dataset.voir);
     const b = e.target.closest("[data-ouvre]"); if (b) ficheTache(taches.find(t => t.id === b.closest("[data-t]").dataset.t), re);
   };
+}
+/* Suivi du dossier (SQL 75) : les comptes rendus des presta, passage par passage : heures, fait, reste, photos du passage.
+   En haut, ce qui reste à faire d'après le dernier compte rendu qui en parle. Avant le SQL 75 : rien à montrer. */
+const minutesCr = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000);
+async function blocSuiviDossier(notes, photos, urlsP) {
+  const crs = notes.filter(n => n.compte_rendu).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
+  if (!crs.length) return "";
+  const ids = [...new Set(crs.map(n => n.pointage_id).filter(Boolean))];
+  const pts = ids.length ? await q(sb.from("pointages").select("id,arrivee,depart,activite").in("id", ids)) : [];
+  const pt = Object.fromEntries(pts.map(p => [p.id, p]));
+  const dernierReste = crs.find(n => n.reste), total = pts.reduce((s, p) => s + (p.depart ? minutesCr(p.arrivee, p.depart) : 0), 0);
+  const photosDe = id => photos.filter(p => id && p.pointage_id === id);
+  return `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("mission")} Suivi du dossier (${crs.length} passage${crs.length > 1 ? "s" : ""}${total ? " · " + heures(total) : ""})</h2>
+    ${dernierReste ? `<div class="card" style="border-color:var(--warn);margin-bottom:10px"><b>Reste à faire</b> <span class="muted small">· d'après ${esc(nomInterv(dernierReste.intervenante_id))}, le ${jour(dernierReste.cree_le)}</span><p style="white-space:pre-wrap;margin:4px 0 0">${esc(dernierReste.reste)}</p></div>` : ""}
+    ${crs.map(n => { const p = pt[n.pointage_id], ph = photosDe(n.pointage_id); return `<div style="border-top:1px solid var(--line);padding:10px 0">
+      <div class="row" style="justify-content:space-between"><b>${p ? jour(p.arrivee) : jour(n.cree_le)} · ${esc(nomInterv(n.intervenante_id))}</b><span class="row" style="gap:4px">${p && p.depart ? `<span class="tag">${heures(minutesCr(p.arrivee, p.depart))}</span>` : ""}${p && p.activite ? `<span class="tag off">${esc(p.activite)}</span>` : ""}</span></div>
+      <p style="white-space:pre-wrap;margin:6px 0 0"><span class="muted small">Fait :</span> ${esc(n.texte)}</p>
+      ${n.reste ? `<p style="white-space:pre-wrap;margin:4px 0 0"><span class="muted small">Reste :</span> ${esc(n.reste)}</p>` : ""}
+      ${ph.length ? `<div class="photos" style="margin-top:8px">${ph.map(x => `<figure class="photo"><img src="${esc(urlsP[x.apercu] || "")}" alt="" loading="lazy" style="display:block;width:100%;aspect-ratio:4/3;object-fit:cover"><figcaption><b>${CATS[x.categorie] || "Photo"}</b>${x.legende ? " · " + esc(x.legende) : ""}</figcaption></figure>`).join("")}</div>` : ""}</div>`; }).join("")}</section>`;
 }
 /* ---------- Analyses IA gardées dans le dossier : brouillon → proposée au client → acceptée (ses tâches passent dans la feuille de route) ---------- */
 const ETATS_ANALYSE = { brouillon: ["Brouillon", "off"], proposee: ["Proposée au client", "warn"], acceptee: ["Acceptée", ""], abandonnee: ["Abandonnée", "off"] };
@@ -7850,8 +7870,8 @@ async function dosFil(c, corps, re) {
       <p class="muted small">Reste factuel : le client peut demander à lire ce qui est écrit sur lui (RGPD). Santé : seulement le strict utile au travail.</p>
       <div><button class="btn primary" type="submit">Ajouter</button></div></form>
     <section class="card" style="margin-top:12px">${fil.length ? fil.map(x => `<div class="ligne"><span style="min-width:0">
-        <span class="muted small">${jour(x.cree_le)} ${hm(x.cree_le)} · ${x.k === "note" ? ico("stylo") + " note de " + esc(nomInterv(x.intervenante_id)) + (x.pointage_id ? " (sur un passage)" : "")
-          : "toi " + (x.partage ? `<span class="tag">partagé</span>` : `<span class="tag off">toi seul</span>`)}</span><br><span style="white-space:pre-wrap">${esc(x.texte)}</span></span>
+        <span class="muted small">${jour(x.cree_le)} ${hm(x.cree_le)} · ${x.k === "note" ? ico("stylo") + (x.compte_rendu ? " compte rendu de " : " note de ") + esc(nomInterv(x.intervenante_id)) + (x.pointage_id && !x.compte_rendu ? " (sur un passage)" : "")
+          : "toi " + (x.partage ? `<span class="tag">partagé</span>` : `<span class="tag off">toi seul</span>`)}</span><br><span style="white-space:pre-wrap">${esc(x.texte)}</span>${x.reste ? `<br><span style="white-space:pre-wrap"><span class="muted small">Reste à faire :</span> ${esc(x.reste)}</span>` : ""}</span>
         ${x.k === "com" ? `<span class="row" style="flex:none"><button class="btn flat" data-part="${x.id}">${x.partage ? "Ne plus partager" : "Partager"}</button><button class="btn flat stop" data-sup="${x.id}">Supprimer</button></span>`
           : x.vue_le ? "" : `<button class="btn" data-lu="${x.id}">Fait</button>`}</div>`).join("") : `<p class="muted">Aucun commentaire pour l'instant.</p>`}</section>`;
   corps.querySelector("#fcom").onsubmit = async e => {
