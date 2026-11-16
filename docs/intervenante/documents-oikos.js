@@ -503,7 +503,12 @@
   }
   // Les cases d'OIKOS de plusieurs modèles : un bloc par modèle (même nom de case = valeur reprise d'un bloc à l'autre)
   const blocsOikos = modeles => modeles.filter(m => (m.champs || []).some(c => c.qui === "oikos")).map(m => { const v = {}; (m.champs || []).forEach(c => { if (c.qui === "oikos" && c.defaut) v[c.cle] = c.defaut; });
-    return `<section class="card" data-oikos="${m.id}"><b>${E(m.titre)}</b> <span class="muted small">· à remplir par OIKOS</span><div class="dz-champs" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(m.champs, v, "oikos")}</div></section>`; }).join("");
+    // tout est déjà rempli par les valeurs habituelles : bloc replié sur une ligne, à ouvrir seulement pour changer
+    const cases = (m.champs || []).filter(c => c.qui === "oikos"), complet = !manque(m.champs, v, "oikos");
+    const resume = cases.filter(c => !vide(v[c.cle])).map(c => E(c.libelle) + " : " + E(v[c.cle])).join(" · ");
+    const champsZ = `<div class="dz-champs" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(m.champs, v, "oikos")}</div>`;
+    return complet ? `<details class="card" data-oikos="${m.id}" style="padding:10px 12px"><summary style="cursor:pointer"><b>${E(m.titre)}</b> <span class="dz-tag ok">${IC("ok")} déjà rempli</span> <span class="muted small">· changer pour cette fois</span></summary><p class="muted small" style="margin:6px 0 0">${resume || "—"}</p>${champsZ}</details>`
+      : `<section class="card" data-oikos="${m.id}"><b>${E(m.titre)}</b> <span class="muted small">· à remplir par OIKOS (gardé ensuite pour les prochains envois)</span>${champsZ}</section>`; }).join("");
   async function lireOikos(f, modeles) {
     const par = {};
     for (const m of modeles) {
