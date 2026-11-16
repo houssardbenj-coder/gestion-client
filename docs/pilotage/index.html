@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#2E3622">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2F3722">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co http://127.0.0.1:8770 https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://nzxphozupnmqyikitwhv.supabase.co; connect-src 'self' https://nzxphozupnmqyikitwhv.supabase.co wss://nzxphozupnmqyikitwhv.supabase.co http://127.0.0.1:8770 https://recherche-entreprises.api.gouv.fr https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>OIKOS Pilotage</title>
 <link rel="icon" href="logo-oikos.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -278,6 +278,10 @@ details.pli[open]>summary{margin-bottom:10px}
 .tf-bloc:first-child{border-top:0;margin-top:0}
 details.pli .pli-alerte{color:var(--warn-vif);display:inline-flex}
 details.pli .pli-ok{color:var(--go);display:inline-flex}
+.vf{border-top:1px solid var(--line);margin-top:10px;padding-top:4px}
+.vf-l{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:.92em}
+.vf-l>span:last-child{min-width:0;overflow-wrap:anywhere}
+.vf-ok{color:var(--go);display:inline-flex;flex:none}.vf-pb{color:var(--warn-vif);display:inline-flex;flex:none}.vf-info{color:var(--muted);display:inline-flex;flex:none}
 .dm>summary::after{content:"▾";color:var(--muted);transition:transform .2s}
 .dm:not([open])>summary::after{transform:rotate(-90deg)}
 .dm-nom{flex:1 1 260px;min-width:0}
@@ -1054,6 +1058,20 @@ async function compteurAVoir() {
 let cacheProfils = [], cacheClients = [], cacheAttrib = [], cacheDemandes = [], cachePropositions = [];
 let cacheEquipes = null, cacheSocietes = null, cacheMembres = null, cacheClientEquipes = null;   // null : SQL 52 (ou 55 pour les membres) pas lancé
 let cacheMises = null, cacheFrais = null;   // null : SQL 58 (mise à disposition) pas lancé
+let cacheVigilance = null;   // échéances de l'attestation de vigilance (SQL 72) ; null : SQL pas lancé
+const vigDe = p => { const v = (cacheVigilance || []).find(x => x.id === p.id); return v && v.concerne ? v : null; };
+async function majVigilance() { cacheVigilance = await sb.rpc("vigilance_tous").then(r => r.error ? null : r.data || [], () => null); }
+const URSSAF_VERIF = "https://www.urssaf.fr/accueil/outils-documentation/outils/verification-attestation.html";
+const lienUrssaf = libelle => /vigilance/i.test(libelle || "") ? `<a class="btn flat" href="${URSSAF_VERIF}" target="_blank" rel="noopener" title="Sur le site de l'URSSAF, taper le code de sécurité (15 caractères) écrit sur l'attestation : il dit si elle est vraie et encore valable">Vérifier sur l'URSSAF</a>` : "";
+const vigGele = p => !!(p.actif && vigDe(p) && vigDe(p).gele);
+const vigTag = p => { const v = p.actif && vigDe(p); if (!v) return "";
+  const passe = new Date() >= new Date(v.gel_le);
+  if (v.gele) return ` <span class="tag warn" title="${v.attente_le ? "Il a envoyé une attestation de vigilance que tu n'as pas validée en 7 jours : gelé jusqu'à ta validation" : "Attestation de vigilance de plus de 6 mois : gelé tout seul jusqu'à ce que tu valides la nouvelle"}">${ico("cadenas")} gelé : vigilance${v.attente_le ? " à valider" : ""}</span>`;
+  const libre = passe && v.libre_jusqu_au && new Date(v.libre_jusqu_au + "T23:59:59") >= new Date();
+  if (libre) return ` <span class="tag warn" title="Tu l'as dégelé : après cette date, gel tout seul s'il n'a pas de nouvelle attestation validée">vigilance : libre jusqu'au ${jour(v.libre_jusqu_au)}${v.attente_le ? ", attestation à valider" : ""}</span>`;
+  if (v.attente_le && new Date() >= new Date(v.demande_le)) return ` <span class="tag warn" title="Nouvelle attestation de vigilance reçue : Papiers › Voir, puis Valider ou Refuser">vigilance à valider${passe ? " avant le " + jour(v.attente_fin) : ""}</span>`;
+  if (new Date() >= new Date(v.demande_le)) return ` <span class="tag warn" title="Son appli lui demande la nouvelle attestation de vigilance">vigilance à renvoyer avant le ${jour(v.gel_le)}</span>`;
+  return ""; };
 async function chargerBase() {
   [cacheEquipes, cacheSocietes, cacheMembres] = await Promise.all([
     sb.from("equipes").select("*").order("cheffe_nom").then(r => r.error ? null : r.data || []),
@@ -1069,6 +1087,7 @@ async function chargerBase() {
     q(sb.from("attributions").select("*")),
     sb.from("demandes_devis").select("*").order("cree_le", { ascending: false }).then(r => r.data || []),
     sb.from("taches").select("demande_id,intervenante_id,texte,fait_le,commentaire").like("texte", "Proposition*").not("demande_id", "is", null).then(r => r.data || [])]);
+  await majVigilance();
 }
 const nomClient = id => (cacheClients.find(c => c.id === id) || {}).nom || "?";
 const ACTIVITES_CLIENT = ["Cours", "Ménage", "Jardinage", "Bricolage"];
@@ -3262,7 +3281,7 @@ async function vueAVoir() {
           <button class="btn" data-lu="${n.id}">Fait</button></div>`).join("") : `<p class="muted">Rien de nouveau.</p>`}</section>
       <section class="card" id="ve-papiers"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${papiersRecus.length}</span></h2>
         ${papiersRecus.length ? papiersRecus.map(d => `<div class="ligne"><span><b>${esc(nomInterv(d.intervenante_id))}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
-          <span class="row"><button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
+          <span class="row">${lienUrssaf(d.libelle)}<button class="btn" data-voir="${esc(d.fichier)}">Voir</button><button class="btn go" data-ok="${d.id}">Valider</button><button class="btn stop" data-ko="${d.id}">Refuser</button></span></div>`).join("") : `<p class="muted">Rien à vérifier.</p>`}</section>
     </div>
     ${facturesRecues.length ? `<section class="card" id="ve-factures" style="margin-top:12px"><h2 style="margin-top:0">${ico("recu")} Factures des presta à contrôler <span class="tag">${facturesRecues.length}</span></h2>
       ${facturesRecues.map(f => `<div class="ligne"><span><b>${esc(nomInterv(f.intervenante_id))}</b> · <span style="text-transform:capitalize">${esc(moisLong(f.mois))}</span><br><span class="muted small">n° ${esc(f.numero || "?")} · ${euros(f.montant)} · reçue le ${jour(f.cree_le)}</span></span>
@@ -3310,8 +3329,8 @@ async function vueAVoir() {
     if (b.dataset.dlu) { const r = sb.from("tache_documents").update({ vue_le: new Date().toISOString() });
       await maj(b.dataset.dlu === "tout" ? r.in("id", docsTaches.map(d => d.id)) : r.eq("id", b.dataset.dlu)); afficher(); }
     if (b.dataset.voir) voirFichier(b.dataset.voir);
-    if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); afficher(); }
-    if (b.dataset.ko) refuserDoc(b.dataset.ko, () => afficher());
+    if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); await majVigilance(); afficher(); }
+    if (b.dataset.ko) refuserDoc(b.dataset.ko, async () => { await majVigilance(); afficher(); });
   };
 }
 /* Garde-fou des fichiers (SQL 37) : le sas et les alertes, un bloc par presta. Rien ne s'affiche si tout va bien, sauf une ligne discrète pour les réglages. */
@@ -5004,7 +5023,7 @@ function cartePresta(p, pieces, docs) {
   return `<div class="pp-carte"><button class="card cliquable" style="text-align:left;width:100%;padding-right:48px" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}${estCheffe ? ` <span class="tag">${ico("drapeau")} ${chefMot((cacheEquipes || []).find(x => x.cheffe === p.id && x.active))}</span>` : ""}<br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
-      ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}
+      ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
       <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span>
       ${nbMises ? `<span class="tag">${ico("mission")} mis à disposition${nbMises > 1 ? " (" + nbMises + ")" : ""}</span>` : ""}</span></button>
@@ -5120,10 +5139,25 @@ async function actionArchivePresta(b, tous, retraits) {
 const pastilleCompte = p => p.actif && !p.mdp_provisoire ? `<span class="pastille" role="img" aria-label="Compte créé" title="Compte créé"></span>` : "";
 /* Gelé : il consulte son appli mais n'y touche plus, sauf ses informations et ses papiers. La base refuse le reste (SQL 30). */
 async function basculerGel(p, apres) {
+  if (!p.gele && vigGele(p)) return degelerVigilance(p, apres);   // gelé tout seul pour l'attestation de vigilance (SQL 72)
   if (!p.gele && !confirm(`Geler ${nomPers(p)} ? Il pourra regarder son appli, mais seulement modifier ses informations et envoyer ses papiers.`)) return;
   await maj(sb.from("profils").update({ gele: !p.gele }).eq("id", p.id));
   toast(p.gele ? "Dégelé : il retrouve toute son appli" : "Gelé");
   await chargerBase(); apres();
+}
+/* Dégel d'un presta gelé pour l'attestation de vigilance : libre jusqu'à la date choisie, puis la règle reprend */
+function degelerVigilance(p, apres) {
+  const dans15 = new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10), auj = new Date().toISOString().slice(0, 10);
+  fenetre(`<h2 style="margin-top:0">Dégeler ${esc(nomPers(p))}</h2>
+    <p class="muted">Il est gelé parce qu'il n'a pas d'attestation de vigilance validée depuis plus de 6 mois. Tu lui laisses jusqu'à quand ? Après cette date, il sera de nouveau gelé tout seul, sauf si tu as validé une nouvelle attestation entre-temps.</p>
+    <label class="f">Libre jusqu'au (compris)<input type="date" id="vl-date" value="${dans15}" min="${auj}"></label>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="vl-ok">${ico("ouvert")} Dégeler</button><button class="btn flat" data-fermer>Annuler</button></div>`, (el, fermer) => {
+    el.querySelector("#vl-ok").onclick = async () => {
+      const d = el.querySelector("#vl-date").value; if (!d || d < auj) return toast("Choisis une date à partir d'aujourd'hui");
+      await maj(sb.from("vigilance_libre").upsert({ intervenante_id: p.id, jusqu_au: d, decide_le: new Date().toISOString() }));
+      toast("Dégelé jusqu'au " + new Date(d).toLocaleDateString("fr-FR")); fermer(); await chargerBase(); apres();
+    };
+  });
 }
 const numeroSms = t => { const n = String(t || "").replace(/[^\d+]/g, "").replace(/^00/, "+"); return /^0\d{9}$/.test(n) ? "+33" + n.slice(1) : /^\+\d{8,15}$/.test(n) ? n : ""; };
 /* Comme pour les messages clients : le SMS s'ouvre tout prêt dans Mobile connecté, il ne reste qu'à cliquer sur Envoyer */
@@ -5204,6 +5238,120 @@ function papiersDe(p, pieces, docs) {
   return { ok, total: liste.length, manque: ok < liste.length };
 }
 const pliOuvert = {};   // Papiers / Clients confiés : repliés par défaut, restent ouverts après une action
+/* « Vérifier ses infos » : SIRET, TVA, état de l'entreprise et dates des papiers.
+   Annuaire officiel (recherche-entreprises.api.gouv.fr, public, sans clé : seul le SIRET part). Rien n'est écrit sans un clic. */
+const NAF_LIBELLES = { "81.21Z": "nettoyage courant des bâtiments", "81.22Z": "autres activités de nettoyage", "81.29B": "autres activités de nettoyage", "81.30Z": "aménagement paysager (jardinage)",
+  "88.10A": "aide à domicile", "96.09Z": "autres services personnels", "85.59B": "autres enseignements (cours)", "85.59A": "formation continue d'adultes",
+  "43.39Z": "autres travaux de finition (bricolage)", "43.34Z": "peinture et vitrerie", "43.22A": "plomberie", "43.21A": "électricité", "81.10Z": "services combinés aux bâtiments" };
+const luhnOk = s => { let t = 0; for (let i = 0; i < s.length; i++) { let n = +s[s.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } t += n; } return t % 10 === 0; };
+const siretValide = s => /^\d{14}$/.test(s) && (luhnOk(s) || (s.startsWith("356000000") && [...s].reduce((a, c) => a + +c, 0) % 5 === 0));
+const tvaDuSiren = siren => "FR" + String((12 + 3 * (Number(siren) % 97)) % 97).padStart(2, "0") + siren;
+async function annuaireEntreprise(siret) {
+  const r = await fetch("https://recherche-entreprises.api.gouv.fr/search?q=" + encodeURIComponent(siret) + "&per_page=1");
+  if (!r.ok) throw new Error(r.status === 429 ? "annuaire trop sollicité, réessaie dans une minute" : "annuaire officiel indisponible (" + r.status + ")");
+  const j = await r.json();
+  return (j.results || []).find(x => x.siren === siret.slice(0, 9)) || null;
+}
+async function verifierInfosPresta(boite, p, docs, pieces, recharger) {
+  boite.innerHTML = `<p class="muted small">${ico("loupe")} Vérification dans l'annuaire officiel des entreprises…</p>`;
+  const L = [], ok = t => L.push(["ok", t]), pb = t => L.push(["warn", t]), info = t => L.push(["info", t]);
+  const sousTraitant = p.statut !== "salarie";
+  const dateFr = d => d ? new Date(d).toLocaleDateString("fr-FR") : "";
+  let nouveauSiret = null;
+  // 1. Son SIRET dans l'annuaire
+  const siret = String(p.siret || "").replace(/[\s.]+/g, "");
+  if (!sousTraitant) info("Salarié : pas de SIRET à vérifier.");
+  else if (!siret) pb("Pas de SIRET dans sa fiche" + (p.ae_a_creer ? " (OIKOS crée son auto-entreprise : à écrire dès qu'il est connu)." : "."));
+  else if (/en ?cours/i.test(siret)) info("SIRET « en cours » : son auto-entreprise n'est pas encore immatriculée.");
+  else if (!siretValide(siret)) pb(`SIRET « ${esc(p.siret)} » mal écrit : un SIRET a 14 chiffres et celui-ci ne passe pas le contrôle (faute de frappe ?).`);
+  else {
+    let f = null;
+    try { f = await annuaireEntreprise(siret); }
+    catch (x) { L.push(["warn", "Annuaire non joint : " + esc(x.message || x) + ". Les papiers sont vérifiés quand même."]); f = undefined; }
+    if (f === null) pb(`SIRET ${siret} introuvable dans l'annuaire officiel : faute de frappe, ou immatriculation toute récente.`);
+    else if (f) {
+      const cache = f.statut_diffusion === "P" || /NON-DIFFUSIBLE/i.test(f.nom_complet || "");
+      const etab = (f.matching_etablissements || []).find(e => e.siret === siret) || (f.siege && f.siege.siret === siret ? f.siege : null);
+      if (f.etat_administratif === "C") pb(`Entreprise <b>fermée</b>${f.date_fermeture ? " le " + dateFr(f.date_fermeture) : ""} : il ne peut plus facturer avec ce SIRET.`);
+      else ok(`Entreprise en activité${f.date_creation ? ", créée le " + dateFr(f.date_creation) : ""}.`);
+      if (etab && etab.etat_administratif === "F" && f.etat_administratif === "C") { /* déjà dit : entreprise fermée */ }
+      else if (etab && etab.etat_administratif === "F") {
+        const siege = f.siege && f.siege.etat_administratif === "A" && f.siege.siret !== siret ? f.siege.siret : null;
+        if (siege) nouveauSiret = siege;
+        pb(`Ce SIRET est <b>fermé</b>${etab.date_fermeture ? " depuis le " + dateFr(etab.date_fermeture) : ""} : il a sans doute déménagé.${siege ? ` Son SIRET actuel est <b>${siege}</b>.` : ""}`);
+      } else if (etab) ok(`SIRET ${siret} en activité.`);
+      else info(`Entreprise retrouvée (SIREN ${f.siren}), mais pas cet établissement précis : à regarder sur l'annuaire.`);
+      // Le nom : est-ce bien son entreprise ?
+      if (cache) info("Il a demandé que son nom et son adresse ne soient pas publics : l'annuaire ne les montre pas, vérifie avec son avis de situation.");
+      else if (p.nom) {
+        const noms = [f.nom_complet, f.nom_raison_sociale, ...(f.dirigeants || []).map(d => (d.nom || "") + " " + (d.prenoms || ""))].map(norm).join(" | ");
+        if (norm(p.nom).split(" ").filter(m => m.length > 1).some(m => noms.includes(m))) ok(`Au nom de <b>${esc(f.nom_complet)}</b>.`);
+        else pb(`L'annuaire donne le nom <b>${esc(f.nom_complet)}</b>, pas « ${esc(nomPers(p))} » : est-ce bien son entreprise ?`);
+      }
+      // L'adresse : a-t-il déménagé ?
+      const ici = etab || f.siege || {}, cpFiche = (String(p.adresse || "").match(/\b\d{5}\b/g) || []).pop();
+      if (!cache && ici.adresse) {
+        if (cpFiche && ici.code_postal && cpFiche !== ici.code_postal) pb(`Adresse de l'entreprise : ${esc(ici.adresse)} — sa fiche dit ${cpFiche}. S'il a déménagé, il doit le déclarer sur formalites.entreprises.gouv.fr (sinon courriers URSSAF perdus).`);
+        else ok(`Adresse de l'entreprise : ${esc(ici.adresse)}.`);
+      }
+      const naf = ici.activite_principale || f.activite_principale;
+      if (naf) info(`Activité déclarée : ${esc(naf)}${NAF_LIBELLES[naf] ? " (" + NAF_LIBELLES[naf] + ")" : ""}${p.activites && p.activites.length ? " — chez OIKOS : " + esc(p.activites.join(", ")) : ""}.`);
+      if (f.complements && f.complements.est_entrepreneur_individuel) ok("Entrepreneur individuel (auto-entreprise possible).");
+      else info("Ce n'est pas une entreprise individuelle : c'est une société.");
+      const tva = (f.tva && f.tva[0]) || tvaDuSiren(f.siren);
+      info(`N° de TVA intracommunautaire : <b>${esc(tva)}</b>. En auto-entreprise il est le plus souvent en franchise (« TVA non applicable, art. 293 B du CGI » sur ses factures) : ce numéro ne sert que s'il facture la TVA. <a href="https://ec.europa.eu/taxation_customs/vies/#/vat-validation" target="_blank" rel="noopener">Vérifier qu'il est actif (VIES)</a>`);
+      if (f.date_mise_a_jour_insee) info(`Annuaire mis à jour le ${dateFr(f.date_mise_a_jour_insee)}. <a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${f.siren}" target="_blank" rel="noopener">Voir sa fiche complète</a>`);
+    }
+  }
+  // 2. Sa société du réseau (si elle n'est pas OIKOS) : SIRET et TVA écrits dans la fiche du chef
+  const so = p.societe && p.societe !== "oikos" ? (cacheSocietes || []).find(s => s.code === p.societe) : null;
+  if (so) {
+    const sS = String(so.siret || "").replace(/\s+/g, "");
+    if (!sS) info(`Société ${esc(so.nom || so.code)} : SIRET pas encore écrit (fiche du chef).`);
+    else if (!siretValide(sS)) pb(`Société ${esc(so.nom || so.code)} : SIRET « ${esc(sS)} » mal écrit (fiche du chef).`);
+    else {
+      try {
+        const fs = await annuaireEntreprise(sS);
+        if (!fs) pb(`Société ${esc(so.nom || so.code)} : SIRET ${sS} introuvable dans l'annuaire.`);
+        else if (fs.etat_administratif === "C") pb(`Société ${esc(so.nom || so.code)} <b>fermée</b>${fs.date_fermeture ? " le " + dateFr(fs.date_fermeture) : ""}.`);
+        else ok(`Société ${esc(fs.nom_complet || so.nom)} en activité.`);
+      } catch (x) { pb(`Société ${esc(so.nom || so.code)} : annuaire non joint (${esc(x.message || x)}).`); }
+      const attendu = tvaDuSiren(sS.slice(0, 9)), ecrit = String(so.tva || "").replace(/\s+/g, "").toUpperCase();
+      if (ecrit && ecrit !== attendu) pb(`Société ${esc(so.nom || so.code)} : le n° de TVA écrit (${esc(ecrit)}) ne correspond pas à son SIRET, il devrait être <b>${attendu}</b> (à corriger dans la fiche du chef).`);
+      else if (ecrit) ok(`Société ${esc(so.nom || so.code)} : n° de TVA ${esc(ecrit)} cohérent avec le SIRET.`);
+    }
+  }
+  // 3. Les papiers qui se périment
+  const dernier = re => { const x = pieces.find(k => re.test(norm(k.libelle))); if (!x) return undefined; return docs.find(d => d.piece_id === x.id && d.etat !== "refuse") || null; };
+  const age = d => (Date.now() - new Date(d.cree_le)) / 864e5;
+  if (sousTraitant) {
+    const vig = dernier(/vigilance/), rc = dernier(/rc pro|responsabilite/), avis = dernier(/avis de situation/);
+    if (vig === null) pb("Attestation de vigilance URSSAF pas envoyée (obligatoire dès 5 000 € de travaux dans l'année, à redemander tous les 6 mois).");
+    else if (vigDe(p)) { const v = vigDe(p), d5 = new Date() >= new Date(v.demande_le);
+      (v.gele || d5 ? pb : ok)(v.gele ? `Attestation de vigilance : <b>compte gelé</b> (${v.attente_le ? "attestation envoyée le " + dateFr(v.attente_le) + " à valider" : "plus de 6 mois sans attestation validée"}).`
+        : v.libre_jusqu_au && new Date() >= new Date(v.gel_le) && new Date(v.libre_jusqu_au + "T23:59:59") >= new Date() ? `Attestation de vigilance en retard : tu l'as dégelé jusqu'au ${dateFr(v.libre_jusqu_au)}${v.attente_le ? " ; une attestation envoyée le " + dateFr(v.attente_le) + " est <b>à valider</b>" : ""}.`
+        : v.attente_le && d5 ? `Nouvelle attestation de vigilance envoyée le ${dateFr(v.attente_le)} : <b>à valider</b>${new Date() >= new Date(v.gel_le) ? " avant le " + dateFr(v.attente_fin) + " (sinon gel)" : ""}.`
+        : v.libre_jusqu_au && new Date() >= new Date(v.gel_le) ? `Attestation de vigilance en retard : tu l'as dégelé jusqu'au ${dateFr(v.libre_jusqu_au)}.`
+        : d5 ? `Attestation de vigilance validée le ${dateFr(v.depuis)} : 5 mois passés, son appli lui demande la nouvelle (gel le ${dateFr(v.gel_le)}).`
+        : `Attestation de vigilance validée le ${dateFr(v.depuis)} : bonne jusqu'au ${dateFr(v.gel_le)} (redemandée toute seule le ${dateFr(v.demande_le)}).`); }
+    else if (vig) { const m5 = age(vig) > 152, m6 = age(vig) > 183;
+      (m5 ? pb : ok)(`Attestation de vigilance reçue le ${dateFr(vig.cree_le)}${m6 ? " : plus de 6 mois, <b>compte gelé</b> jusqu'à l'envoi de la nouvelle" : m5 ? " : 5 mois passés, son appli lui demande la nouvelle (gel le " + dateFr(vigDe(p) ? vigDe(p).gel_le : new Date(vig.cree_le).getTime() + 183 * 864e5) + ")" : " : encore bonne (redemandée tout seul à 5 mois)"}${vig.etat === "recu" ? " — pas encore validée" : ""}.`); }
+    if (rc === null) pb("Attestation d'assurance RC Pro pas envoyée.");
+    else if (rc) (age(rc) > 365 ? pb : ok)(`Attestation RC Pro reçue le ${dateFr(rc.cree_le)}${age(rc) > 365 ? " : plus d'un an, <b>à redemander</b> (elle se renouvelle chaque année)" : ""}.`);
+    if (avis === null && siret) pb("Avis de situation SIRET pas envoyé.");
+  }
+  const nb = L.filter(x => x[0] === "warn").length;
+  const marque = { ok: `<span class="vf-ok">${ico("ok")}</span>`, warn: `<span class="vf-pb">${ico("alerte")}</span>`, info: `<span class="vf-info">${ico("loupe")}</span>` };
+  boite.innerHTML = `<div class="vf"><p style="margin:8px 0 4px"><b>${nb ? nb + " point" + (nb > 1 ? "s" : "") + " à regarder" : "Tout est à jour"}</b> <span class="muted small">· vérifié à ${hm(new Date())}</span></p>
+    ${L.map(([e, t]) => `<div class="vf-l">${marque[e]}<span>${t}</span></div>`).join("")}
+    ${nouveauSiret ? `<div class="row" style="margin-top:8px"><button class="btn go" type="button" data-vf-siret="${nouveauSiret}">Mettre ${nouveauSiret} dans sa fiche</button></div>` : ""}</div>`;
+  const b = boite.querySelector("[data-vf-siret]");
+  if (b) b.onclick = async () => {
+    if (!confirm(`Remplacer son SIRET ${siret} par ${nouveauSiret} dans sa fiche ?`)) return;
+    await maj(sb.from("profils").update({ siret: nouveauSiret }).eq("id", p.id));
+    toast("SIRET mis à jour"); await chargerBase(); recharger();
+  };
+}
 async function ficheIntervenante(id) {
   const p = cacheProfils.find(x => x.id === id); if (!p) return;
   const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
@@ -5225,8 +5373,8 @@ async function ficheIntervenante(id) {
   const etatPap = papiersDe(p, pieces, docs);
   const aValider = docs.filter(d => d.piece_id && d.etat === "recu").length;
   const champ =(k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
-  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn">${ico("cadenas")} gelé</span>` : ""}</h1>
-      <span class="row">${p.actif ? `<button class="btn ${p.gele ? "go" : ""}" id="gel" title="Gelé : il consulte son appli, mais ne peut que modifier ses informations et envoyer ses papiers">${p.gele ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}<button class="btn flat" data-fermer>Fermer</button></span></div>
+  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}</h1>
+      <span class="row">${p.actif ? `<button class="btn ${p.gele || vigGele(p) ? "go" : ""}" id="gel" title="Gelé : il consulte son appli, mais ne peut que modifier ses informations et envoyer ses papiers">${p.gele || vigGele(p) ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}<button class="btn flat" data-fermer>Fermer</button></span></div>
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
         <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
@@ -5241,10 +5389,11 @@ async function ficheIntervenante(id) {
         <div class="row">${p.feuille_heures ? `<a class="btn" href="${esc(p.feuille_heures)}" target="_blank" rel="noopener">${ico("reporting")} Feuille d'heures</a>` : `<span class="muted small">Feuille d'heures : créée par le pont Google</span>`}
         ${p.dossier_drive ? `<a class="btn" href="https://drive.google.com/drive/folders/${esc(p.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Dossier Drive</a>` : ""}</div>
         <h3>Heures du mois</h3><p><b>${heures(total)}</b> <span class="muted small">· ${pts.length} passage(s)</span></p></section>
-      <section class="card"><h3 style="margin-top:0">Ses informations</h3>
+      <section class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Ses informations</h3>
+          <button class="btn flat" type="button" id="vf-btn" title="Contrôle son SIRET, son n° de TVA et l'état de son entreprise dans l'annuaire officiel, et la date de ses papiers">${ico("loupe")} Vérifier ses infos</button></div>
         ${champ("email", "E-mail")}${champ("telephone", "Téléphone")}${champ("adresse", "Adresse")}${champ("date_naissance", "Naissance")}${champ("siret", "SIRET")}
         ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
-        ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par lui.</p>`}</section>
+        ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par lui.</p>`}<div id="vf"></div></section>
     </div>
     <details class="card pli" data-pli="benefice" ${pliOuvert.benefice !== false ? "open" : ""}><summary>${ico("euro")} Bénéfice du mois <span class="tag">toi seul</span></summary><div id="bnp"></div></details>
     <section class="card"><h3 style="margin-top:0">Ses passages ${aide("Comme sa feuille d'heures, mais relié à son appli : ce que tu modifies ici change tout de suite dans son appli (marqué « corrigé par OIKOS »), et le pont réécrit la même ligne de sa feuille d'heures dans les 5 minutes.")}</h3>
@@ -5254,7 +5403,7 @@ async function ficheIntervenante(id) {
         ${aValider ? `<span class="tag">${aValider} à valider</span>` : ""}${props.length ? `<span class="tag">${props.length} trouvé${props.length > 1 ? "s" : ""} dans le Drive</span>` : ""}</summary>
       ${liste.map(x => { const d = docs.find(k => k.piece_id === x.id); return `<div class="ligne"><span>${esc(x.libelle)}${x.obligatoire ? "" : ` <span class="muted small">(facultatif)</span>`}</span>
         <span class="row">${!d ? `<span class="tag warn">pas envoyé</span>` : `<span class="tag ${d.etat === "refuse" ? "warn" : ""}">${{ recu: "reçu", valide: "✓ validé", refuse: "refusé" }[d.etat]}</span>
-        <button class="btn" data-voir="${esc(lien(d))}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
+        ${d.etat === "recu" ? lienUrssaf(x.libelle) : ""}<button class="btn" data-voir="${esc(lien(d))}">Voir</button>${d.etat !== "valide" ? `<button class="btn go" data-ok="${d.id}">Valider</button>` : ""}${d.etat !== "refuse" ? `<button class="btn stop" data-ko="${d.id}">Refuser</button>` : ""}`}</span></div>`; }).join("")}
       ${docs.filter(d => !d.piece_id && !d.facture_mois).map(d => `<div class="ligne"><span>${esc(d.libelle)} <span class="muted small">(autre)</span></span><span class="row"><button class="btn" data-voir="${esc(lien(d))}">Voir</button></span></div>`).join("")}
       <div class="row" style="justify-content:space-between;margin-top:10px">
         <span class="muted small">${enCours ? ico("loupe") + " Recherche demandée : résultat dans 5 minutes environ (pont Google)." : p.scan_message ? "Dernière recherche" + (p.scan_fait_le ? " le " + jour(p.scan_fait_le) : "") + " : " + esc(p.scan_message) : "Papiers déjà rangés dans son dossier Drive ?"}</span>
@@ -5283,6 +5432,7 @@ async function ficheIntervenante(id) {
       if (await changerZone(a, s.value)) recharger(); else s.value = zoneAu(a, tfAujourdhui()) || "";
     });
     if (el.querySelector("#fm")) facturesDuPresta(el.querySelector("#fm"), p, factures, docs, recharger);
+    el.querySelector("#vf-btn").onclick = () => verifierInfosPresta(el.querySelector("#vf"), p, docs, pieces, recharger).catch(x => { el.querySelector("#vf").innerHTML = `<p class="err">${esc(x.message || x)}</p>`; });
     if (el.querySelector("#eqp-changer")) el.querySelector("#eqp-changer").onclick = () => { fermer(); changerEquipe(p); };
     if (el.querySelector("#gel")) el.querySelector("#gel").onclick = () => basculerGel(p, () => { recharger(); afficher(); });
     el.querySelector("#enr").onclick = async () => {
@@ -5315,8 +5465,8 @@ async function ficheIntervenante(id) {
         toast("« " + piece.libelle + " » validé : l'appli ne le lui demande plus"); return recharger();
       }
       if (b.dataset.voir) voirFichier(b.dataset.voir);
-      if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); recharger(); }
-      if (b.dataset.ko) refuserDoc(b.dataset.ko, recharger);
+      if (b.dataset.ok) { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", b.dataset.ok)); await majVigilance(); recharger(); }
+      if (b.dataset.ko) refuserDoc(b.dataset.ko, async () => { await majVigilance(); recharger(); });
       if (b.dataset.retire) { const hier = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
         await maj(sb.from("attributions").update({ fin: hier }).eq("id", b.dataset.retire)); toast("Client retiré"); recharger(); }
     };
