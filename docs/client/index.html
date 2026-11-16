@@ -233,6 +233,7 @@ h3{color:var(--accent)}
 <div id="app"><div class="charge"><svg viewBox="0 0 20 18" aria-label="Chargement"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" integrity="sha384-2zrRDgDHSYB/GN3nFW3fsZXoxEhKIr3N2h63Tc6DEOB9JJdFIu8xMJT2Cph/gBil" crossorigin="anonymous"></script>
+<script src="documents-oikos.js"></script><!-- documents à lire et signer (SQL 65) -->
 <script>
 /* ===================== Réglages ===================== */
 /* Adresse et clé PUBLIQUE du projet (faites pour être dans l'appli : la base protège les données elle-même) */
@@ -970,6 +971,7 @@ function vueDocuments(z) {
   z.onclick = e => { const b = e.target.closest("[data-doc]"); if (!b) return; const d = D.documents.find(x => x.id === b.dataset.doc); if (!d) return;
     if (d.chemin) ouvrirDocument(d); else if (/^https:\/\//.test(d.lien || "")) window.open(d.lien, "_blank", "noopener"); };
   remplirVignettes(docs);
+  if (window.DocsOikos) DocsOikos.client(z);   // en haut : documents à lire et signer (SQL 65)
 }
 /* Les vignettes se fabriquent l'une après l'autre : photo telle quelle, première page pour un PDF */
 async function remplirVignettes(docs) {
