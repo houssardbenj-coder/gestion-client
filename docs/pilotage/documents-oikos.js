@@ -16,7 +16,9 @@
   const CATEGORIES = { contrat: "Contrat", mandat: "Mandat", reglement: "Règlement", information: "Information", formulaire: "Formulaire", autre: "Autre" };
   const POUR = { presta: "Presta", chef: "Chef de réseau", client: "Client" };
   const MOTIFS = { introuvable: "Ce document n'est plus disponible.", deja_fait: "Ce document est déjà signé ou refusé.", lecture_seule: "Votre espace est en lecture seule : demandez à OIKOS.",
-    nom: "Écris ton nom et ton prénom en entier.", signature: "Signe dans le cadre avec le doigt (ou la souris).", case_vide: "Une case obligatoire est vide." };
+    nom: "Écris ton nom et ton prénom en entier.", signature: "Signe dans le cadre avec le doigt (ou la souris).", case_vide: "Une case obligatoire est vide.",
+    code_requis: "Demande d'abord ton code par e-mail.", code_expire: "Ce code n'est plus valable : demande un nouveau code.", code_faux: "Code faux.",
+    trop_tot: "Attends une minute avant de redemander un code.", trop_de_codes: "Trop de codes demandés : réessaie dans une heure.", pas_email: "Ton compte n'a pas d'adresse e-mail : préviens OIKOS." };
 
   /* ---------- Styles (une fois) ---------- */
   function styles() {
@@ -56,15 +58,15 @@
       if (!c || !/^[a-z0-9_]{1,40}$/.test(c.cle || "")) continue;
       const v = (valeurs || {})[c.cle]; let s;
       if (c.type === "cases") s = (c.choix || []).map(ch => (Array.isArray(v) && v.includes(ch) ? "☑ " : "☐ ") + ch).join("\n");
-      else if (vide(v)) s = c.vide || (marquer ? "\u0001" + (c.libelle || c.cle) + "\u0002" : "……");
+      else if (vide(v)) s = c.vide || (marquer ? "\u0001" + c.cle + "\u0003" + (c.libelle || c.cle) + "\u0002" : "……");
       else if (Array.isArray(v)) s = v.join(", ");
       else if (c.type === "case") s = v === true ? "oui" : "non";
       else s = String(v);
       t = t.split("{{" + c.cle + "}}").join(s.replace(/\{\{|\}\}/g, ""));
     }
-    return t.split("{{date_signature}}").join(signeLe ? new Date(signeLe).toLocaleDateString("fr-FR") : "……");
+    return t.split("{{date_signature}}").join(signeLe ? new Date(signeLe).toLocaleDateString("fr-FR") : marquer ? "\u0001\u0003date du jour, ajoutée à la signature\u0002" : "……");
   }
-  const enLigne = s => E(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\u0001(.*?)\u0002/g, "<mark>$1</mark>");
+  const enLigne = s => E(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\u0001([a-z0-9_]*)\u0003(.*?)\u0002/g, (x, k, t) => k ? `<mark data-aller="${k}" title="Toucher pour remplir" style="cursor:pointer">${t}</mark>` : `<mark>${t}</mark>`);
   function miseEnForme(t) {
     return String(t || "").replace(/\r/g, "").split(/\n{2,}/).map(b => {
       b = b.replace(/^\n+|\n+$/g, ""); if (!b) return "";
@@ -136,13 +138,18 @@
       <p class="muted small" style="margin:0 0 12px">${fait ? (d.etat === "fait" ? (d.action === "signer" ? "Signé" : d.action === "accepter" ? "Accepté" : "Lu") + " le " + heureFr(d.fait_le) : "Refusé le " + heureFr(d.fait_le)) : "Document " + ACTIONS[d.action] + (d.echeance ? " avant le " + dateFr(d.echeance) : "")}</p>
       ${!fait && aRemplir ? `<section class="card" style="margin-bottom:12px"><b>${tu("À remplir par toi", "À remplir")}</b><p class="muted small" style="margin:2px 0 10px">${tu("Ce que tu écris apparaît dans le document en dessous.", "Ce que vous écrivez apparaît dans le document en dessous.")}</p><div class="dz-champs" id="dz-champs">${champsHtml(d.champs, valeurs, "destinataire")}</div></section>` : ""}
       ${d.fichier ? `<button class="btn" type="button" data-fichier style="margin-bottom:10px">${IC("doc")} Ouvrir le document joint</button>` : ""}
+      ${d.contenu && !fait && aRemplir ? `<p class="small" style="margin:0 0 6px">${tu("Les mots surlignés en jaune sont tes cases : touche-les pour les remplir.", "Les mots surlignés en jaune sont vos cases : touchez-les pour les remplir.")}</p>` : ""}
       ${d.contenu ? `<div class="dz-doc" id="dz-texte"></div>` : ""}
       ${fait && d.pdf_chemin ? `<button class="btn" type="button" data-pdf style="margin-top:10px">${IC("telecharger")} Télécharger le PDF signé</button>` : ""}
       ${fait && !d.pdf_chemin && d.etat === "fait" && d.pdf_etat ? `<p class="muted small" style="margin-top:10px">Le PDF signé arrive dans quelques minutes.</p>` : ""}
       ${fait ? "" : `<section class="card dz-actions">
         ${d.action === "signer" ? `<label class="dz-champs"><span>${tu("Ton nom et ton prénom", "Votre nom et votre prénom")}</span><input type="text" id="dz-nom" autocomplete="name"></label>
           <div class="dz-pad" id="dz-pad"></div><div class="dz-boutons"><button class="btn flat" type="button" data-effacer>Effacer la signature</button></div>` : ""}
-        ${d.action !== "lire" ? `<label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="dz-lu"><span>${tu("J'ai lu ce document en entier et je l'accepte.", "J'ai lu ce document en entier et je l'accepte.")}</span></label>` : ""}
+        ${d.action !== "lire" ? `<label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="dz-lu"><span>${tu("J'ai lu ce document en entier et je l'accepte.", "J'ai lu ce document en entier et je l'accepte.")}</span></label>
+          <div class="dz-champs" style="gap:6px"><b style="font-size:14px">${tu("Ton code de confirmation", "Votre code de confirmation")}</b>
+            <span class="dz-aide">${tu("Pour être sûr que c'est bien toi, OIKOS t'envoie un code à 6 chiffres sur ton adresse e-mail.", "Pour être sûr que c'est bien vous, OIKOS vous envoie un code à 6 chiffres sur votre adresse e-mail.")}</span>
+            <div class="dz-boutons" style="align-items:center"><button class="btn" type="button" data-code>${IC("bulle")} ${tu("Recevoir mon code par e-mail", "Recevoir mon code par e-mail")}</button><span class="small" id="dz-code-info"></span></div>
+            <input type="text" id="dz-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 chiffres" style="max-width:180px;letter-spacing:4px;font-size:18px"></div>` : ""}
         <button class="btn primary" type="button" data-valider>${d.action === "signer" ? "Signer" : d.action === "accepter" ? "J'accepte" : "J'ai lu"}</button>
         ${d.action !== "lire" ? `<button class="btn flat" type="button" data-refuser>${tu("Je ne suis pas d'accord", "Je ne suis pas d'accord")}</button>` : ""}
         <p class="muted small" style="margin:0">${d.action === "signer" ? tu("Ta signature, l'heure et une empreinte du texte sont gardées par OIKOS : elles valent signature. Tu recevras le PDF signé ici.", "Votre signature, l'heure et une empreinte du texte sont gardées par OIKOS : elles valent signature. Le PDF signé arrivera dans vos documents.") : ""}</p></section>`}`;
@@ -153,6 +160,13 @@
     if (zc) zc.addEventListener("input", () => { valeurs = Object.assign({}, d.valeurs || {}, lireChamps(zc)); dessiner(); });
     const sig = cible.querySelector("#dz-pad") ? pad(cible.querySelector("#dz-pad")) : null;
     cible.onclick = async e => {
+      const mk = e.target.closest("mark[data-aller]");
+      if (mk && zc) {   // mot surligné : on remonte à sa case
+        const champ = zc.querySelector(`[data-cle="${mk.dataset.aller}"]`), cadre = champ && (champ.closest("label") || champ.closest("div"));
+        if (cadre) { cadre.scrollIntoView({ behavior: "smooth", block: "center" }); const i = champ.matches("input,select,textarea") ? champ : champ.querySelector("input"); if (i) setTimeout(() => i.focus({ preventScroll: true }), 350);
+          cadre.style.transition = "background .6s"; cadre.style.background = "var(--warn-soft,#F4E9CC)"; setTimeout(() => { cadre.style.background = ""; }, 1400); }
+        return;
+      }
       const b = e.target.closest("button"); if (!b) return;
       if (b.hasAttribute("data-retour")) return retour();
       if (b.hasAttribute("data-effacer")) return sig && sig.effacer();
@@ -163,9 +177,20 @@
       if (b.hasAttribute("data-refuser")) {
         const motif = prompt(tu("Dis à OIKOS ce qui ne va pas (facultatif) :", "Dites à OIKOS ce qui ne va pas (facultatif) :"), "");
         if (motif === null) return;
-        const r = await sb.rpc("doc_repondre", { p_id: d.id, p_valeurs: {}, p_nom: null, p_signature: null, p_accepte: false, p_motif: motif });
+        const r = await sb.rpc("doc_repondre", { p_id: d.id, p_valeurs: {}, p_nom: null, p_signature: null, p_accepte: false, p_motif: motif, p_code: null });
         if (r.error || (r.data && r.data.ok === false)) return toast(r.error ? "Pas envoyé : " + r.error.message : MOTIFS[r.data.motif] || "Pas envoyé");
         toast("OIKOS est prévenu."); return retour();
+      }
+      if (b.hasAttribute("data-code")) {   // SQL 70 : le pont l'envoie depuis la boîte OIKOS, en moins d'une minute
+        b.disabled = true;
+        const r = await sb.rpc("doc_demander_code", { p_id: d.id });
+        const info = cible.querySelector("#dz-code-info");
+        if (r.error || (r.data && r.data.ok === false)) { b.disabled = r.data && r.data.motif === "trop_tot"; setTimeout(() => { b.disabled = false; }, 60000); return toast(r.error ? "Pas envoyé : " + r.error.message : MOTIFS[r.data.motif] || "Pas envoyé"); }
+        info.textContent = tu("Code envoyé à ", "Code envoyé à ") + r.data.email + tu(" : il arrive en moins de 2 minutes (regarde aussi les indésirables).", " : il arrive en moins de 2 minutes (regardez aussi les indésirables).");
+        b.textContent = tu("Renvoyer un code", "Renvoyer un code");
+        setTimeout(() => { b.disabled = false; }, 60000);
+        const c = cible.querySelector("#dz-code"); if (c) c.focus();
+        return;
       }
       if (b.hasAttribute("data-valider")) {
         const v = zc ? lireChamps(zc) : {};
@@ -178,11 +203,14 @@
           image = sig && sig.image(); if (!image) return toast(MOTIFS.signature);
         }
         if (d.action !== "lire" && !cible.querySelector("#dz-lu").checked) return toast(tu("Coche « J'ai lu ce document… » pour continuer.", "Cochez « J'ai lu ce document… » pour continuer."));
+        const code = d.action !== "lire" ? (cible.querySelector("#dz-code").value || "").replace(/\D/g, "") : null;
+        if (d.action !== "lire" && code.length !== 6) { cible.querySelector("#dz-code").focus(); return toast(cible.querySelector("#dz-code-info").textContent ? tu("Tape le code à 6 chiffres reçu par e-mail.", "Tapez le code à 6 chiffres reçu par e-mail.") : MOTIFS.code_requis); }
         b.disabled = true;
-        const r = await sb.rpc("doc_repondre", { p_id: d.id, p_valeurs: v, p_nom: nom, p_signature: image, p_accepte: true, p_motif: null });
+        const r = await sb.rpc("doc_repondre", { p_id: d.id, p_valeurs: v, p_nom: nom, p_signature: image, p_accepte: true, p_motif: null, p_code: code });
         b.disabled = false;
         if (r.error) return toast("Pas enregistré : " + r.error.message);
-        if (r.data && r.data.ok === false) return toast(r.data.motif === "case_vide" ? "Case à remplir : " + (r.data.libelle || "") : MOTIFS[r.data.motif] || "Pas enregistré");
+        if (r.data && r.data.ok === false) return toast(r.data.motif === "case_vide" ? "Case à remplir : " + (r.data.libelle || "")
+          : r.data.motif === "code_faux" ? MOTIFS.code_faux + (r.data.reste > 0 ? tu(" Encore ", " Encore ") + r.data.reste + tu(" essai(s).", " essai(s).") : " " + MOTIFS.code_expire) : MOTIFS[r.data.motif] || "Pas enregistré");
         toast(d.action === "signer" ? "Signé, merci !" : "Enregistré, merci !"); return retour();
       }
     };
