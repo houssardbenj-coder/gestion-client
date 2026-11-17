@@ -18,7 +18,7 @@
   const MOTIFS = { introuvable: "Ce document n'est plus disponible.", deja_fait: "Ce document est déjà signé ou refusé.", lecture_seule: "Votre espace est en lecture seule : demandez à OIKOS.",
     nom: "Écris ton nom et ton prénom en entier.", signature: "Signe dans le cadre avec le doigt (ou la souris).", case_vide: "Une case obligatoire est vide.",
     code_requis: "Demande d'abord ton code par e-mail.", code_expire: "Ce code n'est plus valable : demande un nouveau code.", code_faux: "Code faux.",
-    trop_tot: "Attends une minute avant de redemander un code.", trop_de_codes: "Trop de codes demandés : réessaie dans une heure.", pas_email: "Ton compte n'a pas d'adresse e-mail : préviens OIKOS." };
+    modifie: "OIKOS vient de modifier ce document : relis la nouvelle version avant de signer.", trop_tot: "Attends une minute avant de redemander un code.", trop_de_codes: "Trop de codes demandés : réessaie dans une heure.", pas_email: "Ton compte n'a pas d'adresse e-mail : préviens OIKOS." };
 
   /* ---------- Styles (une fois) ---------- */
   function styles() {
@@ -207,9 +207,16 @@
         const code = d.action !== "lire" ? (cible.querySelector("#dz-code").value || "").replace(/\D/g, "") : null;
         if (d.action !== "lire" && code.length !== 6) { cible.querySelector("#dz-code").focus(); return toast(cible.querySelector("#dz-code-info").textContent ? tu("Tape le code à 6 chiffres reçu par e-mail.", "Tapez le code à 6 chiffres reçu par e-mail.") : MOTIFS.code_requis); }
         b.disabled = true;
-        const r = await sb.rpc("doc_repondre", { p_id: d.id, p_valeurs: v, p_nom: nom, p_signature: image, p_accepte: true, p_motif: null, p_code: code });
+        const args = { p_id: d.id, p_valeurs: v, p_nom: nom, p_signature: image, p_accepte: true, p_motif: null, p_code: code };
+        if (d.revision != null) args.p_revision = d.revision;   // SQL 76 : refusé si OIKOS a modifié le texte depuis l'ouverture
+        const r = await sb.rpc("doc_repondre", args);
         b.disabled = false;
         if (r.error) return toast("Pas enregistré : " + r.error.message);
+        if (r.data && r.data.motif === "modifie") {   // on remontre tout de suite le nouveau texte ; le code reste valable
+          toast(tu("OIKOS vient de modifier ce document : relis-le, puis signe à nouveau (ton code reste valable).", "OIKOS vient de modifier ce document : relisez-le, puis signez à nouveau (votre code reste valable)."));
+          try { const frais = (await mesDocs()).find(x => x.id === d.id); if (frais) { ouvrirRecu(cible, frais, retour, tutoie); cible.scrollIntoView && cible.scrollIntoView({ behavior: "smooth", block: "start" }); } } catch (err) {}
+          return;
+        }
         if (r.data && r.data.ok === false) return toast(r.data.motif === "case_vide" ? "Case à remplir : " + (r.data.libelle || "")
           : r.data.motif === "code_faux" ? MOTIFS.code_faux + (r.data.reste > 0 ? tu(" Encore ", " Encore ") + r.data.reste + tu(" essai(s).", " essai(s).") : " " + MOTIFS.code_expire) : MOTIFS[r.data.motif] || "Pas enregistré");
         toast(d.action === "signer" ? "Signé, merci !" : "Enregistré, merci !"); return retour();
@@ -497,7 +504,7 @@
     if (d.etat !== "envoye" && d.etat !== "vu") { toast("Déjà signé ou refusé : utilise « Nouvelle version »"); return afficher("documents"); }
     const vals = Object.assign({}, d.valeurs || {}), aOikos = (d.champs || []).some(c => c.qui === "oikos");
     fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Modifier avant signature</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
-      <p class="muted small" style="margin:0">« ${E(d.titre)} » : seulement pour cette personne, le modèle de la bibliothèque ne change pas. ${d.etat === "vu" ? "<b>Il l'a déjà ouvert :</b> il verra la nouvelle version à sa prochaine ouverture ; pense à le prévenir." : "Il ne l'a pas encore ouvert."}</p>
+      <p class="muted small" style="margin:0">« ${E(d.titre)} » : seulement pour cette personne, le modèle de la bibliothèque ne change pas. ${d.etat === "vu" ? "Il l'a déjà ouvert : s'il essaie de signer l'ancien texte resté à l'écran, l'appli refuse et lui montre la nouvelle version." : "Il ne l'a pas encore ouvert."}</p>
       ${aOikos ? `<section class="card"><b>Cases remplies par OIKOS</b> <span class="muted small">(prix, dates, missions…)</span><div class="dz-champs" id="me-oikos" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(d.champs, vals, "oikos")}</div></section>` : ""}
       ${d.contenu ? `<div class="dz-boutons"><button class="btn" id="me-t">Texte</button><button class="btn flat" id="me-a">Aperçu</button><span class="muted small">Pour une particularité de cette personne, change le texte ici.</span></div>
         <textarea id="me-contenu" rows="14" style="width:100%;box-sizing:border-box;font:13px/1.45 ui-monospace,Consolas,monospace">${E(d.contenu)}</textarea><div id="me-apercu" class="dz-doc" style="display:none;max-height:55vh;overflow:auto"></div>` : `<p class="small">Document à partir d'un fichier : le fichier joint ne se change pas ici (retire-le et envoie-en un autre).</p>`}
