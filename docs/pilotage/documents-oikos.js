@@ -88,7 +88,8 @@
 
   /* ---------- Formulaire des cases d'un destinataire (ou d'OIKOS) ---------- */
   function champsHtml(champs, valeurs, qui) {
-    return (champs || []).filter(c => (c.qui || "destinataire") === qui).map(c => {
+    return (champs || []).filter(c => (c.qui || "destinataire") === qui && c.type !== "auto" && !c.pilote_par).map(c => {
+      if (c.type === "grille") return grilleHtml(c, valeurs);
       const v = (valeurs || {})[c.cle], n = `data-cle="${E(c.cle)}"`, ob = c.obligatoire ? " *" : "", aideH = c.aide ? `<span class="dz-aide">${E(c.aide)}</span>` : "";
       if (c.type === "cases") return `<div><b style="font-size:14px">${E(c.libelle)}${ob}</b>${aideH}<div class="dz-coches" ${n} data-type="cases">${(c.choix || []).map(ch =>
         `<label><input type="checkbox" value="${E(ch)}" ${Array.isArray(v) && v.includes(ch) ? "checked" : ""}><span>${E(ch)}</span></label>`).join("")}</div></div>`;
@@ -101,13 +102,84 @@
   function lireChamps(zone) {
     const v = {};
     zone.querySelectorAll("[data-cle]").forEach(el => {
-      if (el.dataset.type === "cases") v[el.dataset.cle] = [...el.querySelectorAll("input:checked")].map(i => i.value);
+      if (el.dataset.type === "grille") Object.assign(v, lireGrille(el));
+      else if (el.dataset.type === "cases") v[el.dataset.cle] = [...el.querySelectorAll("input:checked")].map(i => i.value);
       else if (el.dataset.type === "case") v[el.dataset.cle] = el.checked;
       else v[el.dataset.cle] = el.value.trim();
     });
     return v;
   }
   const manque = (champs, v, qui) => (champs || []).find(c => (c.qui || "destinataire") === qui && c.obligatoire && (c.type === "case" ? v[c.cle] !== true : vide(v[c.cle])));
+
+  /* ---------- Prestations couvertes et tarifs (contrat de sous-traitance, 17/11/2026) ----------
+     Case « grille » d'OIKOS : on coche les prestations couvertes, pour chacune « selon la zone » (3 tarifs) ou « tarif unique »,
+     montants préremplis depuis le modèle (c.activites) et modifiables à chaque envoi ; « J'ai vérifié » obligatoire.
+     Elle écrit des cases ordinaires (texte) : la grille en tableau, les activités cochées (c.lie) et les phrases sur le déplacement
+     et le prix (c.phrases), qui ne parlent de zone que si une prestation est tarifée par zone. Le détail est gardé dans <cle>_detail. */
+  const montant = s => { const n = parseFloat(String(s ?? "").replace(/\s|€/g, "").replace(",", ".")); return isFinite(n) && n > 0 && n < 1000 ? n.toFixed(2).replace(".", ",") + " €" : null; };
+  const nombre = s => String(s ?? "").replace(/\s|€/g, "").replace(".", ",");
+  function grilleHtml(c, valeurs) {
+    const det = (valeurs || {})[c.cle + "_detail"], lies = (valeurs || {})[c.lie];
+    const uid = "g" + Math.random().toString(36).slice(2, 8);
+    const lignes = (c.activites || []).map((a, i) => {
+      const d = det && Array.isArray(det.lignes) ? det.lignes.find(l => l.choix === a.choix) : null;
+      const on = d ? true : !det && Array.isArray(lies) && lies.includes(a.choix);
+      const mode = d ? d.mode : a.mode || "unique";
+      const z = d && d.mode === "zones" ? d.taux : Array.isArray(a.taux) ? a.taux : [a.taux, a.taux, a.taux];
+      const u = d && d.mode !== "zones" ? d.taux : Array.isArray(a.taux) ? a.taux[0] : a.taux;
+      return `<div class="dz-gl" data-choix="${E(a.choix)}" data-table="${E(a.table || a.nom)}" style="border:1px solid var(--line,#ddd);border-radius:10px;padding:8px 10px">
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-g="on" ${on ? "checked" : ""}><b>${E(a.nom)}</b></label>
+        <div data-g="detail" style="display:${on ? "grid" : "none"};gap:6px;margin:6px 0 0 24px">
+          <div style="display:flex;gap:14px;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center"><input type="radio" name="${uid}-${i}" value="zones" data-g="mode" ${mode === "zones" ? "checked" : ""}> Selon la zone (3 tarifs)</label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="${uid}-${i}" value="unique" data-g="mode" ${mode !== "zones" ? "checked" : ""}> Tarif unique</label></div>
+          <div data-g="zones" style="display:${mode === "zones" ? "flex" : "none"};gap:8px;flex-wrap:wrap;align-items:center">${[0, 1, 2].map(k => `<label style="display:flex;gap:4px;align-items:center">Zone ${k + 1} <input type="text" data-g="z${k}" value="${E(nombre(z[k]))}" style="width:80px" inputmode="decimal"> €</label>`).join("")}</div>
+          <div data-g="unique" style="display:${mode !== "zones" ? "flex" : "none"};gap:4px;align-items:center"><input type="text" data-g="u" value="${E(nombre(u))}" style="width:80px" inputmode="decimal"> € de l'heure</div>
+        </div></div>`;
+    }).join("");
+    return `<div data-cle="${E(c.cle)}" data-type="grille" data-lie="${E(c.lie || "")}" data-phrases="${E(JSON.stringify(c.phrases || {}))}" style="display:grid;gap:8px;grid-column:1/-1">
+      <b style="font-size:14px">${E(c.libelle || "Prestations et tarifs")}${c.obligatoire ? " *" : ""}</b><span class="dz-aide">Coche ce que couvre ce contrat, choisis « selon la zone » ou « tarif unique », vérifie les montants (tarif horaire payé au presta).</span>
+      ${lignes}
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" data-g="verifie"> J'ai vérifié les prestations et les montants</label>
+      <div data-g="resume" class="dz-aide"></div></div>`;
+  }
+  function lireGrille(el) {
+    const lignes = [], erreurs = [];
+    el.querySelectorAll(".dz-gl").forEach(b => {
+      if (!b.querySelector('[data-g="on"]').checked) return;
+      const mode = (b.querySelector('[data-g="mode"]:checked') || {}).value === "zones" ? "zones" : "unique";
+      const taux = mode === "zones" ? [0, 1, 2].map(k => b.querySelector(`[data-g="z${k}"]`).value.trim()) : b.querySelector('[data-g="u"]').value.trim();
+      if ((mode === "zones" ? taux : [taux]).some(t => !montant(t))) erreurs.push(b.dataset.table);
+      lignes.push({ choix: b.dataset.choix, table: b.dataset.table, mode, taux });
+    });
+    const zo = lignes.filter(l => l.mode === "zones"), un = lignes.filter(l => l.mode !== "zones");
+    let md = "";
+    if (zo.length) md += "| Activité | Zone 1 | Zone 2 | Zone 3 |\n" + zo.map(l => `| ${l.table} | ${l.taux.map(montant).join(" | ")} |`).join("\n")
+      + "\n\nLa zone de chaque client (1, 2 ou 3) dépend de la distance et du temps de trajet ; elle figure dans chaque proposition de mission.";
+    if (un.length) md += (md ? "\n\n" : "") + `| Activité | ${zo.length ? "Tarif unique, quel que soit le lieu" : "Tarif horaire"} |\n` + un.map(l => `| ${l.table} | ${montant(l.taux)} |`).join("\n");
+    let ph = {}; try { ph = JSON.parse(el.dataset.phrases || "{}"); } catch (e) { }
+    const sorte = !zo.length ? "unique" : !un.length ? "zones" : "mixte";
+    const ok = lignes.length > 0 && !erreurs.length && el.querySelector('[data-g="verifie"]').checked, v = {};
+    v[el.dataset.cle] = ok ? md : "";
+    v[el.dataset.cle + "_detail"] = { lignes: lignes.map(({ choix, mode, taux }) => ({ choix, mode, taux })) };
+    if (el.dataset.lie) v[el.dataset.lie] = lignes.map(l => l.choix);
+    if (ph.deplacement) v[ph.deplacement] = {
+      unique: "Les frais de déplacement du Prestataire sont à sa charge ; ils sont compris dans les tarifs de l'annexe 2.",
+      zones: "Les frais de déplacement du Prestataire sont à sa charge ; ils sont pris en compte par la zone d'intervention dans la grille de tarifs (annexe 2).",
+      mixte: "Les frais de déplacement du Prestataire sont à sa charge ; ils sont pris en compte par la zone d'intervention pour les activités tarifées par zone, et compris dans le tarif unique pour les autres (annexe 2)." }[sorte];
+    if (ph.prix) v[ph.prix] = { unique: "selon l'activité", zones: "selon l'activité et la zone d'intervention", mixte: "selon l'activité et, pour les activités tarifées par zone, la zone d'intervention" }[sorte];
+    const r = el.querySelector('[data-g="resume"]');
+    if (r) r.textContent = !lignes.length ? "Aucune prestation cochée." : erreurs.length ? "Montant à corriger : " + erreurs.join(", ") + "." : !ok ? "Coche « J'ai vérifié » pour pouvoir envoyer."
+      : "Prêt : " + lignes.map(l => l.table + " " + (l.mode === "zones" ? l.taux.map(montant).join(" / ") : montant(l.taux))).join(" · ");
+    return v;
+  }
+  // un seul écouteur pour toutes les grilles (le HTML est construit en texte) : montrer/cacher, résumé à jour
+  document.addEventListener("change", e => {
+    const g = e.target.closest && e.target.closest('[data-type="grille"]'); if (!g) return;
+    g.querySelectorAll(".dz-gl").forEach(b => { const on = b.querySelector('[data-g="on"]').checked, z = (b.querySelector('[data-g="mode"]:checked') || {}).value === "zones";
+      b.querySelector('[data-g="detail"]').style.display = on ? "grid" : "none"; b.querySelector('[data-g="zones"]').style.display = z ? "flex" : "none"; b.querySelector('[data-g="unique"]').style.display = z ? "none" : "flex"; });
+    lireGrille(g);
+  });
+  document.addEventListener("input", e => { const g = e.target.closest && e.target.closest('[data-type="grille"]'); if (g) lireGrille(g); });
 
   /* ---------- Signature au doigt ---------- */
   function pad(zone) {
@@ -549,7 +621,7 @@
   }
 
   /* ---------- Créer ou modifier un modèle ---------- */
-  const TYPES = [["texte", "Texte court"], ["long", "Texte long"], ["date", "Date"], ["cases", "Cases à cocher"], ["choix", "Liste de choix"], ["case", "Une case à cocher"]];
+  const TYPES = [["texte", "Texte court"], ["long", "Texte long"], ["date", "Date"], ["cases", "Cases à cocher"], ["choix", "Liste de choix"], ["case", "Une case à cocher"], ["grille", "Prestations et tarifs"], ["auto", "Rempli tout seul"]];
   const SOURCES = [["", "—"], ["nom_complet", "Nom et prénom"], ["adresse", "Adresse"], ["siret", "SIRET"], ["email", "E-mail"], ["telephone", "Téléphone"], ["activites", "Activités"]];
   function editerModele(m, sorte, pieces) {
     const nouveau = !m;
@@ -584,6 +656,7 @@
       const tb = f.querySelector("#m-champs"), ta = f.querySelector("#m-contenu"), ap = f.querySelector("#m-apercu");
       const lireTable = () => [...tb.querySelectorAll("tr")].map(tr => { const v = k => tr.querySelector(`[data-k="${k}"]`); const c = { cle: v("cle").value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 40), libelle: v("libelle").value.trim(), qui: v("qui").value, type: v("type").value, obligatoire: v("obligatoire").checked };
         const ch = v("choix").value.split(";").map(s => s.trim()).filter(Boolean); if (ch.length && (c.type === "cases" || c.type === "choix")) c.choix = ch;
+        const ancien = champs.find(x => x.cle === c.cle); if (ancien) Object.keys(ancien).forEach(k => { if (!["cle", "libelle", "qui", "type", "obligatoire", "choix", "source", "defaut", "aide", "vide"].includes(k)) c[k] = ancien[k]; });
         if (v("source").value) c.source = v("source").value; if (v("defaut").value.trim()) c.defaut = v("defaut").value.trim(); if (v("aide").value.trim()) c.aide = v("aide").value.trim(); if (v("vide").value.trim()) c.vide = v("vide").value.trim();
         return c; }).filter(c => c.cle);
       const dessinerTable = () => { tb.innerHTML = champs.map(ligneChamp).join(""); };
@@ -662,8 +735,8 @@
   // Les cases d'OIKOS de plusieurs modèles : un bloc par modèle (même nom de case = valeur reprise d'un bloc à l'autre)
   const blocsOikos = modeles => modeles.filter(m => (m.champs || []).some(c => c.qui === "oikos")).map(m => { const v = {}; (m.champs || []).forEach(c => { if (c.qui === "oikos" && c.defaut) v[c.cle] = c.defaut; });
     // tout est déjà rempli par les valeurs habituelles : bloc replié sur une ligne, à ouvrir seulement pour changer
-    const cases = (m.champs || []).filter(c => c.qui === "oikos"), complet = !manque(m.champs, v, "oikos");
-    const resume = cases.filter(c => !vide(v[c.cle])).map(c => E(c.libelle) + " : " + E(v[c.cle])).join(" · ");
+    const cases = (m.champs || []).filter(c => c.qui === "oikos"), complet = !manque(m.champs, v, "oikos") && !cases.some(c => c.type === "grille");
+    const resume = cases.filter(c => !vide(v[c.cle]) && c.type !== "auto" && !c.pilote_par).map(c => E(c.libelle) + " : " + E(v[c.cle])).join(" · ");
     const champsZ = `<div class="dz-champs" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(m.champs, v, "oikos")}</div>`;
     return complet ? `<details class="card" data-oikos="${m.id}" style="padding:10px 12px"><summary style="cursor:pointer"><b>${E(m.titre)}</b> <span class="dz-tag ok">${IC("ok")} déjà rempli</span> <span class="muted small">· changer pour cette fois</span></summary><p class="muted small" style="margin:6px 0 0">${resume || "—"}</p>${champsZ}</details>`
       : `<section class="card" data-oikos="${m.id}"><b>${E(m.titre)}</b> <span class="muted small">· à remplir par OIKOS (gardé ensuite pour les prochains envois)</span>${champsZ}</section>`; }).join("");
