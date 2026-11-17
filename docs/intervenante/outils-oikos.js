@@ -107,6 +107,20 @@
     throw new Error("photo trop lourde : reprends-la d'un peu plus loin");
   }
 
+  /* La photo complète (1600 px) est déposée dans le dossier du presta ; le script « Matériel » la range ensuite dans le Drive d'OIKOS */
+  async function photoComplete(f) {
+    try {
+      if (!f || typeof moi === "undefined" || !moi || !moi.id) return null;
+      const img = await createImageBitmap(f), k = Math.min(1, 1600 / Math.max(img.width, img.height)), cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k));
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(ok => cv.toBlob(ok, "image/jpeg", 0.85)); if (!blob) return null;
+      const chemin = moi.id + "/photos/" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
+      const u = await sb.storage.from("materiel").upload(chemin, blob, { contentType: "image/jpeg" });
+      return u.error ? null : chemin;
+    } catch (e) { return null; }
+  }
+
   /* ---------- L'écran « Mon matériel » ---------- */
   const tagEtat = e => `<span class="ou-tag ${e === "hors_service" || e === "a_reparer" ? "non" : ""}">${E(ETAT_MOT[e] || e || "")}</span>`;
   const titreOutil = m => `${m.etiquette ? `<span class="ou-rep">${E(m.etiquette)}</span> ` : ""}${E(m.nom)}${m.quantite > 1 ? " ×" + m.quantite : ""}`;
@@ -214,7 +228,7 @@
       };
       return;
     }
-    let etat = null, photo = null, sig = null;
+    let etat = null, photo = null, sig = null, original = null;
     z.innerHTML = `${retour}<h1 style="margin:0 0 4px">${titreOutil(m)}</h1>
       <p class="muted" style="margin:0 0 12px">${E(m.categorie || "")}${m.marque ? " · " + E(m.marque) : ""}${m.numero_serie ? " · n° de série " + E(m.numero_serie) : ""}${v.de ? ` · passé par <b>${E(v.de)}</b>` : v.via === "attribue" ? " · remis par OIKOS" : ""}</p>
       <section class="card" style="margin-bottom:12px"><b>1. Dans quel état est-il ?</b>
@@ -243,8 +257,8 @@
     const fichier = z.querySelector("#ou-fichier"), apercu = z.querySelector("#ou-apercu");
     fichier.onchange = async () => {
       const f = fichier.files && fichier.files[0]; if (!f) return;
-      try { photo = await photoReduite(f); apercu.src = photo; apercu.hidden = false; z.querySelector("#ou-photo").innerHTML = IC("photo") + " Reprendre la photo"; }
-      catch (e) { photo = null; apercu.hidden = true; toast(e.message || "Photo illisible"); }
+      try { photo = await photoReduite(f); original = f; apercu.src = photo; apercu.hidden = false; z.querySelector("#ou-photo").innerHTML = IC("photo") + " Reprendre la photo"; }
+      catch (e) { photo = null; original = null; apercu.hidden = true; toast(e.message || "Photo illisible"); }
       fichier.value = "";
     };
     z.onclick = async e => {
@@ -260,7 +274,11 @@
       if (!z.querySelector("#ou-lu").checked) return toast("Coche « J'ai lu cette fiche… » pour continuer.");
       b.disabled = true; b.textContent = "Envoi…";
       try {
-        const r = await rpc("materiel_prendre", { p_code: code, p_passe: passe || null, p_etat: etat, p_photo: photo, p_signature: image, p_remarque: rem.value.trim() || null });
+        const args = { p_code: code, p_passe: passe || null, p_etat: etat, p_photo: photo, p_signature: image, p_remarque: rem.value.trim() || null };
+        const complet = await photoComplete(original);   // en pleine qualité pour le dossier Drive de l'objet (SQL 78) ; si ça échoue, la fiche garde sa photo réduite
+        let r;
+        try { r = await rpc("materiel_prendre", complet ? Object.assign({ p_fichier: complet }, args) : args); }
+        catch (e1) { if (complet && pasPret(e1)) r = await rpc("materiel_prendre", args); else throw e1; }
         if (!r || r.ok === false) { b.disabled = false; b.textContent = "Je signe et je prends ce matériel"; toast(MOTIFS[r && r.motif] || (r && r.motif === "passe" ? "Ce matériel est chez un autre intervenant : il faut son QR code de passage." : "Pas enregistré.")); if (r && r.motif !== "gele") examiner(code, passe); return; }
         toast("Signé : " + (r.nom || "le matériel") + " est sous ta responsabilité."); page();
       } catch (err) { b.disabled = false; b.textContent = "Je signe et je prends ce matériel"; toast(typeof reseau === "function" && reseau(err) ? "Pas de réseau : réessaie dans un instant." : "Pas enregistré : " + (err.message || err)); }

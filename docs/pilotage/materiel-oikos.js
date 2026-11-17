@@ -58,6 +58,12 @@
 .ma-qr-img svg{display:block;border-radius:6px}
 .ma-doc{white-space:pre-line;background:#fff;color:#1b2a4a;border:1px solid var(--line,#ddd);border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin:10px 0}
 .ma-photo{max-width:100%;max-height:340px;border-radius:12px;border:1px solid var(--line,#ddd);display:block}
+.ma-galerie{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:8px}
+.ma-vignette{position:relative;border:1px solid var(--line,#ddd);border-radius:10px;overflow:hidden;background:var(--bg,#fff);aspect-ratio:1;display:grid}
+.ma-vignette button.ma-voir{border:0;padding:0;background:none;cursor:pointer;display:grid;place-items:center;font:inherit;color:var(--muted,#666);font-size:12px;text-align:center;min-width:0}
+.ma-vignette img{width:100%;height:100%;object-fit:cover;display:block}
+.ma-vignette .ma-leg{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.ma-vignette .ma-x{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;line-height:1;font-size:14px}
 #ma-impression{display:none}
 @media print{body.ma-imprime>*:not(#ma-impression){display:none!important}body.ma-imprime{background:#fff!important}
   body.ma-imprime #ma-impression{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;padding:0;color:#000;font-family:Arial,Helvetica,sans-serif}
@@ -236,10 +242,12 @@
       <p class="muted small" style="margin:0">${E(m.categorie)}${m.marque ? " · " + E(m.marque) : ""}${m.numero_serie ? " · n° de série " + E(m.numero_serie) : ""}${m.quantite > 1 ? " · quantité " + m.quantite : ""}${m.achete_le ? " · acheté le " + dateFr(m.achete_le) : ""}${m.prix != null ? " · " + euros(m.prix) : ""}</p>
       ${m.remarque ? `<p class="small" style="margin:6px 0 0">${E(m.remarque)}</p>` : ""}
       ${blocQR}
+      <div id="ma-photos"></div>
       <h3 style="margin:14px 0 6px;font-size:15px">Historique</h3>
       <ul class="ma-histo">${h.map(v => `<li><b>${dateFr(v.le)}</b> · ${SORTES[v.sorte] || v.sorte}${v.lieu ? " " + E(ou(v)) : ""}${v.etat && v.sorte !== "entree" ? " · " + ETATS[v.etat] : ""}${doc(v)}${fs(v)}${v.remarque ? `<div class="ma-m">${E(v.remarque)}</div>` : ""}</li>`).join("") || `<li class="muted">Rien encore.</li>`}</ul>
       <div class="dz-boutons" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px"><button class="btn" data-g="modifier">Modifier la fiche</button><button class="btn" data-g="etat">Changer l'état</button>${m.lieu !== "depot" ? `<button class="btn" data-g="depot">Rentrer au dépôt</button>` : ""}<button class="btn primary" data-g="remettre">Remettre à un presta</button></div>`, (f, fermer) => {
       f.style.maxWidth = "720px";
+      photosDe(x, m, f.querySelector("#ma-photos"));
       f.onclick = e => { const pz = e.target.closest("[data-prise]"); if (pz) return voirPrise(x, pz.dataset.prise);
         const b = e.target.closest("[data-g]"); if (!b) return; if (b.dataset.g === "qr") return imprimerQR(x, [m]); fermer();
         ({ modifier: () => editer(x, m), etat: () => changerEtat(x, [m]), depot: () => deplacer(x, [m], "depot"), remettre: () => remettre(x, [m]) })[b.dataset.g](); };
@@ -355,6 +363,64 @@
     const b = new Blob(["﻿" + lignes.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "Inventaire matériel OIKOS " + auj() + ".csv"; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  /* ---------- Photos de l'objet et dossier Drive (SQL 78) ----------
+     La base ne garde qu'un aperçu ; la photo complète part dans le Drive d'OIKOS (MATÉRIEL OIKOS › l'objet › Photos),
+     rangée par le script « Matériel » du Pont photos, qui tient aussi la fiche de vie et les fiches signées en PDF. */
+  async function reduire(f, max, qualite) {
+    const img = await createImageBitmap(f), k = Math.min(1, max / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas"); cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k));
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return new Promise((ok, ko) => cv.toBlob(b => b ? ok(b) : ko(new Error("image illisible")), "image/jpeg", qualite));
+  }
+  async function photosDe(x, m, z) {
+    if (!z) return;
+    let l;
+    try { l = await q(sb.from("materiel_photos").select("*").eq("materiel_id", m.id).is("supprime_le", null).order("prise_le", { ascending: false })); }
+    catch (e) { z.innerHTML = ""; return; }   // SQL 78 pas encore lancé : la fiche reste comme avant
+    const urls = {};
+    try { const ap = l.map(p => p.apercu).filter(Boolean); if (ap.length) { const s = await sb.storage.from("materiel").createSignedUrls(ap, 3600); if (!s.error) s.data.forEach(u => { if (u.signedUrl) urls[u.path] = u.signedUrl; }); } } catch (e) {}
+    const frais = (await q(sb.from("materiel").select("dossier_drive,vie_drive").eq("id", m.id)).catch(() => []))[0] || {};
+    z.innerHTML = `<h3 style="margin:14px 0 2px;font-size:15px">Photos et dossier Drive</h3>
+      <div class="dz-boutons" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><input type="file" id="mp-fichiers" accept="image/*" multiple hidden><button class="btn small" id="mp-ajout">${IC("plus")} Ajouter des photos</button>
+        ${/^[\w-]{10,}$/.test(frais.dossier_drive || "") ? `<a class="btn small" href="https://drive.google.com/drive/folders/${frais.dossier_drive}" target="_blank" rel="noopener">${IC("dossier")} Ouvrir son dossier Drive</a>` : `<span class="muted small">Son dossier Drive se crée tout seul, sous 10 minutes.</span>`}
+        ${/^[\w-]{10,}$/.test(frais.vie_drive || "") ? `<a class="btn small" href="https://drive.google.com/file/d/${frais.vie_drive}/view" target="_blank" rel="noopener">${IC("doc")} Fiche de vie (PDF)</a>` : ""}</div>
+      ${l.length ? `<div class="ma-galerie">${l.map(p => `<div class="ma-vignette"><button type="button" class="ma-voir" data-photo="${p.id}" title="${E(p.legende || "")}">${urls[p.apercu] ? `<img src="${E(urls[p.apercu])}" alt="${E(p.legende || "Photo")}" loading="lazy">` : `<span style="padding:6px">${p.sorte === "prise" ? "Photo de la fiche signée" : "Photo"}<br>${dateFr(String(p.prise_le).slice(0, 10))}</span>`}</button>
+          <span class="ma-leg">${E(p.legende || dateFr(String(p.prise_le).slice(0, 10)))}${p.drive_id ? "" : " · en cours de rangement"}</span>${p.sorte === "objet" ? `<button type="button" class="ma-x" data-retirer="${p.id}" aria-label="Retirer cette photo">×</button>` : ""}</div>`).join("")}</div>`
+        : `<p class="muted small" style="margin:6px 0 0">Aucune photo pour l'instant. Celles que les presta prennent en signant arrivent ici toutes seules.</p>`}
+      <p class="muted small" style="margin:6px 0 0">Dans son dossier Drive (MATÉRIEL OIKOS) : la fiche de vie, les photos en pleine qualité, les fiches signées en PDF, et « Factures et notices » pour y glisser tes papiers.</p>`;
+    z.querySelector("#mp-ajout").onclick = () => z.querySelector("#mp-fichiers").click();
+    z.querySelector("#mp-fichiers").onchange = async ev => {
+      const fichiers = [...ev.target.files]; if (!fichiers.length) return;
+      const legende = prompt("Légende pour " + (fichiers.length > 1 ? "ces " + fichiers.length + " photos" : "cette photo") + " (facultatif) :\nex. À l'achat, Lame cassée, Au retour de Thomas", "");
+      if (legende === null) { ev.target.value = ""; return; }
+      const bouton = z.querySelector("#mp-ajout"); bouton.disabled = true; let fait = 0;
+      for (const f of fichiers) {
+        try {
+          bouton.textContent = "Envoi " + (fait + 1) + " / " + fichiers.length + "…";
+          const complet = await reduire(f, 1600, 0.85), apercu = await reduire(f, 480, 0.7);
+          const n = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8), ch = `${m.id}/photos/${n}.jpg`, ap = `${m.id}/apercus/${n}.jpg`;
+          for (const [chemin, blob] of [[ch, complet], [ap, apercu]]) { const u = await sb.storage.from("materiel").upload(chemin, blob, { contentType: "image/jpeg" }); if (u.error) throw u.error; }
+          await q(sb.from("materiel_photos").insert({ materiel_id: m.id, sorte: "objet", legende: legende.trim().slice(0, 200) || null, apercu: ap, fichier: ch, auteur: typeof moi !== "undefined" && moi ? moi.id : null }));
+          fait++;
+        } catch (err) { toast("« " + f.name + " » pas envoyée : " + (err.message || err)); }
+      }
+      if (fait) toast(fait + " photo" + (fait > 1 ? "s ajoutées" : " ajoutée") + " · rangée" + (fait > 1 ? "s" : "") + " dans le Drive sous 10 minutes");
+      photosDe(x, m, z);
+    };
+    z.onclick = async e => {
+      const r = e.target.closest("[data-retirer]");
+      if (r) { e.stopPropagation(); if (!confirm("Retirer cette photo ? Elle ira à la corbeille du Drive.")) return;
+        try { await q(sb.from("materiel_photos").update({ supprime_le: new Date().toISOString() }).eq("id", r.dataset.retirer)); toast("Photo retirée"); photosDe(x, m, z); } catch (err) { toast("Pas retirée : " + (err.message || err)); }
+        return; }
+      const v = e.target.closest("[data-photo]"); if (!v) return; e.stopPropagation();
+      const p = l.find(y => y.id === v.dataset.photo); if (!p) return;
+      if (p.drive_url && /^https:\/\/(drive|docs)\.google\.com\//.test(p.drive_url)) return window.open(p.drive_url, "_blank", "noopener");
+      if (p.fichier) { const s = await sb.storage.from("materiel").createSignedUrl(p.fichier, 300); if (!s.error && s.data) return window.open(s.data.signedUrl, "_blank", "noopener"); }
+      if (p.prise_id) return voirPrise(x, p.prise_id);
+      toast("Photo en cours de rangement dans le Drive.");
+    };
   }
 
   /* ---------- Voir une fiche de prise en charge signée (photo, texte, signature) ---------- */
