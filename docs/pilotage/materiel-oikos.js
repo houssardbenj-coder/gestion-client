@@ -6,7 +6,11 @@
      « Remise de clés, de matériel et de moyens d'accès » à signer, avec la liste déjà remplie ;
    - « Rentrer au dépôt », « Mettre ailleurs », « Changer l'état » ; chaque geste est noté dans l'historique
      (table materiel_mouvements, qui met la fiche à jour toute seule).
-   Se sert de ce que le pilote a déjà : sb, q, esc, toast, ico, contenu, fenetre, afficher ; et DocsOikos.envoyerModele. */
+   Fiche outil et QR code (SQL 77, 17/11/2026) : chaque objet a son QR code (à imprimer et coller dessus). Le presta
+   le scanne avec son appli, dit l'état, prend une photo et signe : l'objet passe chez lui tout seul, avec sa fiche
+   signée. Il peut le passer à un autre presta par un QR code de passage. Ici : QR code, étiquettes à imprimer,
+   fiches signées (photo, texte, signature) et filtre « Sans fiche signée ».
+   Se sert de ce que le pilote a déjà : sb, q, esc, toast, ico, contenu, fenetre, afficher ; DocsOikos.envoyerModele ; QROikos. */
 (function () {
   "use strict";
   const E = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -14,12 +18,16 @@
   const auj = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
   const dateFr = d => d ? new Date(d + (String(d).length === 10 ? "T12:00:00" : "")).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
   const euros = n => (Number(n) || 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
-  const ETATS = { neuf: "Neuf", bon: "Bon état", use: "Usé", a_reparer: "À réparer", hors_service: "Hors service", perdu: "Perdu", vole: "Volé", vendu: "Vendu ou jeté" };
-  const ETAT_TON = { neuf: "ok", bon: "ok", use: "", a_reparer: "att", hors_service: "non", perdu: "non", vole: "non", vendu: "" };
+  const ETATS = { neuf: "Neuf", tres_bon: "Très bon état", bon: "Bon état", fonctionnel: "Fonctionnel", use: "Usé", a_reparer: "À réparer", hors_service: "Hors service", perdu: "Perdu", vole: "Volé", vendu: "Vendu ou jeté" };
+  const ETAT_TON = { neuf: "ok", tres_bon: "ok", bon: "ok", fonctionnel: "", use: "", a_reparer: "att", hors_service: "non", perdu: "non", vole: "non", vendu: "" };
   const SORTIS = ["perdu", "vole", "vendu"];   // ne compte plus dans le matériel disponible
   const SORTES = { entree: "Entrée dans l'inventaire", remise: "Remis", retour: "Rentré au dépôt", deplacement: "Déplacé", etat: "État changé" };
   const CATEGORIES = ["Jardin", "Ménage", "Bricolage", "Échelles et sécurité", "Informatique et téléphone", "Véhicule", "Autre"];
   const RECU = "remise-intervenant";
+  const APPLI = typeof APPLI_PRESTA === "string" ? APPLI_PRESTA : "https://houssardbenj-coder.github.io/gestion-client/intervenante/";
+  const heureFr = d => { d = new Date(d); return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) + " à " + d.getHours() + " h " + String(d.getMinutes()).padStart(2, "0"); };
+  const adresseQR = m => APPLI + "?outil=" + encodeURIComponent(m.jeton);
+  const codeLisible = j => String(j || "").replace(/(.{5})(?=.)/g, "$1 ");
   const nomP = p => p ? (((p.prenom || "") + " " + (p.nom || "")).trim() || p.email || "?") : "?";
   let filtre = "tout", cherche = "";
   const coches = new Set();
@@ -45,7 +53,17 @@
 .ma-form input,.ma-form select,.ma-form textarea,.ma-champ{width:100%;box-sizing:border-box;font:inherit;padding:9px 10px;border-radius:10px;border:1px solid var(--line,#ccc);background:var(--bg,#fff);color:inherit}
 .ma-gens{max-height:32vh;overflow:auto;display:grid;gap:4px}.ma-gens label{display:flex;gap:8px;align-items:center}
 .ma-histo{display:grid;gap:6px;margin:0;padding:0;list-style:none}.ma-histo li{padding:8px 10px;border-left:3px solid var(--accent-soft,#E7E8DA)}
-.ma-chiffres{display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 0}.ma-chiffres b{font-size:18px;display:block}`;
+.ma-chiffres{display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 0}.ma-chiffres b{font-size:18px;display:block}
+.ma-qr{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:12px 0 0;padding:12px;border:1px solid var(--line,#ddd);border-radius:12px}
+.ma-qr-img svg{display:block;border-radius:6px}
+.ma-doc{white-space:pre-line;background:#fff;color:#1b2a4a;border:1px solid var(--line,#ddd);border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin:10px 0}
+.ma-photo{max-width:100%;max-height:340px;border-radius:12px;border:1px solid var(--line,#ddd);display:block}
+#ma-impression{display:none}
+@media print{body.ma-imprime>*:not(#ma-impression){display:none!important}body.ma-imprime{background:#fff!important}
+  body.ma-imprime #ma-impression{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;padding:0;color:#000;font-family:Arial,Helvetica,sans-serif}
+  .ma-etq{border:.3mm dashed #999;border-radius:2mm;padding:3mm;text-align:center;break-inside:avoid;page-break-inside:avoid}
+  .ma-etq svg{width:38mm;height:38mm;display:block;margin:0 auto}
+  .ma-etq b{display:block;font-size:11pt;margin-top:1mm}.ma-etq span{display:block;font-size:8pt}.ma-etq .c{font-family:Consolas,monospace;font-size:9pt;letter-spacing:.5pt}}`;
     document.head.appendChild(s);
   }
 
@@ -59,22 +77,34 @@
     const ids = [...new Set(mvts.map(m => m.doc_envoi_id).filter(Boolean))];
     const docs = ids.length ? await q(sb.from("doc_envois").select("id,etat,fait_le,envoye_le").in("id", ids)) : [];
     const P = Object.fromEntries(profils.map(p => [p.id, p])), C = Object.fromEntries(clients.map(c => [c.id, c])), D = Object.fromEntries(docs.map(d => [d.id, d]));
-    return { mat, mvts, profils, clients, P, C, D };
+    // Fiches de prise en charge signées dans l'appli (SQL 77) : sans la photo ni la signature, lues seulement à l'ouverture
+    let prises = [], qr = mat.length ? mat.some(m => m.jeton) : true;
+    try { prises = await q(sb.from("materiel_prises").select("id,materiel_id,intervenante_id,de_id,signataire,via,etat,remarque,mouvement_id,signe_le").order("signe_le", { ascending: false })); } catch (e) { qr = false; }
+    return { mat, mvts, profils, clients, P, C, D, prises, qr };
   }
   const ouEst = (x, m) => m.lieu === "presta" ? "Chez " + nomP(x.P[m.intervenante_id]) + (x.P[m.intervenante_id] && x.P[m.intervenante_id].cheffe_reseau ? " (chef)" : "")
     : m.lieu === "client" ? "Chez le client " + ((x.C[m.client_id] || {}).nom || "?") : m.lieu === "ailleurs" ? (m.lieu_detail || "Ailleurs") : "Au dépôt OIKOS" + (m.lieu_detail ? " · " + m.lieu_detail : "");
   // Le reçu de la dernière remise encore en cours (si le matériel est chez un presta)
+  // La fiche signée par celui qui a l'objet aujourd'hui (signée depuis qu'il est arrivé chez lui)
+  function priseEnCours(x, m) {
+    if (m.lieu !== "presta" || !m.intervenante_id) return null;
+    const arrive = x.mvts.filter(v => v.materiel_id === m.id && v.lieu).map(v => new Date(v.cree_le).getTime()).sort((a, b) => a - b).pop() || 0;
+    return x.prises.find(p => p.materiel_id === m.id && p.intervenante_id === m.intervenante_id && new Date(p.signe_le).getTime() >= arrive) || null;
+  }
+  const sansFiche = (x, m) => m.lieu === "presta" && !priseEnCours(x, m) && !/reçu signé/.test(recuDe(x, m));
   function recuDe(x, m) {
     if (m.lieu !== "presta") return "";
+    const pr = priseEnCours(x, m);
+    if (pr) return `<button type="button" class="ma-tag ok" data-prise="${pr.id}" style="border:0;cursor:pointer" title="Voir la fiche signée : photo, texte, signature">fiche signée le ${dateFr(String(pr.signe_le).slice(0, 10))}</button>`;
     const mv = x.mvts.find(v => v.materiel_id === m.id && v.lieu === "presta" && v.intervenante_id === m.intervenante_id && (v.sorte === "remise" || v.sorte === "entree"));
     const d = mv && mv.doc_envoi_id && x.D[mv.doc_envoi_id];
-    if (!d) return `<span class="ma-tag" title="Remettre à nouveau pour lui faire signer le reçu">pas de reçu signé</span>`;
+    if (!d) return `<span class="ma-tag" title="Il scanne le QR code de l'objet avec son appli pour signer sa fiche (ou « Remettre à un presta » pour un reçu)">pas de fiche signée</span>`;
     if (d.etat === "fait") return `<span class="ma-tag ok">reçu signé le ${dateFr(String(d.fait_le).slice(0, 10))}</span>`;
     if (d.etat === "refuse") return `<span class="ma-tag non">reçu refusé</span>`;
     if (d.etat === "retire") return `<span class="ma-tag">reçu retiré</span>`;
     return `<span class="ma-tag att">reçu en attente de signature</span>`;
   }
-  const decrire = m => m.nom + (m.quantite > 1 ? " ×" + m.quantite : "") + (m.marque ? " (" + m.marque + ")" : "") + (m.etiquette ? ", repère " + m.etiquette : "") + (m.numero_serie ? ", n° de série " + m.numero_serie : "") + ", " + ({ neuf: "neuf", bon: "en bon état", use: "usé", a_reparer: "à réparer", hors_service: "hors service" }[m.etat] || (ETATS[m.etat] || m.etat).toLowerCase());
+  const decrire = m => m.nom + (m.quantite > 1 ? " ×" + m.quantite : "") + (m.marque ? " (" + m.marque + ")" : "") + (m.etiquette ? ", repère " + m.etiquette : "") + (m.numero_serie ? ", n° de série " + m.numero_serie : "") + ", " + ({ neuf: "neuf", tres_bon: "en très bon état", bon: "en bon état", fonctionnel: "fonctionnel", use: "usé", a_reparer: "à réparer", hors_service: "hors service" }[m.etat] || (ETATS[m.etat] || m.etat).toLowerCase());
   function prochaineEtiquette(x) {
     const n = Math.max(0, ...x.mat.map(m => /^M-(\d+)$/.exec(m.etiquette || "")).filter(Boolean).map(r => +r[1]));
     return "M-" + String(n + 1).padStart(3, "0");
@@ -85,9 +115,9 @@
     styles();
     const x = await charger();
     coches.forEach(id => { if (!x.mat.some(m => m.id === id)) coches.delete(id); });
-    const FILTRES = [["tout", "Tout"], ["depot", "Au dépôt"], ["presta", "Chez un presta"], ["client", "Chez un client"], ["ailleurs", "Ailleurs"], ["soucis", "À réparer, hors service"], ["sortis", "Perdu, volé, vendu"]];
+    const FILTRES = [["tout", "Tout"], ["depot", "Au dépôt"], ["presta", "Chez un presta"], ["client", "Chez un client"], ["ailleurs", "Ailleurs"], ["nonsigne", "Sans fiche signée"], ["soucis", "À réparer, hors service"], ["sortis", "Perdu, volé, vendu"]];
     const garde = m => (filtre === "sortis" ? SORTIS.includes(m.etat) : !SORTIS.includes(m.etat))
-      && (filtre === "tout" || filtre === "sortis" || (filtre === "soucis" ? ["a_reparer", "hors_service"].includes(m.etat) : m.lieu === filtre))
+      && (filtre === "tout" || filtre === "sortis" || (filtre === "soucis" ? ["a_reparer", "hors_service"].includes(m.etat) : filtre === "nonsigne" ? sansFiche(x, m) : m.lieu === filtre))
       && (!cherche || [m.nom, m.etiquette, m.marque, m.numero_serie, m.categorie, ouEst(x, m)].join(" ").toLowerCase().includes(cherche.toLowerCase()));
     const l = x.mat.filter(garde);
     // groupes : dépôt, puis chaque presta, chaque client, ailleurs
@@ -101,8 +131,9 @@
       <button class="ma-nom" type="button" data-fiche="${m.id}"><b>${m.etiquette ? `<span class="ma-rep">${E(m.etiquette)}</span> ` : ""}${E(m.nom)}${m.quantite > 1 ? " ×" + m.quantite : ""}</b><span class="ma-m">${E(m.categorie)}${m.marque ? " · " + E(m.marque) : ""}${m.lieu_detail && m.lieu !== "ailleurs" ? " · " + E(m.lieu_detail) : ""} · depuis le ${dateFr(m.depuis)}</span></button>
       <span class="ma-tag ${ETAT_TON[m.etat] || ""}">${ETATS[m.etat] || E(m.etat)}</span>${recuDe(x, m)}</div>`;
     const z = contenu(`<div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h1 style="margin:0">Matériel d'OIKOS</h1>
-        <span class="dz-boutons" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="ma-csv">${IC("doc")} Exporter l'inventaire</button><button class="btn primary" id="ma-ajout">${IC("plus")} Ajouter du matériel</button></span></div>
-      <p class="muted small" style="margin:4px 0 0">Ce qui appartient à OIKOS et où ça se trouve. Coche des objets pour les remettre à un presta (il signe le reçu dans son appli), les rentrer au dépôt ou changer leur état. Clique un nom pour sa fiche et son historique.</p>
+        <span class="dz-boutons" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="ma-qr" title="Une étiquette par objet : QR code, nom, repère. Coche des objets pour n'imprimer que ceux-là.">${IC("doc")} Imprimer les QR codes</button><button class="btn" id="ma-csv">${IC("doc")} Exporter l'inventaire</button><button class="btn primary" id="ma-ajout">${IC("plus")} Ajouter du matériel</button></span></div>
+      <p class="muted small" style="margin:4px 0 0">Ce qui appartient à OIKOS et où ça se trouve. Chaque objet a son QR code : le presta le scanne avec son appli, dit l'état, prend une photo et signe, et l'objet passe chez lui tout seul. Clique un nom pour sa fiche, son QR code et son historique ; coche des objets pour les rentrer au dépôt, changer leur état ou imprimer leurs étiquettes.</p>
+      ${x.qr ? "" : `<p class="small" style="margin:6px 0 0;color:var(--warn,#8A5A0E)"><b>QR codes pas encore actifs :</b> lance le SQL 77 (« fiche outil et QR code ») dans Supabase.</p>`}
       <div class="ma-chiffres"><span><b>${actifs.length}</b><span class="muted small">objets</span></span><span><b>${actifs.filter(m => m.lieu === "depot").length}</b><span class="muted small">au dépôt</span></span><span><b>${actifs.filter(m => m.lieu !== "depot").length}</b><span class="muted small">sortis</span></span><span><b>${euros(valeur)}</b><span class="muted small">prix d'achat</span></span>${actifs.filter(m => ["a_reparer", "hors_service"].includes(m.etat)).length ? `<span><b>${actifs.filter(m => ["a_reparer", "hors_service"].includes(m.etat)).length}</b><span class="muted small">à réparer ou hors service</span></span>` : ""}</div>
       <div class="sous-menu" style="margin-top:12px">${FILTRES.map(([k, t]) => `<button class="chip" data-filtre="${k}" aria-pressed="${filtre === k}">${t}</button>`).join("")}</div>
       <div class="ma-barre"><input type="search" id="ma-cherche" placeholder="Chercher : nom, repère, presta, client…" value="${E(cherche)}"></div>
@@ -120,6 +151,7 @@
     z.onclick = e => {
       const f = e.target.closest("[data-filtre]"); if (f) { filtre = f.dataset.filtre; return page(); }
       const t = e.target.closest("[data-tout]"); if (t) { t.dataset.tout.split(",").forEach(id => coches.add(id)); z.querySelectorAll("[data-coche]").forEach(c => { c.checked = coches.has(c.dataset.coche); }); return barreSel(); }
+      const pz = e.target.closest("[data-prise]"); if (pz) return voirPrise(x, pz.dataset.prise);
       const fi = e.target.closest("[data-fiche]"); if (fi) return fiche(x, x.mat.find(m => m.id === fi.dataset.fiche));
       const g = e.target.closest("[data-geste]"); if (!g) return;
       const choisis = x.mat.filter(m => coches.has(m.id));
@@ -131,6 +163,7 @@
     };
     z.querySelector("#ma-ajout").onclick = () => editer(x, null);
     z.querySelector("#ma-csv").onclick = () => exporter(x);
+    z.querySelector("#ma-qr").onclick = () => { const choisis = x.mat.filter(m => coches.has(m.id)); imprimerQR(x, choisis.length ? choisis : l.filter(m => !SORTIS.includes(m.etat))); };
   }
 
   /* ---------- Ajouter ou modifier un objet ---------- */
@@ -192,16 +225,23 @@
     if (!m) return;
     const h = x.mvts.filter(v => v.materiel_id === m.id);
     const ou = v => v.lieu === "presta" ? "chez " + nomP(x.P[v.intervenante_id]) : v.lieu === "client" ? "chez le client " + ((x.C[v.client_id] || {}).nom || "?") : v.lieu === "ailleurs" ? (v.lieu_detail || "ailleurs") : v.lieu === "depot" ? "au dépôt" + (v.lieu_detail ? " (" + v.lieu_detail + ")" : "") : "";
+    const fs = v => { const p = x.prises.find(y => y.mouvement_id === v.id); return p ? ` <button type="button" class="ma-tag ok" data-prise="${p.id}" style="border:0;cursor:pointer">fiche signée par ${E(p.signataire)}</button>` : ""; };
+    const blocQR = m.jeton && window.QROikos ? `<div class="ma-qr"><div class="ma-qr-img">${QROikos.svg(adresseQR(m), 150, "QR code de " + m.nom)}</div>
+        <div style="flex:1 1 260px"><b>QR code de cet objet</b><p class="muted small" style="margin:2px 0 6px">À imprimer et coller dessus. Le presta le scanne avec son téléphone : son appli lui montre la fiche à signer (état, photo, signature). S'il ne peut pas scanner, il tape le code.</p>
+          <p style="margin:0 0 8px">Code : <span class="ma-rep" style="font-size:13px">${E(codeLisible(m.jeton))}</span></p>
+          <button class="btn small" data-g="qr">${IC("doc")} Imprimer l'étiquette</button></div></div>` : "";
     const doc = v => { const d = v.doc_envoi_id && x.D[v.doc_envoi_id]; return !d ? "" : d.etat === "fait" ? ` <span class="ma-tag ok">reçu signé</span>` : d.etat === "refuse" ? ` <span class="ma-tag non">reçu refusé</span>` : d.etat === "retire" ? ` <span class="ma-tag">reçu retiré</span>` : ` <span class="ma-tag att">reçu en attente</span>`; };
     fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">${m.etiquette ? `<span class="ma-rep">${E(m.etiquette)}</span> ` : ""}${E(m.nom)}</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
       <p style="margin:6px 0"><b>${E(ouEst(x, m))}</b> depuis le ${dateFr(m.depuis)} · <span class="ma-tag ${ETAT_TON[m.etat] || ""}">${ETATS[m.etat]}</span> ${recuDe(x, m)}</p>
       <p class="muted small" style="margin:0">${E(m.categorie)}${m.marque ? " · " + E(m.marque) : ""}${m.numero_serie ? " · n° de série " + E(m.numero_serie) : ""}${m.quantite > 1 ? " · quantité " + m.quantite : ""}${m.achete_le ? " · acheté le " + dateFr(m.achete_le) : ""}${m.prix != null ? " · " + euros(m.prix) : ""}</p>
       ${m.remarque ? `<p class="small" style="margin:6px 0 0">${E(m.remarque)}</p>` : ""}
+      ${blocQR}
       <h3 style="margin:14px 0 6px;font-size:15px">Historique</h3>
-      <ul class="ma-histo">${h.map(v => `<li><b>${dateFr(v.le)}</b> · ${SORTES[v.sorte] || v.sorte}${v.lieu ? " " + E(ou(v)) : ""}${v.etat && v.sorte !== "entree" ? " · " + ETATS[v.etat] : ""}${doc(v)}${v.remarque ? `<div class="ma-m">${E(v.remarque)}</div>` : ""}</li>`).join("") || `<li class="muted">Rien encore.</li>`}</ul>
+      <ul class="ma-histo">${h.map(v => `<li><b>${dateFr(v.le)}</b> · ${SORTES[v.sorte] || v.sorte}${v.lieu ? " " + E(ou(v)) : ""}${v.etat && v.sorte !== "entree" ? " · " + ETATS[v.etat] : ""}${doc(v)}${fs(v)}${v.remarque ? `<div class="ma-m">${E(v.remarque)}</div>` : ""}</li>`).join("") || `<li class="muted">Rien encore.</li>`}</ul>
       <div class="dz-boutons" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px"><button class="btn" data-g="modifier">Modifier la fiche</button><button class="btn" data-g="etat">Changer l'état</button>${m.lieu !== "depot" ? `<button class="btn" data-g="depot">Rentrer au dépôt</button>` : ""}<button class="btn primary" data-g="remettre">Remettre à un presta</button></div>`, (f, fermer) => {
       f.style.maxWidth = "720px";
-      f.onclick = e => { const b = e.target.closest("[data-g]"); if (!b) return; fermer();
+      f.onclick = e => { const pz = e.target.closest("[data-prise]"); if (pz) return voirPrise(x, pz.dataset.prise);
+        const b = e.target.closest("[data-g]"); if (!b) return; if (b.dataset.g === "qr") return imprimerQR(x, [m]); fermer();
         ({ modifier: () => editer(x, m), etat: () => changerEtat(x, [m]), depot: () => deplacer(x, [m], "depot"), remettre: () => remettre(x, [m]) })[b.dataset.g](); };
     });
   }
@@ -223,7 +263,8 @@
         <label>Pour les interventions chez (facultatif)<select id="r-client"><option value="">toutes ses missions</option>${x.clients.filter(c => c.etat !== "termine").map(c => `<option value="${c.id}">${E(c.nom)}</option>`).join("")}</select></label>
       </div>
       <label class="ma-form" style="grid-template-columns:1fr;margin-top:10px"><span>Clés, badges ou télécommandes remis en même temps (facultatif)</span><textarea id="r-cles" rows="2" placeholder="2 clés de la porte d'entrée, 1 badge du portail. Jamais les codes."></textarea></label>
-      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="r-recu" checked style="margin-top:4px"><span>Lui faire signer le reçu dans son appli <span class="muted small">(« Remise de clés, de matériel et de moyens d'accès », la liste du matériel est déjà remplie)</span></span></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="r-recu" ${x.qr ? "" : "checked"} style="margin-top:4px"><span>Lui faire signer aussi le reçu général dans son appli <span class="muted small">(« Remise de clés, de matériel et de moyens d'accès », la liste du matériel est déjà remplie ; utile surtout s'il y a des clés)</span></span></label>
+      ${x.qr ? `<p class="muted small" style="margin:4px 0 0">Sans reçu général, chaque objet apparaît dans son appli (Moi › Mon matériel) avec « fiche à signer » : il dit l'état, prend une photo et signe. Le plus simple reste de lui faire scanner le QR code de l'objet.</p>` : ""}
       <label class="ma-form" style="grid-template-columns:1fr;margin-top:6px"><span>Note pour lui (facultatif) <span class="muted small">et remarque gardée dans l'historique</span></span><textarea id="r-note" rows="2"></textarea></label>
       <div class="dz-boutons" style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="r-ok">Remettre</button></div>`, (f, fermer) => {
       f.style.maxWidth = "820px";
@@ -309,11 +350,53 @@
   /* ---------- Export de l'inventaire (assurance, comptable) ---------- */
   function exporter(x) {
     const c = s => '"' + String(s ?? "").replace(/"/g, '""') + '"';
-    const lignes = [["Repère", "Nom", "Catégorie", "Marque et modèle", "N° de série", "Quantité", "Acheté le", "Prix d'achat TTC", "État", "Où", "Depuis", "Remarque"].map(c).join(";")]
-      .concat(x.mat.map(m => [m.etiquette, m.nom, m.categorie, m.marque, m.numero_serie, m.quantite, m.achete_le ? dateFr(m.achete_le) : "", m.prix != null ? String(m.prix).replace(".", ",") : "", ETATS[m.etat], ouEst(x, m), dateFr(m.depuis), m.remarque].map(c).join(";")));
+    const lignes = [["Repère", "Nom", "Catégorie", "Marque et modèle", "N° de série", "Quantité", "Acheté le", "Prix d'achat TTC", "État", "Où", "Depuis", "Fiche signée le", "Remarque"].map(c).join(";")]
+      .concat(x.mat.map(m => [m.etiquette, m.nom, m.categorie, m.marque, m.numero_serie, m.quantite, m.achete_le ? dateFr(m.achete_le) : "", m.prix != null ? String(m.prix).replace(".", ",") : "", ETATS[m.etat], ouEst(x, m), dateFr(m.depuis), (p => p ? dateFr(String(p.signe_le).slice(0, 10)) : "")(priseEnCours(x, m)), m.remarque].map(c).join(";")));
     const b = new Blob(["﻿" + lignes.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "Inventaire matériel OIKOS " + auj() + ".csv"; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  /* ---------- Voir une fiche de prise en charge signée (photo, texte, signature) ---------- */
+  async function voirPrise(x, id) {
+    let p;
+    try { p = (await q(sb.from("materiel_prises").select("*").eq("id", id)))[0]; } catch (err) { return toast("Fiche illisible : " + (err.message || err)); }
+    if (!p) return toast("Fiche introuvable");
+    const m = x.mat.find(y => y.id === p.materiel_id) || {};
+    const image = s => /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s || "") ? s : "";
+    fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Fiche signée · ${m.etiquette ? `<span class="ma-rep">${E(m.etiquette)}</span> ` : ""}${E(m.nom || "")}</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
+      <p class="small" style="margin:6px 0"><b>${E(p.signataire)}</b> · le ${heureFr(p.signe_le)} · <span class="ma-tag ${ETAT_TON[p.etat] || ""}">${ETATS[p.etat] || E(p.etat)}</span>
+        <span class="muted">${p.via === "passe" ? " · passé par " + E(nomP(x.P[p.de_id])) : p.via === "qr" ? " · QR code de l'objet scanné" : " · remis par le pilote, signé ensuite"}</span></p>
+      ${image(p.photo) ? `<img class="ma-photo" src="${image(p.photo)}" alt="Photo de l'objet à la prise en charge">` : ""}
+      <div class="ma-doc">${E(p.texte)}</div>
+      ${image(p.signature) ? `<img src="${image(p.signature)}" alt="Signature" style="max-width:260px;border:1px solid var(--line,#ddd);border-radius:10px;background:#fff">` : ""}
+      <p class="muted small" style="margin:8px 0 0;word-break:break-all">Empreinte : ${E(p.empreinte)} · cette fiche ne peut plus être modifiée.</p>
+      <div class="dz-boutons" style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px"><button class="btn" id="p-imprimer">Imprimer</button><button class="btn primary" data-fermer>Fermer</button></div>`, f => {
+      f.style.maxWidth = "720px";
+      f.querySelector("#p-imprimer").onclick = () => imprimer(`<div style="grid-column:1/-1;text-align:left;font-size:11pt">
+        <h2 style="margin:0 0 3mm">${E(m.nom || "")}${m.etiquette ? " · " + E(m.etiquette) : ""}</h2>
+        ${image(p.photo) ? `<img src="${image(p.photo)}" style="max-width:90mm;max-height:70mm;display:block;margin-bottom:4mm">` : ""}
+        <div style="white-space:pre-line;line-height:1.45">${E(p.texte)}</div>
+        ${image(p.signature) ? `<p style="margin:4mm 0 1mm">Signature de ${E(p.signataire)}, le ${heureFr(p.signe_le)} :</p><img src="${image(p.signature)}" style="max-width:70mm;border:.3mm solid #999">` : ""}
+        <p style="font-size:8pt;word-break:break-all;margin-top:3mm">Empreinte : ${E(p.empreinte)}</p></div>`);
+    });
+  }
+
+  /* ---------- Imprimer : la page d'impression remplace l'écran le temps de l'impression (pas de fenêtre en plus) ---------- */
+  function imprimer(html) {
+    let z = document.getElementById("ma-impression");
+    if (!z) { z = document.createElement("div"); z.id = "ma-impression"; document.body.appendChild(z); }
+    z.innerHTML = html;
+    const fin = () => { document.body.classList.remove("ma-imprime"); z.innerHTML = ""; window.removeEventListener("afterprint", fin); };
+    window.addEventListener("afterprint", fin);
+    document.body.classList.add("ma-imprime");
+    setTimeout(() => { try { window.print(); } catch (e) { fin(); } }, 60);
+  }
+  function imprimerQR(x, liste) {
+    if (!window.QROikos) return toast("qr-oikos.js manque à côté de la page");
+    liste = liste.filter(m => m.jeton);
+    if (!liste.length) return toast(x.qr ? "Aucun objet à imprimer" : "Lance d'abord le SQL 77 : les objets n'ont pas encore de QR code");
+    imprimer(liste.map(m => `<div class="ma-etq">${QROikos.svg(adresseQR(m), 150, m.nom)}<b>${E(m.etiquette || "")}${m.etiquette ? " · " : ""}${E(m.nom)}</b><span>Matériel OIKOS · scanne avec ton appli</span><span class="c">${E(codeLisible(m.jeton))}</span></div>`).join(""));
   }
 
   window.MaterielOikos = { page };

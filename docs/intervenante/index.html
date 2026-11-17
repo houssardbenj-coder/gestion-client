@@ -674,6 +674,7 @@ window.introOuverte = true;
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" integrity="sha384-2zrRDgDHSYB/GN3nFW3fsZXoxEhKIr3N2h63Tc6DEOB9JJdFIu8xMJT2Cph/gBil" crossorigin="anonymous"></script>
 <script src="documents-oikos.js"></script><!-- documents à lire et signer (SQL 65) -->
+<script src="qr-oikos.js"></script><script src="outils-oikos.js"></script><!-- mon matériel : fiche outil, QR code, prise en charge signée (SQL 77) -->
 <script>
 /* ===================== Réglages ===================== */
 /* Adresse et clé PUBLIQUE du projet (faites pour être dans l'appli : la base protège les données elle-même) */
@@ -1080,9 +1081,11 @@ async function accueil(o) {
     if (c.error) throw c.error;
     clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, messages: vueMessages, moi: vueMoi, papiers: vuePapiers, taches: vueTaches,
-      docs: () => window.DocsOikos ? DocsOikos.presta() : contenu("<h1>Mes documents</h1><p class='muted'>Mets l'appli à jour.</p>") })[onglet]();
+      docs: () => window.DocsOikos ? DocsOikos.presta() : contenu("<h1>Mes documents</h1><p class='muted'>Mets l'appli à jour.</p>"),
+      materiel: () => window.OutilsOikos ? OutilsOikos.page() : contenu("<h1>Mon matériel</h1><p class='muted'>Mets l'appli à jour.</p>") })[onglet]();
     if (onglet === "agenda" || onglet === "jour") rappelsMission().catch(() => {});
     if (window.DocsOikos) DocsOikos.rappel(onglet).catch(() => {});   // documents à lire et signer (SQL 65) : bandeau sur Aujourd'hui, bouton dans Moi
+    if (window.OutilsOikos) OutilsOikos.rappel(onglet).catch(() => {});   // mon matériel (SQL 77) : arrivée par un QR code, bandeau sur Aujourd'hui, bouton dans Moi
     if (animer) entree(sens);
     didacticielSiBesoin();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
