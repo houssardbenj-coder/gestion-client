@@ -40,7 +40,7 @@
 .dz-pad{position:relative;border:1.5px dashed var(--accent,#525A44);border-radius:12px;background:#fff;touch-action:none;height:170px}.dz-pad canvas{width:100%;height:100%;display:block;border-radius:12px;cursor:crosshair}
 .dz-pad span{position:absolute;left:12px;bottom:8px;font-size:12px;color:#8a8a80;pointer-events:none}
 .dz-liste{display:grid;gap:8px}.dz-ligne{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface,var(--carte,#fff))}
-.dz-ligne b{display:block}.dz-ligne .dz-m{font-size:12px;color:var(--muted,#666)}.dz-boutons{display:flex;gap:6px;flex-wrap:wrap}
+.dz-ligne.dz-court{padding:6px 10px;border-radius:10px}.dz-ligne.dz-court .btn{padding:4px 10px;min-height:0}.dz-ligne b{display:block}.dz-ligne .dz-m{font-size:12px;color:var(--muted,#666)}.dz-boutons{display:flex;gap:6px;flex-wrap:wrap}
 .dz-tag{display:inline-block;font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;background:var(--accent-soft,#E7E8DA);color:var(--accent,#525A44)}
 .dz-tag.ok{background:var(--paie,#DFF0DC);color:var(--paie-ink,#2C6B29)}.dz-tag.non{background:var(--delai,#FBE3DE);color:var(--delai-ink,#8E2F1C)}.dz-tag.att{background:var(--warn-soft,#F4E9CC);color:var(--warn,#8A5A0E)}
 .dz-bandeau{display:flex;gap:10px;align-items:center;justify-content:space-between;border-radius:14px;padding:12px 14px;margin:0 0 14px;background:var(--warn-soft,#F4E9CC);color:var(--warn,#8A5A0E)}
@@ -274,7 +274,7 @@
   /* ===================== Pilote : page « Documents » ===================== */
   // Trois entrées : « Envoyer à une personne » (le pilote propose selon son profil), le Suivi (par personne ou par document)
   // et la Bibliothèque (rangée par destinataire puis par moment : à l'arrivée, selon le cas, quand il se passe quelque chose).
-  let vuePilote = "suivi", filtreSuivi = "attente", rangSuivi = "personne", pourBiblio = "presta";
+  let vuePilote = "suivi", filtreSuivi = "attente", rangSuivi = "personne", pourBiblio = "presta", chercheSuivi = "", plusSuivi = 25;
   const choisis = new Set();
   const QUAND = { arrivee: "À l'arrivée", cas: "Selon le cas", evenement: "Quand il se passe quelque chose" };
   const QUAND_AIDE = { arrivee: "proposés d'office à une nouvelle personne", cas: "proposés sans être cochés", evenement: "à envoyer seulement le jour où ça arrive (clés, transfert, nouvelle grille, avenant…)" };
@@ -288,8 +288,36 @@
       q(sb.from("clients").select("id,nom,adresse,email,telephone,etat").order("nom")),
       sb.from("comptes_clients").select("id,client_id,actif").then(r => r.data || [], () => []),
       q(sb.from("pieces_demandees").select("id,libelle").order("ordre"))]);
+    const anciens = await chargerAnciens(envois).catch(() => []);
     const parId = l => Object.fromEntries(l.map(x => [x.id, x]));
-    return { modeles, envois, profils, clientsL, pieces, P: parId(profils), C: parId(clientsL), M: parId(modeles), avecCompte: new Set(comptes.filter(k => k.actif).map(k => k.client_id)) };
+    return { modeles, envois, anciens, profils, clientsL, pieces, P: parId(profils), C: parId(clientsL), M: parId(modeles), avecCompte: new Set(comptes.filter(k => k.actif).map(k => k.client_id)) };
+  }
+  // Documents signés AVANT la bibliothèque (17/11/2026) : retrouvés dans les papiers des presta (table documents),
+  // le dossier juridique des clients (client_juridique) et leur espace client (client_documents). Lecture seule.
+  const SIGNE_RE = /sign|contrat|mandat|procuration|droit [àa] l.image|avenant|convention|engagement|charte|cgv|conditions g[ée]n[ée]rales|r[eè]glement int/i;
+  async function chargerAnciens(envois) {
+    const lire = p => p.then(r => r.error ? [] : (r.data || []), () => []);
+    const [papiers, jur, cdocs] = await Promise.all([
+      lire(sb.from("documents").select("id,intervenante_id,libelle,fichier,drive_url,etat,cree_le,facture_mois").neq("etat", "refuse").limit(3000)),
+      lire(sb.from("client_juridique").select("id,client_id,type,titre,texte,date_evt,drive_url,cree_le").is("supprime_le", null).limit(3000)),
+      lire(sb.from("client_documents").select("id,client_id,categorie,titre,date_doc,chemin,lien,ref,cree_le").in("categorie", ["contrat", "juridique", "feuille_signee"]).limit(3000))]);
+    const faits = new Set(envois.map(e => e.pdf_chemin).filter(Boolean)), vus = new Set(), l = [];
+    const garder = o => { const k = (o.client_id || o.intervenante_id) + "|" + String(o.titre).toLowerCase().trim() + "|" + String(o.quand || "").slice(0, 10); if (vus.has(k)) return; vus.add(k); l.push(Object.assign({ ancien: true, etat: "fait", action: "signer" }, o)); };
+    papiers.forEach(d => {
+      const t = d.libelle || "";
+      if (d.facture_mois || faits.has(d.fichier) || /^factur/i.test(t) || !SIGNE_RE.test(t)) return;
+      const drive = String(d.fichier || "").startsWith("drive:"), url = drive ? d.drive_url : /^https?:/.test(d.fichier || "") ? d.fichier : null;
+      garder({ id: "p:" + d.id, titre: t, quand: d.cree_le, intervenante_id: d.intervenante_id, source: d.etat === "recu" ? "papier pas encore validé" : "ses papiers", url, seau: url || drive ? null : "documents", chemin: url || drive ? null : d.fichier });
+    });
+    jur.forEach(j => {
+      if (/^Signé dans l'espace client/.test(j.texte || "") || !(j.type === "contrat" || SIGNE_RE.test(j.titre || ""))) return;
+      garder({ id: "j:" + j.id, titre: j.titre, quand: j.date_evt || j.cree_le, client_id: j.client_id, source: "dossier juridique", url: j.drive_url || null });
+    });
+    cdocs.forEach(c => {
+      if (String(c.ref || "").startsWith("doc:")) return;
+      garder({ id: "c:" + c.id, titre: c.titre, quand: c.date_doc || c.cree_le, client_id: c.client_id, source: "espace client", url: c.chemin ? null : c.lien, seau: c.chemin ? "espace-client" : null, chemin: c.chemin || null });
+    });
+    return l;
   }
   // Tout le monde à qui on peut envoyer : presta, chefs, clients (ceux qui ont un espace client)
   function lesGens(x) {
@@ -305,41 +333,67 @@
   async function pilote() {
     styles();
     const x = await chargerDocs();
-    const { modeles, envois, P, C, M } = x;
+    const { modeles, envois, anciens, P, C, M } = x;
     const qui = e => e.intervenante_id ? { nom: nomP(P[e.intervenante_id]), type: P[e.intervenante_id] && P[e.intervenante_id].cheffe_reseau ? "Chef" : "Presta" } : { nom: (C[e.client_id] || {}).nom || "Client", type: "Client" };
-    const etatTag = e => e.etat === "fait" ? `<span class="dz-tag ok">${e.action === "signer" ? "Signé" : e.action === "accepter" ? "Accepté" : "Lu"} le ${dateFr(e.fait_le)}</span>`
+    const etatTag = e => e.ancien ? `<span class="dz-tag" title="Signé avant la bibliothèque : retrouvé dans ${E(e.source)}">Avant l'appli${e.quand ? " · " + dateFr(e.quand) : ""}</span>`
+      : e.etat === "fait" ? `<span class="dz-tag ok">${e.action === "signer" ? "Signé" : e.action === "accepter" ? "Accepté" : "Lu"} le ${dateFr(e.fait_le)}</span>`
       : e.etat === "refuse" ? `<span class="dz-tag non" title="${E(e.motif || "")}">Refusé${e.motif ? " : " + E(e.motif.slice(0, 40)) : ""}</span>`
       : e.etat === "retire" ? `<span class="dz-tag">Retiré</span>` : e.etat === "vu" ? `<span class="dz-tag att">Ouvert le ${dateFr(e.vu_le)}</span>` : `<span class="dz-tag att">Pas encore ouvert</span>`;
     const pdfTag = e => e.pdf_etat === "fait" && e.pdf_chemin ? `<button class="btn" data-pdf="${e.id}">${IC("doc")} PDF</button>` : e.pdf_etat === "erreur" ? `<span class="dz-tag non" title="${E(e.pdf_erreur || "")}">PDF en erreur</span>` : e.pdf_etat ? `<span class="dz-tag att">PDF en préparation</span>` : "";
-    const filtres = { attente: ["À signer", e => e.etat === "envoye" || e.etat === "vu"], fait: ["Signés", e => e.etat === "fait"], refuse: ["Refusés", e => e.etat === "refuse"], tous: ["Tous", e => e.etat !== "retire"] };
+    // Une version remplacée ne prend plus de place : elle se replie sous la version qui la remplace
+    const remplacees = new Set(envois.filter(v => v.remplace && v.etat !== "retire").map(v => v.remplace));
+    const avant = e => { const l = []; let id = e.remplace; while (id) { const v = envois.find(z => z.id === id); if (!v || l.includes(v)) break; l.push(v); id = v.remplace; } return l; };
+    const tout = envois.filter(e => !remplacees.has(e.id)).concat(anciens);
+    const filtres = { attente: ["À signer", e => e.etat === "envoye" || e.etat === "vu"], fait: ["Signés", e => e.etat === "fait"], anciens: ["Avant l'appli", e => !!e.ancien], refuse: ["Refusés", e => e.etat === "refuse"], tous: ["Tous", e => e.etat !== "retire"] };
     const nbAtt = envois.filter(filtres.attente[1]).length;
     const el = contenu(`<div class="dz-boutons" style="justify-content:space-between;align-items:center"><h1 style="margin:0">Documents</h1><button class="btn primary" data-a-une-personne>${IC("personne")} Envoyer à une personne</button></div>
       <p class="muted small" style="margin:6px 0 12px">Choisis une personne : le pilote te dit quels documents lui envoyer selon son profil et ce qu'elle a déjà signé. Une fois signé, le PDF part tout seul dans son dossier Drive et ne se modifie plus.</p>
       <div class="sous-menu" style="margin-bottom:12px"><button class="chip" data-vue="suivi" aria-pressed="${vuePilote === "suivi"}">Suivi${nbAtt ? " (" + nbAtt + " à signer)" : ""}</button><button class="chip" data-vue="biblio" aria-pressed="${vuePilote === "biblio"}">Bibliothèque (${modeles.filter(m => m.actif).length})</button></div>
       <div id="dz-zone"></div>`);
     const zone = el.querySelector("#dz-zone");
-    const ligneEnvoi = (e, avecNom) => { const w = qui(e), apres = envois.find(v => v.remplace === e.id && v.etat !== "retire");
-      return `<div class="dz-ligne"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}envoyé le ${dateFr(e.envoye_le)}${e.echeance ? " · avant le " + dateFr(e.echeance) : ""}${e.signe_nom ? " · signé par " + E(e.signe_nom) : ""}</span>${e.note ? `<span class="dz-m" style="font-style:italic">Note : ${E(e.note.length > 120 ? e.note.slice(0, 120) + "…" : e.note)}</span>` : ""}</span>
-        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat" data-note-envoi="${e.id}">${e.note ? "Modifier la note" : "Ajouter une note"}</button>` : ""}${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${e.etat === "fait" && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (e.etat === "fait" && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
+    const ligneEnvoi = (e, avecNom) => { const w = qui(e);
+      if (e.ancien) return `<div class="dz-ligne dz-court"><span><b>${E(e.titre)}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}retrouvé dans ${E(e.source)}</span></span>
+        <span class="dz-boutons">${etatTag(e)}${e.url || e.chemin ? `<button class="btn flat" data-ancien="${E(e.id)}">${IC("doc")} Voir</button>` : `<span class="muted small">pas de fichier</span>`}</span></div>`;
+      const apres = envois.find(v => v.remplace === e.id && v.etat !== "retire"), prec = avant(e), fait = e.etat === "fait";
+      return `<div class="dz-ligne${fait ? " dz-court" : ""}"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}${fait ? (e.signe_nom ? "signé par " + E(e.signe_nom) : "envoyé le " + dateFr(e.envoye_le)) : "envoyé le " + dateFr(e.envoye_le) + (e.echeance ? " · avant le " + dateFr(e.echeance) : "")}</span>${e.note && !fait ? `<span class="dz-m" style="font-style:italic">Note : ${E(e.note.length > 120 ? e.note.slice(0, 120) + "…" : e.note)}</span>` : ""}
+        ${prec.length ? `<details class="dz-m" style="margin-top:2px"><summary style="cursor:pointer">Versions précédentes (${prec.length})</summary>${prec.map(v => `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">version ${v.numero || 1} · ${etatTag(v)}${v.pdf_etat === "fait" && v.pdf_chemin ? `<button class="btn flat" data-pdf="${v.id}">PDF</button>` : ""}<button class="btn flat" data-voir="${v.id}">Voir</button></div>`).join("")}</details>` : ""}</span>
+        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat" data-note-envoi="${e.id}">${e.note ? "Modifier la note" : "Ajouter une note"}</button>` : ""}${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${fait && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (fait && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
+    const sans = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const quandDe = e => e.ancien ? e.quand : e.fait_le || e.vu_le || e.envoye_le;
+    const ordre = (a, b) => ((b.etat === "envoye" || b.etat === "vu") - (a.etat === "envoye" || a.etat === "vu")) || new Date(quandDe(b) || 0) - new Date(quandDe(a) || 0);
+    const joignables = new Set(lesGens(x).map(g => g.cle));
+    const plus = n => n > plusSuivi ? `<button class="btn flat" data-plus style="margin-top:8px">Afficher plus (${n - plusSuivi} de plus)</button>` : "";
     const dessinerSuivi = () => {
-      const l = envois.filter(filtres[filtreSuivi][1]);
+      const mot = sans(chercheSuivi.trim());
+      const l = tout.filter(filtres[filtreSuivi][1]).filter(e => !mot || sans(e.titre).includes(mot) || sans(qui(e).nom).includes(mot)).sort(ordre);
       let corps = "";
-      if (!l.length) corps = `<div class="card"><p class="muted">Rien ici. Pour envoyer : « Envoyer à une personne », ou coche des modèles dans la Bibliothèque.</p></div>`;
-      else if (rangSuivi === "document") corps = `<div class="dz-liste">${l.map(e => ligneEnvoi(e, true)).join("")}</div>`;
-      else {   // par personne : une carte repliable par personne, ceux qui ont du retard en premier
+      if (!l.length) corps = `<div class="card"><p class="muted">${mot ? "Rien ne correspond à « " + E(chercheSuivi) + " »." : filtreSuivi === "anciens" ? "Aucun document signé avant l'appli retrouvé dans les papiers des presta ni dans les dossiers juridiques des clients." : "Rien ici. Pour envoyer : « Envoyer à une personne », ou coche des modèles dans la Bibliothèque."}</p></div>`;
+      else if (rangSuivi === "document") {   // par document : une ligne par sorte de document, les personnes dedans (replié)
+        const groupes = {};
+        l.forEach(e => { const k = sans(e.titre).replace(/\s*-\s*version \d+/, "").replace(/\s+(signee?s?|accepte)$/, "").trim(); (groupes[k] = groupes[k] || []).push(e); });
+        const g = Object.values(groupes).sort((a, b) => b.length - a.length || a[0].titre.localeCompare(b[0].titre));
+        corps = `<div class="dz-liste">${g.slice(0, plusSuivi).map(liste => { const nf = liste.filter(e => e.etat === "fait").length, na = liste.filter(e => e.etat === "envoye" || e.etat === "vu").length, nr = liste.filter(e => e.etat === "refuse").length, nv = liste.filter(e => e.ancien).length;
+          return `<details class="card" style="padding:8px 12px" ${g.length === 1 ? "open" : ""}><summary style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${E(liste[0].titre)}</b>
+            ${nf ? `<span class="dz-tag ok">${nf} signé${nf > 1 ? "s" : ""}${nv ? " dont " + nv + " avant l'appli" : ""}</span>` : ""}${na ? `<span class="dz-tag att">${na} en attente</span>` : ""}${nr ? `<span class="dz-tag non">${nr} refusé${nr > 1 ? "s" : ""}</span>` : ""}</summary>
+            <div class="dz-liste" style="margin-top:8px;gap:6px">${liste.map(e => ligneEnvoi(e, true)).join("")}</div></details>`; }).join("")}</div>${plus(g.length)}`;
+      } else {   // par personne : une carte repliée par personne, ceux qui ont du retard en premier
         const groupes = {};
         l.forEach(e => { const k = e.intervenante_id ? "i:" + e.intervenante_id : "c:" + e.client_id; (groupes[k] = groupes[k] || []).push(e); });
-        const cartes = Object.entries(groupes).map(([k, liste]) => { const w = qui(liste[0]), tous = envois.filter(e => e.etat !== "retire" && (k[0] === "i" ? e.intervenante_id === k.slice(2) : e.client_id === k.slice(2)));
-          const nbF = tous.filter(e => e.etat === "fait").length, nbA = tous.filter(e => e.etat === "envoye" || e.etat === "vu").length, nbR = tous.filter(e => e.etat === "refuse").length;
-          return { k, w, nbA, html: `<details class="card" style="padding:10px 12px" ${Object.keys(groupes).length <= 3 ? "open" : ""}><summary style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${E(w.nom)}</b><span class="dz-tag">${E(w.type)}</span>
-              <span class="dz-tag ok">${nbF} signé${nbF > 1 ? "s" : ""}</span>${nbA ? `<span class="dz-tag att">${nbA} en attente</span>` : ""}${nbR ? `<span class="dz-tag non">${nbR} refusé${nbR > 1 ? "s" : ""}</span>` : ""}
-              <button class="btn flat" data-completer="${k}" style="margin-left:auto">Que lui envoyer ?</button></summary>
-              <div class="dz-liste" style="margin-top:8px">${liste.map(e => ligneEnvoi(e, false)).join("")}</div></details>` }; })
+        const ouvrir = Object.keys(groupes).length <= 3;
+        const cartes = Object.entries(groupes).map(([k, liste]) => { const w = qui(liste[0]), siens = tout.filter(e => e.etat !== "retire" && (k[0] === "i" ? e.intervenante_id === k.slice(2) : e.client_id === k.slice(2)));
+          const nbF = siens.filter(e => e.etat === "fait" && !e.ancien).length, nbV = siens.filter(e => e.ancien).length, nbA = siens.filter(e => e.etat === "envoye" || e.etat === "vu").length, nbR = siens.filter(e => e.etat === "refuse").length;
+          return { k, w, nbA, html: `<details class="card" style="padding:8px 12px" ${ouvrir ? "open" : ""}><summary style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${E(w.nom)}</b><span class="dz-tag">${E(w.type)}</span>
+              ${nbF ? `<span class="dz-tag ok">${nbF} signé${nbF > 1 ? "s" : ""}</span>` : ""}${nbV ? `<span class="dz-tag">${nbV} avant l'appli</span>` : ""}${nbA ? `<span class="dz-tag att">${nbA} en attente</span>` : ""}${nbR ? `<span class="dz-tag non">${nbR} refusé${nbR > 1 ? "s" : ""}</span>` : ""}
+              ${joignables.has(k) ? `<button class="btn flat" data-completer="${k}" style="margin-left:auto">Que lui envoyer ?</button>` : ""}</summary>
+              <div class="dz-liste" style="margin-top:8px;gap:6px">${liste.map(e => ligneEnvoi(e, false)).join("")}</div></details>` }; })
           .sort((a, b) => b.nbA - a.nbA || a.w.nom.localeCompare(b.w.nom));
-        corps = `<div class="dz-liste">${cartes.map(c => c.html).join("")}</div>`;
+        corps = `<div class="dz-liste">${cartes.slice(0, plusSuivi).map(c => c.html).join("")}</div>${plus(cartes.length)}`;
       }
-      zone.innerHTML = `<div class="dz-boutons" style="margin-bottom:10px;justify-content:space-between"><div class="sous-menu">${Object.entries(filtres).map(([k, [t, f]]) => `<button class="chip" data-filtre="${k}" aria-pressed="${k === filtreSuivi}">${t} (${envois.filter(f).length})</button>`).join("")}</div>
-        <div class="sous-menu"><button class="chip" data-rang="personne" aria-pressed="${rangSuivi === "personne"}">Par personne</button><button class="chip" data-rang="document" aria-pressed="${rangSuivi === "document"}">Par document</button></div></div>${corps}`;
+      zone.innerHTML = `<div class="dz-boutons" style="margin-bottom:10px;justify-content:space-between"><div class="sous-menu">${Object.entries(filtres).map(([k, [t, f]]) => `<button class="chip" data-filtre="${k}" aria-pressed="${k === filtreSuivi}">${t} (${tout.filter(f).length})</button>`).join("")}</div>
+        <div class="sous-menu"><button class="chip" data-rang="personne" aria-pressed="${rangSuivi === "personne"}">Par personne</button><button class="chip" data-rang="document" aria-pressed="${rangSuivi === "document"}">Par document</button></div></div>
+        <input type="search" id="dz-cherche" placeholder="Chercher une personne ou un document" value="${E(chercheSuivi)}" style="width:100%;box-sizing:border-box;margin-bottom:10px">${corps}`;
+      const ch = zone.querySelector("#dz-cherche");
+      ch.oninput = () => { chercheSuivi = ch.value; plusSuivi = 25; const pos = ch.selectionStart; dessinerSuivi(); const n = zone.querySelector("#dz-cherche"); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) {} };
     };
     const dessinerBiblio = () => {
       const visibles = modeles.filter(m => m.actif && (pourBiblio === "tous" || m.pour.includes(pourBiblio)));
@@ -365,8 +419,10 @@
         if (b.hasAttribute("data-a-une-personne")) return envoyerAUnePersonne(x, null);
         if (b.dataset.completer) { e.preventDefault(); return envoyerAUnePersonne(x, b.dataset.completer); }
         if (b.dataset.vue) { vuePilote = b.dataset.vue; return redessiner(); }
-        if (b.dataset.filtre) { filtreSuivi = b.dataset.filtre; return dessinerSuivi(); }
-        if (b.dataset.rang) { rangSuivi = b.dataset.rang; return dessinerSuivi(); }
+        if (b.dataset.filtre) { filtreSuivi = b.dataset.filtre; plusSuivi = 25; return dessinerSuivi(); }
+        if (b.dataset.rang) { rangSuivi = b.dataset.rang; plusSuivi = 25; return dessinerSuivi(); }
+        if (b.hasAttribute("data-plus")) { plusSuivi += 25; return dessinerSuivi(); }
+        if (b.dataset.ancien) { const v = anciens.find(z => z.id === b.dataset.ancien); if (!v) return; return window.open(v.url || await lienSigne(v.seau, v.chemin), "_blank", "noopener"); }
         if (b.dataset.pourBiblio) { pourBiblio = b.dataset.pourBiblio; return dessinerBiblio(); }
         if (b.hasAttribute("data-decocher")) { choisis.clear(); return dessinerBiblio(); }
         if (b.hasAttribute("data-envoyer-choix")) return mettreADisposition([...choisis].map(id => M[id]).filter(Boolean), x);
