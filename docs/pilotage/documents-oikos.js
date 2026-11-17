@@ -357,7 +357,7 @@
       const apres = envois.find(v => v.remplace === e.id && v.etat !== "retire"), prec = avant(e), fait = e.etat === "fait";
       return `<div class="dz-ligne${fait ? " dz-court" : ""}"><span><b>${E(e.titre)}${(e.numero || 1) > 1 ? ` <span class="dz-tag">version ${e.numero}</span>` : ""}${apres ? ` <span class="dz-tag">remplacé par la version ${apres.numero}</span>` : ""}</b><span class="dz-m">${avecNom ? E(w.type) + " : " + E(w.nom) + " · " : ""}${fait ? (e.signe_nom ? "signé par " + E(e.signe_nom) : "envoyé le " + dateFr(e.envoye_le)) : "envoyé le " + dateFr(e.envoye_le) + (e.echeance ? " · avant le " + dateFr(e.echeance) : "")}</span>${e.note && !fait ? `<span class="dz-m" style="font-style:italic">Note : ${E(e.note.length > 120 ? e.note.slice(0, 120) + "…" : e.note)}</span>` : ""}
         ${prec.length ? `<details class="dz-m" style="margin-top:2px"><summary style="cursor:pointer">Versions précédentes (${prec.length})</summary>${prec.map(v => `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">version ${v.numero || 1} · ${etatTag(v)}${v.pdf_etat === "fait" && v.pdf_chemin ? `<button class="btn flat" data-pdf="${v.id}">PDF</button>` : ""}<button class="btn flat" data-voir="${v.id}">Voir</button></div>`).join("")}</details>` : ""}</span>
-        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat" data-note-envoi="${e.id}">${e.note ? "Modifier la note" : "Ajouter une note"}</button>` : ""}${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${fait && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (fait && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
+        <span class="dz-boutons">${etatTag(e)}${pdfTag(e)}<button class="btn flat" data-voir="${e.id}">Voir</button>${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat" data-modifier-envoi="${e.id}" title="Changer le texte, les cases d'OIKOS (prix…), la note ou la date, pour cette personne seulement : le modèle ne bouge pas">${IC("stylo")} Modifier</button>` : ""}${e.etat === "envoye" || e.etat === "vu" ? `<button class="btn flat stop" data-retirer="${e.id}">Retirer</button>` : ""}${fait && !apres ? `<button class="btn flat" data-version="${e.id}" title="Le document signé reste tel quel ; une nouvelle version part à signer">Nouvelle version</button>` : ""}${e.etat === "refuse" || (fait && e.pdf_etat === "erreur") ? `<button class="btn flat" data-renvoyer="${e.id}">${e.etat === "refuse" ? "Renvoyer" : "Refaire le PDF"}</button>` : ""}</span></div>`; };
     const sans = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
     const quandDe = e => e.ancien ? e.quand : e.fait_le || e.vu_le || e.envoye_le;
     const ordre = (a, b) => ((b.etat === "envoye" || b.etat === "vu") - (a.etat === "envoye" || a.etat === "vu")) || new Date(quandDe(b) || 0) - new Date(quandDe(a) || 0);
@@ -441,6 +441,7 @@
             };
           });
         }
+        if (b.dataset.modifierEnvoi) return modifierEnvoi(b.dataset.modifierEnvoi);
         if (b.dataset.version) return nouvelleVersion(b.dataset.version);
         if (b.dataset.retirer) { if (!confirm("Retirer ce document ? La personne ne le verra plus.")) return; await q(sb.from("doc_envois").update({ etat: "retire" }).eq("id", b.dataset.retirer)); toast("Retiré"); return afficher("documents"); }
         if (b.dataset.renvoyer) {
@@ -484,6 +485,47 @@
             remplace: d.id, numero: n, note: (f.querySelector("#nv-note").value || "").trim().slice(0, 2000) || null }));
           toast("Version " + n + " envoyée"); fermer(); vuePilote = "suivi"; filtreSuivi = "attente"; afficher("documents");
         } catch (err) { bouton.disabled = false; toast("Pas envoyé : " + (err.message || err)); }
+      };
+    });
+  }
+
+  /* ---------- Modifier un document envoyé tant qu'il n'est pas signé (17/11/2026) ----------
+     Seulement CET envoi : le modèle de la bibliothèque ne bouge pas. Une fois signé, plus rien ne bouge (SQL 68) : il faut une nouvelle version.
+     Après la modification, le document repasse en « pas encore ouvert » pour qu'on voie s'il a relu la nouvelle version. */
+  async function modifierEnvoi(id) {
+    const d = await q(sb.from("doc_envois").select("*").eq("id", id).single());
+    if (d.etat !== "envoye" && d.etat !== "vu") { toast("Déjà signé ou refusé : utilise « Nouvelle version »"); return afficher("documents"); }
+    const vals = Object.assign({}, d.valeurs || {}), aOikos = (d.champs || []).some(c => c.qui === "oikos");
+    fenetre(`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Modifier avant signature</h2><button class="btn flat" data-fermer>${IC("croix")}</button></div>
+      <p class="muted small" style="margin:0">« ${E(d.titre)} » : seulement pour cette personne, le modèle de la bibliothèque ne change pas. ${d.etat === "vu" ? "<b>Il l'a déjà ouvert :</b> il verra la nouvelle version à sa prochaine ouverture ; pense à le prévenir." : "Il ne l'a pas encore ouvert."}</p>
+      ${aOikos ? `<section class="card"><b>Cases remplies par OIKOS</b> <span class="muted small">(prix, dates, missions…)</span><div class="dz-champs" id="me-oikos" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${champsHtml(d.champs, vals, "oikos")}</div></section>` : ""}
+      ${d.contenu ? `<div class="dz-boutons"><button class="btn" id="me-t">Texte</button><button class="btn flat" id="me-a">Aperçu</button><span class="muted small">Pour une particularité de cette personne, change le texte ici.</span></div>
+        <textarea id="me-contenu" rows="14" style="width:100%;box-sizing:border-box;font:13px/1.45 ui-monospace,Consolas,monospace">${E(d.contenu)}</textarea><div id="me-apercu" class="dz-doc" style="display:none;max-height:55vh;overflow:auto"></div>` : `<p class="small">Document à partir d'un fichier : le fichier joint ne se change pas ici (retire-le et envoie-en un autre).</p>`}
+      <label class="dz-champs"><span>Note pour la personne (facultatif)</span><textarea id="me-note" rows="2" placeholder="Ex. : le prix a changé, relis l'article 6.">${E(d.note || "")}</textarea></label>
+      <label class="dz-champs" style="max-width:260px"><span>À faire avant le (facultatif)</span><input type="date" id="me-echeance" value="${E(d.echeance || "")}"></label>
+      <div class="dz-boutons" style="justify-content:flex-end"><button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="me-ok">Enregistrer</button></div>`, (f, fermer) => {
+      const ta = f.querySelector("#me-contenu"), ap = f.querySelector("#me-apercu");
+      const valeursVues = () => { const zo = f.querySelector("#me-oikos"); return Object.assign({}, vals, zo ? lireChamps(zo) : {}); };
+      if (ta) {
+        const onglet = a => { f.querySelector("#me-t").className = "btn" + (a ? " flat" : ""); f.querySelector("#me-a").className = "btn" + (a ? "" : " flat"); ta.style.display = a ? "none" : ""; ap.style.display = a ? "" : "none"; if (a) ap.innerHTML = rendre(ta.value, d.champs, valeursVues(), null, true); };
+        f.querySelector("#me-t").onclick = () => onglet(false); f.querySelector("#me-a").onclick = () => onglet(true);
+      }
+      f.querySelector("#me-ok").onclick = async ev => {
+        const bouton = ev.currentTarget;
+        try {
+          const vo = valeursVues(), mq = manque(d.champs, vo, "oikos"); if (mq) return toast("Case à remplir : " + mq.libelle);
+          const contenuN = ta ? ta.value.trim() : null;
+          if (ta && !contenuN) return toast("Le texte ne peut pas être vide");
+          bouton.disabled = true;
+          const frais = await q(sb.from("doc_envois").select("etat").eq("id", d.id).single());   // signé entre-temps ?
+          if (frais.etat !== "envoye" && frais.etat !== "vu") { fermer(); toast("Il vient de le signer ou de le refuser : rien n'a été changé. Pour corriger : « Nouvelle version »."); return afficher("documents"); }
+          const maj = { valeurs: vo, note: (f.querySelector("#me-note").value || "").trim().slice(0, 2000) || null, echeance: f.querySelector("#me-echeance").value || null };
+          if (ta) maj.contenu = contenuN;
+          const change = (ta && contenuN !== d.contenu) || JSON.stringify(vo) !== JSON.stringify(d.valeurs || {});
+          if (change) { maj.etat = "envoye"; maj.vu_le = null; }   // le texte a changé : on repart de « pas encore ouvert »
+          await q(sb.from("doc_envois").update(maj).eq("id", d.id).in("etat", ["envoye", "vu"]));
+          toast(change ? "Modifié : il verra la nouvelle version en l'ouvrant" : "Enregistré"); fermer(); afficher("documents");
+        } catch (err) { bouton.disabled = false; toast("Pas enregistré : " + (err.message || err)); }
       };
     });
   }
