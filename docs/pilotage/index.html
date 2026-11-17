@@ -810,6 +810,7 @@ window.introOuverte = true;
 <script src="xlsx-0.20.3.full.min.js"></script>
 <script src="documents-oikos.js"></script><!-- bibliothèque de documents (SQL 65) : page Messages › Documents -->
 <script src="qr-oikos.js"></script><!-- fabrique des QR codes (fiche outil, SQL 77) -->
+<script src="facture-lue.js"></script><!-- lecture du n° et du montant des factures des presta (pdf.min.js chargé au besoin) -->
 <script src="materiel-oikos.js"></script><!-- inventaire du matériel (SQL 73) : page Équipe › Matériel -->
 <script>
 /* ===================== Réglages ===================== */
@@ -3415,6 +3416,15 @@ async function voirFichier(chemin) {
   const { data, error } = await sb.storage.from("documents").createSignedUrl(chemin, 300);
   if (error) return souci(error);
   window.open(data.signedUrl, "_blank", "noopener");
+}
+/* Lit le n° et le montant d'une facture envoyée par l'appli (facture-lue.js). Un papier seulement dans le Drive ne se lit pas d'ici. */
+async function lireFactureDoc(d) {
+  if (!d || !d.fichier) return { lu: false, raison: "pas de fichier" };
+  if (!window.lireFacture) return { lu: false, raison: "lecteur pas chargé" };
+  if (d.fichier.startsWith("drive:") || /^https?:/.test(d.fichier)) return { lu: false, raison: "rangée seulement dans le Drive" };
+  const { data, error } = await sb.storage.from("documents").createSignedUrl(d.fichier, 300);
+  if (error) return { lu: false, raison: "fichier introuvable" };
+  return window.lireFacture(data.signedUrl);
 }
 function refuserDoc(id, apres) {
   fenetre(`<h2 style="margin:0">Refuser ce papier</h2><label class="f">Pourquoi ? (il le lira dans son appli)<input type="text" id="mo" placeholder="Ex. photo floue, document périmé…"></label>
@@ -6119,22 +6129,46 @@ async function facturesDuPresta(zone, p, factures, docs, recharger) {
     const b = e.target.closest("button"); if (!b) return;
     e.stopPropagation();
     if (b.dataset.voir) return voirFichier(b.dataset.voir);
-    if (b.hasAttribute("data-sm-ok")) {   // rattacher un papier « Facture… » à un mois
+    if (b.hasAttribute("data-sm-ok")) {   // rattacher un papier « Facture… » à un mois : n° et montant lus dans le PDF, comparés au coût Excel
       const box = b.closest("[data-sm]"), mois = box.querySelector("[data-sm-mois]").value, f = factures.find(x => x.mois === mois);
-      const numero = prompt(`Numéro écrit sur sa facture ${moisLong(mois)} (laisser vide si tu ne le vois pas) :`, f && f.numero || "");
-      if (numero === null) return;
-      const mt = prompt("Montant total de sa facture, en euros (laisser vide si tu ne le vois pas) :", f && f.montant != null ? String(f.montant).replace(".", ",") : "");
-      if (mt === null) return;
-      const montant = mt.trim() ? +mt.replace(/\s|€/g, "").replace(",", ".") : null;
-      if (montant != null && isNaN(montant)) return toast("Montant illisible : écris par exemple 412,50");
-      b.disabled = true;
-      try {
-        const champs = { etat: "envoyee", numero: numero.trim().replace(/^[=+@\s-]+/, "").slice(0, 60) || null, montant, motif: null };
-        if (f) await maj(sb.from("factures_mois").update(champs).eq("id", f.id));
-        else await maj(sb.from("factures_mois").insert({ intervenante_id: p.id, mois, ...champs }));
-        await maj(sb.from("documents").update({ facture_mois: mois }).eq("id", box.dataset.sm));
-        toast("Rangée dans " + moisLong(mois) + " : tu peux la contrôler"); return recharger();
-      } catch (x) { b.disabled = false; return souci(x); }
+      const doc = sansMois.find(d => String(d.id) === box.dataset.sm), lm = lignes.find(x => x.mois === mois);
+      const coutTxt = !lm || !lm.lx ? "Excel : PC pas relié, coût non comparé" : lm.cx == null ? `Excel ${heures(lm.hx * 60)}, taux payé manquant` : `Coût Excel de ${moisLong(mois)} : <b>${euros(lm.cx)}</b> (${heures(lm.hx * 60)})`;
+      return fenetre(`<h2 style="margin:0">Sa facture de ${esc(moisLong(mois))}</h2>
+        <p class="small" id="fl-etat">${ico("loupe")} Lecture de la facture…</p>
+        <label class="f">Numéro de sa facture<input type="text" id="fl-num" value="${esc(f && f.numero || "")}" autocomplete="off"></label>
+        <label class="f">Montant total, en euros<input type="text" id="fl-mt" inputmode="decimal" value="${f && f.montant != null ? String(f.montant).replace(".", ",") : ""}" autocomplete="off"></label>
+        <p class="small">${coutTxt}</p><p class="small" id="fl-cmp"></p>
+        <div class="row"><button class="btn go" id="fl-ok">C'est la facture de ce mois</button>${doc ? `<button class="btn" id="fl-voir">Voir</button>` : ""}<button class="btn flat" data-fermer>Annuler</button></div>`, (el, fermer) => {
+        const num = el.querySelector("#fl-num"), mt = el.querySelector("#fl-mt"), etat = el.querySelector("#fl-etat"), cmp = el.querySelector("#fl-cmp");
+        const lireMt = () => mt.value.trim() ? +mt.value.replace(/\s|€/g, "").replace(",", ".") : null;
+        const comparer = () => { const v = lireMt();
+          cmp.innerHTML = v == null || isNaN(v) || !lm || lm.cx == null ? "" : Math.abs(v - lm.cx) <= 0.05
+            ? `<span style="color:var(--go)">${ico("ok")} Le montant correspond au coût Excel.</span>`
+            : `<span style="color:var(--warn-vif)">${ico("alerte")} Écart de ${euros(v - lm.cx)} avec le coût Excel.</span>`; };
+        mt.oninput = comparer;
+        if (doc && el.querySelector("#fl-voir")) el.querySelector("#fl-voir").onclick = () => voirFichier(doc.fichier.startsWith("drive:") && doc.drive_url ? doc.drive_url : doc.fichier);
+        lireFactureDoc(doc).then(r => {
+          if (r.lu) {
+            if (r.numero && !num.value.trim()) num.value = r.numero;
+            if (r.montant != null && !mt.value.trim()) mt.value = String(r.montant).replace(".", ",");
+            etat.innerHTML = `${ico("ok")} Lu dans la facture : ${r.numero ? "n° <b>" + esc(r.numero) + "</b>" : "numéro non trouvé"} · ${r.montant != null ? "total <b>" + euros(r.montant) + "</b>" : "total non trouvé"}. Vérifie d'un coup d'œil.`;
+          } else etat.innerHTML = `${ico("alerte")} Pas lue toute seule (${esc(r.raison || "?")}) : tape le numéro et le montant.`;
+          comparer();
+        });
+        comparer();
+        el.querySelector("#fl-ok").onclick = async e2 => {
+          const montant = lireMt();
+          if (montant != null && isNaN(montant)) return toast("Montant illisible : écris par exemple 412,50");
+          e2.target.disabled = true;
+          try {
+            const champs = { etat: "envoyee", numero: num.value.trim().replace(/^[=+@\s-]+/, "").slice(0, 60) || null, montant, motif: null };
+            if (f) await maj(sb.from("factures_mois").update(champs).eq("id", f.id));
+            else await maj(sb.from("factures_mois").insert({ intervenante_id: p.id, mois, ...champs }));
+            await maj(sb.from("documents").update({ facture_mois: mois }).eq("id", box.dataset.sm));
+            fermer(); toast("Rangée dans " + moisLong(mois) + " : tu peux la valider"); recharger();
+          } catch (x) { e2.target.disabled = false; souci(x); }
+        };
+      });
     }
     const l = lignes[+b.closest("[data-fm]").dataset.fm]; if (!l || !l.f) return;
     if (b.hasAttribute("data-fm-ko")) {
@@ -6146,6 +6180,13 @@ async function facturesDuPresta(zone, p, factures, docs, recharger) {
     }
     if (!b.hasAttribute("data-fm-ok")) return;
     const e2 = ecarts(l), ecrire = l.f.etat === "envoyee" && l.f.numero && l.sansNum.length;
+    if (l.f.etat === "envoyee" && l.pages.length) {   // relit le PDF : le n° et le montant tapés sont-ils bien ceux de la facture ?
+      b.disabled = true;
+      const r = await lireFactureDoc(l.pages[0]); b.disabled = false;
+      const sansEsp = t => String(t || "").replace(/\s+/g, "").toUpperCase();
+      if (r.lu && r.numero && l.f.numero && sansEsp(r.numero) !== sansEsp(l.f.numero)) e2.push(`le PDF porte le n° ${r.numero}, pas ${l.f.numero}`);
+      if (r.lu && r.montant != null && l.f.montant != null && Math.abs(r.montant - l.f.montant) > 0.05) e2.push(`le PDF dit ${euros(r.montant)}, pas ${euros(l.f.montant)}`);
+    }
     if (!confirm([e2.length ? "Attention : " + e2.join(" ; ") + "." : "", ecrire ? `Écrire le n° « ${l.f.numero} » sur ${l.sansNum.length} ligne(s) de l'Excel (FACTURE INTERVENANT) et valider ?`
       : l.f.etat === "envoyee" && !l.lx ? "Le PC n'est pas relié : valider sans écrire le numéro dans l'Excel ?" : "Valider ?"].filter(Boolean).join("\n\n"))) return;
     b.disabled = true;
