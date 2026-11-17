@@ -193,9 +193,13 @@
         <label id="e-l-client" hidden>Lequel<select id="e-client">${x.clients.filter(c => c.etat !== "termine").map(c => `<option value="${c.id}">${E(c.nom)}</option>`).join("")}</select></label>
         <label id="e-l-detail">Précision (facultatif)<input id="e-detail" placeholder="garage, local, réparateur…"></label></div>
         <p class="muted small" style="margin:6px 0 0">Déjà chez un presta : il est noté chez lui sans reçu. Pour lui faire signer le reçu, coche-le ensuite et fais « Remettre à un presta ».</p>` : ""}
+      ${nouveau && x.qr ? `<label class="ma-form" style="grid-template-columns:1fr;margin-top:10px"><span>Photos de l'objet (facultatif) <span class="muted small">tu peux en choisir plusieurs ; elles vont dans son dossier Drive</span></span><input type="file" id="e-photos" accept="image/*" multiple><span class="muted small" id="e-photos-n"></span></label>` : ""}
+      ${nouveau ? "" : `<p class="muted small" style="margin:10px 0 0">Pour ajouter des photos : ferme cette fenêtre, la fiche de l'objet a un bouton « Ajouter des photos ».</p>`}
       <label class="ma-form" style="grid-template-columns:1fr;margin-top:10px"><span>Remarque</span><textarea id="e-rem" rows="2">${E(m.remarque || "")}</textarea></label>
       <div class="dz-boutons" style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px">${nouveau ? "" : `<button class="btn flat stop" id="e-suppr" style="margin-right:auto">Effacer cette fiche</button>`}<button class="btn flat" data-fermer>Annuler</button><button class="btn primary" id="e-ok">${nouveau ? "Ajouter" : "Enregistrer"}</button></div>`, (f, fermer) => {
       f.style.maxWidth = "820px";
+      const zp = f.querySelector("#e-photos");
+      if (zp) zp.onchange = () => { const n = zp.files.length; f.querySelector("#e-photos-n").textContent = n ? n + " photo" + (n > 1 ? "s choisies" : " choisie") : ""; };
       const lieu = f.querySelector("#e-lieu");
       if (lieu) lieu.onchange = () => { f.querySelector("#e-l-presta").hidden = lieu.value !== "presta"; f.querySelector("#e-l-client").hidden = lieu.value !== "client"; f.querySelector("#e-l-detail").hidden = lieu.value === "presta" || lieu.value === "client"; };
       const sup = f.querySelector("#e-suppr");
@@ -217,7 +221,9 @@
             const l = v("#e-lieu") || "depot";
             await q(sb.from("materiel_mouvements").insert({ materiel_id: r[0].id, sorte: "entree", lieu: l, intervenante_id: l === "presta" ? v("#e-presta") : null, client_id: l === "client" ? v("#e-client") : null,
               lieu_detail: l === "depot" || l === "ailleurs" ? v("#e-detail") || null : null, etat: d.etat, le: auj() }));
-            toast("Ajouté : " + d.nom + (d.etiquette ? " (" + d.etiquette + ")" : ""));
+            const choisies = zp ? [...zp.files] : []; let np = 0;
+            if (choisies.length) { const b = f.querySelector("#e-ok"); np = await envoyerPhotos(r[0].id, choisies, "À l'entrée dans l'inventaire", (i, n) => { b.textContent = "Photo " + i + " / " + n + "…"; }); }
+            toast("Ajouté : " + d.nom + (d.etiquette ? " (" + d.etiquette + ")" : "") + (np ? " · " + np + " photo" + (np > 1 ? "s" : "") : ""));
           } else { await q(sb.from("materiel").update(d).eq("id", m.id)); toast("Enregistré"); }
           fermer(); page();
         } catch (err) { ev.currentTarget.disabled = false; toast("Pas enregistré : " + (err.message || err)); }
@@ -374,6 +380,20 @@
     cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
     return new Promise((ok, ko) => cv.toBlob(b => b ? ok(b) : ko(new Error("image illisible")), "image/jpeg", qualite));
   }
+  async function envoyerPhotos(materielId, fichiers, legende, suivi) {
+    let fait = 0;
+    for (const f of fichiers) {
+      try {
+        if (suivi) suivi(fait + 1, fichiers.length);
+        const complet = await reduire(f, 1600, 0.85), apercu = await reduire(f, 480, 0.7);
+        const n = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8), ch = `${materielId}/photos/${n}.jpg`, ap = `${materielId}/apercus/${n}.jpg`;
+        for (const [chemin, blob] of [[ch, complet], [ap, apercu]]) { const u = await sb.storage.from("materiel").upload(chemin, blob, { contentType: "image/jpeg" }); if (u.error) throw u.error; }
+        await q(sb.from("materiel_photos").insert({ materiel_id: materielId, sorte: "objet", legende: String(legende || "").trim().slice(0, 200) || null, apercu: ap, fichier: ch, auteur: typeof moi !== "undefined" && moi ? moi.id : null }));
+        fait++;
+      } catch (err) { toast("« " + f.name + " » pas envoyée : " + (err.message || err)); }
+    }
+    return fait;
+  }
   async function photosDe(x, m, z) {
     if (!z) return;
     let l;
@@ -395,17 +415,8 @@
       const fichiers = [...ev.target.files]; if (!fichiers.length) return;
       const legende = prompt("Légende pour " + (fichiers.length > 1 ? "ces " + fichiers.length + " photos" : "cette photo") + " (facultatif) :\nex. À l'achat, Lame cassée, Au retour de Thomas", "");
       if (legende === null) { ev.target.value = ""; return; }
-      const bouton = z.querySelector("#mp-ajout"); bouton.disabled = true; let fait = 0;
-      for (const f of fichiers) {
-        try {
-          bouton.textContent = "Envoi " + (fait + 1) + " / " + fichiers.length + "…";
-          const complet = await reduire(f, 1600, 0.85), apercu = await reduire(f, 480, 0.7);
-          const n = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8), ch = `${m.id}/photos/${n}.jpg`, ap = `${m.id}/apercus/${n}.jpg`;
-          for (const [chemin, blob] of [[ch, complet], [ap, apercu]]) { const u = await sb.storage.from("materiel").upload(chemin, blob, { contentType: "image/jpeg" }); if (u.error) throw u.error; }
-          await q(sb.from("materiel_photos").insert({ materiel_id: m.id, sorte: "objet", legende: legende.trim().slice(0, 200) || null, apercu: ap, fichier: ch, auteur: typeof moi !== "undefined" && moi ? moi.id : null }));
-          fait++;
-        } catch (err) { toast("« " + f.name + " » pas envoyée : " + (err.message || err)); }
-      }
+      const bouton = z.querySelector("#mp-ajout"); bouton.disabled = true;
+      const fait = await envoyerPhotos(m.id, fichiers, legende, (i, n) => { bouton.textContent = "Envoi " + i + " / " + n + "…"; });
       if (fait) toast(fait + " photo" + (fait > 1 ? "s ajoutées" : " ajoutée") + " · rangée" + (fait > 1 ? "s" : "") + " dans le Drive sous 10 minutes");
       photosDe(x, m, z);
     };
