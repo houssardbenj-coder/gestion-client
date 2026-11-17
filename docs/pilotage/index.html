@@ -5045,7 +5045,7 @@ function sectionsPresta(gens, pieces, docs) {
     return `<section class="card eq-carte" style="--eq:${couleurSure(e.couleur)};margin-top:14px">
       <div class="row" style="justify-content:space-between;align-items:flex-start"><span style="min-width:0"><b style="font-size:18px">${eqPoint(e)}${esc(e.cheffe_nom)}</b> <span class="muted">· ${esc(e.nom)}</span>
         <br><span class="tag">${modeLib(e, tx ? tx.mode : e.mode)}${(tx ? tx.mode : e.mode) === "societe" ? " : " + esc(nomSociete(e.societe)) : ""}</span> <span class="tag">${l.length} presta</span>
-        <span class="muted small">${tx ? `${tx.mode === "rattachee" ? "Part " + duChef(e) : LIB_TAUX[tx.mode][0]} : ${suEuros(tx.apporte)} apportés · ${suEuros(tx.confie)} confiés` : "taux à régler"}</span></span>
+        <span class="muted small">${modeEq(e, tx) === "rattachee" ? "Part " + duChef(e) + " : " + partsLib(ymd(new Date())) : tx ? `${LIB_TAUX[tx.mode][0]} : ${suEuros(tx.apporte)} apportés · ${suEuros(tx.confie)} confiés` : "commission à régler"}</span></span>
         <span class="row">${compte(e)}<button class="btn flat" data-eq-clients="${e.id}">Clients apportés</button><button class="btn" data-eq-modif="${e.id}">${ico("stylo")} Modifier</button></span></div>
       ${l.length ? grille(l) : `<p class="muted small" style="margin:8px 0 0">Aucun presta dans son équipe : bouton « Équipe » sur la carte d'un presta, ou choisis-le en créant un presta.</p>`}</section>`; }).join("");
   return cheffes + `<h2 style="margin:22px 0 0">Presta d'OIKOS <span class="muted small" style="font-weight:400">· sans chef</span></h2>`
@@ -5477,8 +5477,10 @@ async function ficheIntervenante(id) {
 /* ===================== Réseau : cheffes, équipes et argent (SQL 52 + 54, gérant seul) =====================
    Deux sortes de cheffes : RATTACHÉE (pas de société, son équipe est chez OIKOS, elle touche une part par heure)
    et EN SOCIÉTÉ (sa SAS ; OIKOS garde sa commission par heure et verse le reste du prix HT à la société, qui paie ses presta).
-   Chaque presta est « OIKOS en direct » ou dans une équipe (profils.equipe) ; un client « apporté » par l'équipe (clients.apporte_par)
-   prend le taux « apportés », les autres le taux « confiés ». Les taux sont datés (equipes.taux) : un changement ne touche jamais les mois passés.
+   CHEF RATTACHÉ (règle du 17/11/2026) : deux rôles, chaque rôle rapporte à celui qui le tient. Part « client » au chef du client,
+   part « intervenant » au chef de l'équipe du presta (montants datés du SQL 58 : 3 € / 2 €) ; le même chef pour les deux = la somme.
+   Plus de taux « apportés / confiés » pour lui. EN SOCIÉTÉ : la commission d'OIKOS garde ses deux taux datés (equipes.taux),
+   « apportés » pour un client apporté par l'équipe (clients.apporte_par), « confiés » pour les autres. Un changement ne touche jamais les mois passés.
    Le prix client (« Ce que rapporte ce client ») est lu comme TTC, avec la TVA de l'activité (onglet TVA de l'Excel : ménage 10 %, jardinage et bricolage 20 %). Les cours (Benjamin enseignement) restent hors réseau. */
 const TVA_SAP = 0.10, TVA_ACTIVITE = { "Ménage": 0.10, "Jardinage": 0.20, "Bricolage": 0.20 };   // comme l'onglet TVA de l'Excel
 const tvaDe = act => TVA_ACTIVITE[act] ?? TVA_SAP;
@@ -5523,10 +5525,12 @@ function fraisAu(date) {
   const l = (cacheFrais || []).filter(x => x.a_partir_du <= date).sort((x, y) => x.a_partir_du < y.a_partir_du ? -1 : 1).pop();
   return l ? { client: +l.part_client, presta: +l.part_presta, depuis: l.a_partir_du } : { client: 3, presta: 2, depuis: null };
 }
+const modeEq = (e, tx) => e ? (tx ? tx.mode : e.mode) : null;   // la sorte de chef ce jour-là
+const partsLib = date => { const f = fraisAu(date); return `${suEuros(f.client)} par heure pour le client · ${suEuros(f.presta)} pour l'intervenant`; };
 const misesDe = pid => (cacheMises || []).filter(m => m.intervenante_id === pid).sort((x, y) => x.debut < y.debut ? -1 : 1);
 const miseAu = (pid, reseau, date) => misesDe(pid).find(m => (m.equipe_id || null) === reseau && m.debut <= date && (!m.fin || m.fin >= date)) || null;
 const misesEnCours = pid => { const auj = ymd(new Date()); return misesDe(pid).filter(m => !m.fin || m.fin >= auj); };
-const LIB_TAUX = { rattachee: ["Part du chef", "par heure de son équipe"], societe: ["Commission d'OIKOS", "par heure (le reste du prix HT va à sa société)"] };
+const LIB_TAUX = { rattachee: ["Part du chef", "les deux rôles, mêmes montants pour tous les chefs"], societe: ["Commission d'OIKOS", "par heure (le reste du prix HT va à sa société)"] };
 const reseauMois = { m: null };
 /* Calcule le mois : une ligne par presta, rangée dans « OIKOS en direct » ou dans son équipe */
 async function calculReseau(m0, m1) {
@@ -5548,30 +5552,28 @@ async function calculReseau(m0, m1) {
     const r = g.prestas[p.id] || (g.prestas[p.id] = { presta: p, h: 0, hc: 0, ht: 0, paye: 0, cheffe: 0, verser: 0, oikos: 0, apporte: 0, dispo: 0, dispoH: 0, dispoDe: new Set(), manque: new Set() });
     r.h += h;
     const t = tarifAu(tarifs, p.id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
-    const tx = e ? tauxEquipeAu(e, date) : null;
+    const tx = e ? tauxEquipeAu(e, date) : null, soc = modeEq(e, tx) === "societe";
     /* Le presta vient d'un autre réseau que le client : il faut une mise à disposition (SQL 58) */
     const eP = cacheMembres ? equipeAuJour(p, date) : e, croise = !!cacheMembres && idReseau(eP) !== idReseau(e);
-    const txP = croise && eP ? tauxEquipeAu(eP, date) : null, sansMise = croise && !miseAu(p.id, idReseau(e), date);
+    const socP = croise && !!eP && modeEq(eP, tauxEquipeAu(eP, date)) === "societe", sansMise = croise && !miseAu(p.id, idReseau(e), date);
     if (!(t.taux > 0)) r.manque.add("tarif du presta");
     if (!prix) r.manque.add("prix client");
-    if (e && !tx) r.manque.add("taux de l'équipe");
-    if (croise && eP && !txP) r.manque.add("taux de l'équipe du presta");
+    if (soc && !tx) r.manque.add("commission d'OIKOS pour sa société");
     if (sansMise) {
       r.manque.add("mise à disposition");
       const k = p.id + "|" + (idReseau(e) || "oikos"), al = alertes[k] || (alertes[k] = { presta: p, de: eP, vers: e, h: 0, debut: date });
       al.h += h; if (date < al.debut) al.debut = date;
     }
-    if (!(t.taux > 0) || !prix || (e && !tx) || (croise && eP && !txP) || sansMise) return;
+    if (!(t.taux > 0) || !prix || (soc && !tx) || sansMise) return;
     const ht = h * prix / (1 + tvaDe(act)), paye = h * t.taux;
     r.hc += h; r.ht += ht; r.paye += paye;
-    const apporte = !!e && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos"));
-    if (e) (g.modes || (g.modes = new Set())).add(tx.mode);
+    const apporte = soc && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos"));
+    if (e) (g.modes || (g.modes = new Set())).add(modeEq(e, tx));
     if (!croise) {
       if (!e) { r.oikos += ht - paye; return; }
-      const taux = apporte ? tx.apporte : tx.confie;
       if (apporte) r.apporte += h;
-      if (tx.mode === "societe") { const com = h * taux; r.oikos += com; r.verser += ht - com; r.cheffe += ht - com - paye; }
-      else { const part = h * taux; r.cheffe += part; r.verser += part; r.oikos += ht - paye - part; }
+      if (soc) { const com = h * (apporte ? tx.apporte : tx.confie); r.oikos += com; r.verser += ht - com; r.cheffe += ht - com - paye; }
+      else { const f2 = fraisAu(date), part = h * (f2.client + f2.presta); r.cheffe += part; r.verser += part; r.oikos += ht - paye - part; }   // il tient les deux rôles
       return;
     }
     /* Mise à disposition : OIKOS au centre. Le presta est payé par SON réseau ; ce réseau touche part_presta par heure,
@@ -5580,7 +5582,7 @@ async function calculReseau(m0, m1) {
     r.dispoH += h; r.dispoDe.add(nomReseau(eP));
     let versP = 0;
     if (!eP) r.oikos += partP;                                   // presta d'OIKOS : OIKOS le paie et garde la part du presta
-    else versP = txP.mode === "societe" ? paye + partP : partP;  // en société : sa société le paie ; rattaché : OIKOS le paie
+    else versP = socP ? paye + partP : partP;  // en société : sa société le paie ; rattaché : OIKOS le paie
     r.dispo += versP;
     const kS = idReseau(eP) || "direct", kP = p.id + "|" + (idReseau(e) || "oikos"), s = sortants[kS] || (sortants[kS] = {});
     const so = s[kP] || (s[kP] = { presta: p, vers: e, h: 0, verser: 0, part: 0 });
@@ -5588,7 +5590,7 @@ async function calculReseau(m0, m1) {
     const reste = ht - paye - partP;
     if (!e) { r.oikos += reste; return; }
     if (apporte) r.apporte += h;
-    if (tx.mode === "societe") {
+    if (soc) {
       const com = h * (apporte ? tx.apporte : tx.confie);
       r.oikos += com; r.verser += reste - com; r.cheffe += reste - com;
       if (reste - com < 0) r.manque.add("prix client trop bas pour la mise à disposition");
@@ -5600,7 +5602,7 @@ async function vueReseau() {
   await chargerBase();
   if (cacheEquipes === null) { contenu(`<h1>Réseau</h1><p class="muted">Il faut d'abord lancer le SQL 52 (sociétés et équipes) et le SQL 54 (couleur et commission) dans Supabase.</p>`); return; }
   const auj = new Date(), m0 = reseauMois.m || new Date(auj.getFullYear(), auj.getMonth(), 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
-  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque chef a son équipe de presta. Rattaché : pas de société, son équipe travaille pour OIKOS et le chef touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. C'est le chef du client qui touche sa part, quel que soit le presta qui y va : fiche du client › Vue d'ensemble › Chef. Un client sans chef rapporte 100 % à OIKOS. Mettre ou retirer un chef ne change pas les mois passés.")}</h1>
+  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Réseau ${aide("Chaque chef a son équipe de presta. Rattaché : pas de société, son équipe travaille pour OIKOS et le chef touche une part par heure. En société : sa société reçoit le prix HT moins la commission d'OIKOS, et paie elle-même ses presta. Deux rôles : le chef du client touche la part « client » (fiche du client › Vue d'ensemble › Chef), le chef de l'équipe du presta la part « intervenant » ; le même chef pour les deux touche la somme. Un client sans chef et un presta sans équipe rapportent 100 % à OIKOS. Mettre ou retirer un chef ne change pas les mois passés.")}</h1>
       <button class="btn primary" id="nv-cheffe">${ico("plus")} Nouveau chef</button></div>
     <div id="rs-dem"></div>
     <div class="row" style="justify-content:space-between;margin:10px 0"><button class="btn" data-rm="-1" aria-label="Mois précédent">‹</button>
@@ -5643,7 +5645,7 @@ async function vueReseau() {
     return `<section class="card eq-carte" style="--eq:${couleurSure(e.couleur)};margin-bottom:12px">
       <div class="row" style="justify-content:space-between;align-items:flex-start"><span style="min-width:0"><b style="font-size:17px">${eqPoint(e)}${esc(e.cheffe_nom)}</b> <span class="muted">· ${esc(e.nom)}</span>
         <br><span class="tag">${modeLib(e, mode)}${soc ? " : " + esc(nomSociete(e.societe)) : ""}</span>${e.active ? "" : ` <span class="tag off">arrêtée</span>`}
-        <span class="muted small">${tx ? `${mode === "rattachee" ? "Part " + duChef(e) : LIB_TAUX[mode][0]} : ${suEuros(tx.apporte)} clients apportés · ${suEuros(tx.confie)} clients confiés` : "taux à régler"}</span></span>
+        <span class="muted small">${mode === "rattachee" ? "Part " + duChef(e) + " : " + partsLib(ymd(new Date(Math.min(m1 - 864e5, Date.now())))) : tx ? `${LIB_TAUX[mode][0]} : ${suEuros(tx.apporte)} clients apportés · ${suEuros(tx.confie)} clients confiés` : "commission à régler"}</span></span>
         <span class="row"><button class="btn flat" data-eq-clients="${e.id}">Clients apportés</button><button class="btn" data-eq-modif="${e.id}">${ico("stylo")} Modifier</button></span></div>
       ${rs.length ? `<div class="su-table" style="margin-top:8px"><table><thead><tr><th>Presta</th><th class="n">Heures</th><th class="n">Facturé HT</th><th class="n">Payé au presta</th><th class="n">${colonnes[0]}</th><th class="n">${colonnes[1]}</th><th class="n">Reste à OIKOS</th></tr></thead>
         <tbody>${rs.map(r => `<tr><td>${prestaCell(r)}${r.apporte ? ` <span class="muted small">· ${heures(r.apporte * 60)} chez des clients apportés</span>` : ""}</td><td class="n">${heures(r.h * 60)}</td><td class="n">${suEuros(r.ht)}</td><td class="n">${suEuros(r.paye)}</td><td class="n">${suEuros(r.cheffe)}</td><td class="n"><b>${suEuros(r.verser)}</b></td><td class="n">${suEuros(r.oikos)}</td></tr>`).join("")}
@@ -5668,7 +5670,7 @@ async function vueReseau() {
   zone.innerHTML = alertesHtml + `<div class="su-chiffres" style="margin-bottom:12px">${[["Heures du réseau", heures(totH * 60)], ["Facturé HT", suEuros(totHt)], ["À verser aux chefs et sociétés", suEuros(totVerser)], ["Reste à OIKOS", suEuros(totOikos)]].map(([n, v]) => `<div class="card"><span class="muted small">${n}</span><b>${v}</b></div>`).join("")}</div>
     ${cartes || `<section class="card" style="margin-bottom:12px"><p class="muted" style="margin:0">Aucun chef pour l'instant : touche « Nouveau chef ».</p></section>`}${carteDirect}
     <p class="muted small">Facturé HT = heures × prix de l'heure du client (« Ce que rapporte ce client », lu comme TTC), divisé par la TVA de l'activité comme dans l'onglet TVA de l'Excel (ménage 10 %, jardinage et bricolage 20 %). Payé au presta = son tarif à l'heure du jour du passage.
-      Chaque passage compte pour le chef du client ce jour-là (client sans chef : 100 % OIKOS). Presta d'un autre réseau (mise à disposition) : ${suEuros(fraisAu(ymd(new Date())).client)} par heure au réseau du client, ${suEuros(fraisAu(ymd(new Date())).presta)} au réseau du presta, qui le paie. « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
+      Deux rôles, chaque rôle rapporte à celui qui le tient : ${suEuros(fraisAu(ymd(new Date())).client)} par heure au chef du client ce jour-là, ${suEuros(fraisAu(ymd(new Date())).presta)} au chef de l'équipe du presta ; le même chef pour les deux touche la somme (client sans chef, presta sans équipe : la part reste à OIKOS). Presta d'un autre réseau que le client : il faut une mise à disposition. « À verser » ne regarde pas encore si le client a payé : ne verse que ce qui est encaissé.${res.cours.h ? ` Les cours (${heures(res.cours.h * 60)}) restent hors réseau.` : ""}</p>`;
 }
 /* Demandes des chefs depuis leur appli (SQL 58) : « J'ai trop de clients, je veux un presta » / « J'ai trop de presta, je veux des clients » */
 const DEMANDE_RESEAU = { presta: "a trop de clients : veut un presta", clients: "a trop de presta : veut des clients" };
@@ -5762,8 +5764,8 @@ function lignesReseauExcel(xl) {
     const eP = p && cacheMembres ? equipeAuJour(p, l.date) : e, croise = idReseau(eP) !== idReseau(e);
     if (croise) return lignes.push(ligneMiseADisposition(l, c, e, p, eP));
     if (!e) return;   // client sans chef ce jour-là, presta d'OIKOS : 100 % OIKOS
-    const tx = tauxEquipeAu(e, l.date), h = +l.heures || 0;
-    const apporte = !!c && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos")), taux = tx ? (apporte ? tx.apporte : tx.confie) : null, soc = (tx ? tx.mode : e.mode) === "societe";
+    const tx = tauxEquipeAu(e, l.date), h = +l.heures || 0, soc = modeEq(e, tx) === "societe", fr = fraisAu(l.date);
+    const apporte = soc && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos")), taux = soc ? (tx ? (apporte ? tx.apporte : tx.confie) : null) : fr.client + fr.presta;
     const ht = l.ht == null ? null : +l.ht, cout = l.cout == null ? null : +l.cout, part = taux == null ? null : Math.round(h * taux * 100) / 100;
     lignes.push({ date: l.date, mois: l.mois || "", cheffe: e.cheffe_nom + " · " + e.nom, sorte: soc ? "En société" : femme(e) ? "Rattachée" : "Rattaché", couleur: couleurSure(e.couleur), intervenant: l.intervenant, client: l.client, activite: l.activite,
       apporte, heures: h, ttc: l.ttc == null ? null : +l.ttc, ht, cout, taux_eq: taux, part,
@@ -5777,12 +5779,12 @@ function ligneMiseADisposition(l, c, e, p, eP) {
   const arr = v => v == null ? null : Math.round(v * 100) / 100, h = +l.heures || 0, fr = fraisAu(l.date);
   const ht = l.ht == null ? null : +l.ht, cout = l.cout == null ? null : +l.cout, mise = miseAu(p.id, idReseau(e), l.date);
   const tx = e ? tauxEquipeAu(e, l.date) : null, txP = eP ? tauxEquipeAu(eP, l.date) : null;
-  const apporte = !!e && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos")), soc = !!e && (tx ? tx.mode : e.mode) === "societe", socP = !!eP && (txP ? txP.mode : eP.mode) === "societe";
+  const soc = modeEq(e, tx) === "societe", socP = modeEq(eP, txP) === "societe", apporte = soc && (c.apporte_par === e.id || (c.societe && c.societe !== "oikos"));
   const nomEq = x => x.cheffe_nom + " · " + x.nom;
   const base = { date: l.date, mois: l.mois || "", cheffe: e ? nomEq(e) : "OIKOS · clients sans chef", sorte: e ? (soc ? "En société" : femme(e) ? "Rattachée" : "Rattaché") : "OIKOS", couleur: e ? couleurSure(e.couleur) : null,
     intervenant: l.intervenant, client: l.client, activite: l.activite, apporte, heures: h, ttc: l.ttc == null ? null : +l.ttc, ht, cout, ligne: l.ligne,
     reseau_presta: (eP ? nomEq(eP) : "OIKOS") + (mise ? "" : " — SANS MISE À DISPOSITION"), couleur_presta: eP ? couleurSure(eP.couleur) : null };
-  if (!mise || ht == null || cout == null || (e && !tx) || (eP && !txP)) return { ...base, taux_eq: null, part: null, verser: null, oikos: null, dispo: null };
+  if (!mise || ht == null || cout == null || (soc && !tx)) return { ...base, taux_eq: null, part: null, verser: null, oikos: null, dispo: null };
   const partP = h * fr.presta, reste = ht - cout - partP, dispo = eP ? (socP ? cout + partP : partP) : 0, garde = eP ? 0 : partP;
   if (!e) return { ...base, taux_eq: null, part: null, verser: null, oikos: arr(reste + garde), dispo: arr(dispo) };
   if (soc) { const t = apporte ? tx.apporte : tx.confie, com = h * t; return { ...base, taux_eq: t, part: arr(com), verser: arr(reste - com), oikos: arr(com + garde), dispo: arr(dispo) }; }
@@ -5890,10 +5892,10 @@ function ficheCheffe(e) {
       <div class="deux"><div style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);align-items:flex-start"><span>Couleur</span><input type="color" name="couleur" aria-label="Couleur" value="${couleurSure(v.couleur)}" style="height:40px;width:64px;padding:2px;cursor:pointer"></div>
         <label class="f">Son compte, si c'est aussi un presta (facultatif)<select name="cheffe"><option value="">— aucun —</option>${comptes.map(p => `<option value="${p.id}" ${p.id === v.cheffe ? "selected" : ""}>${esc(nomPers(p))}</option>`).join("")}</select></label></div>
       <div class="card" style="padding:10px"><b id="fc-taux-titre"></b> <span class="muted small" id="fc-taux-sous"></span>
-        <div class="deux" style="margin-top:6px"><label class="f">Clients apportés par son équipe (€ HT / h)<input name="apporte" inputmode="decimal" placeholder="—" value="${tx ? esc(tfVirgule(tx.apporte)) : ""}"></label>
+        <div class="deux" id="fc-taux-champs" style="margin-top:6px"><label class="f">Clients apportés par son équipe (€ HT / h)<input name="apporte" inputmode="decimal" placeholder="—" value="${tx ? esc(tfVirgule(tx.apporte)) : ""}"></label>
           <label class="f">Clients d'OIKOS confiés (€ HT / h)<input name="confie" inputmode="decimal" placeholder="—" value="${tx ? esc(tfVirgule(tx.confie)) : ""}"></label></div>
         <label class="f" style="margin-top:6px">À partir du<input type="date" name="depuis" value="${neuf ? m1er : auj}" ${neuf ? "" : `min="${auj}"`}></label>
-        <p class="muted small" style="margin:6px 0 0">${neuf ? "Le premier taux peut commencer dans le passé (par exemple le 1er du mois)." : "Un changement commence au plus tôt aujourd'hui : les mois passés ne bougent pas."}${tx ? ` En vigueur depuis le ${tfDateFr(tx.depuis)}.` : ""}</p></div>
+        <p class="muted small" style="margin:6px 0 0">${neuf ? "Le début peut être dans le passé (par exemple le 1er du mois)." : "Un changement commence au plus tôt aujourd'hui : les mois passés ne bougent pas."}${tx ? ` En vigueur depuis le ${tfDateFr(tx.depuis)}.` : ""}</p></div>
       ${neuf ? "" : `<label class="chk"><input type="checkbox" name="active" ${v.active ? "checked" : ""}>Équipe active (décocher si l'équipe s'arrête : ses presta repassent en presta d'OIKOS à la main)</label>`}
       <p class="err" id="fc-err"></p>
       <div class="row"><button class="btn primary" type="submit">${neuf ? "Créer le chef" : "Enregistrer"}</button><button class="btn flat" type="button" data-fermer>Annuler</button></div>
@@ -5911,11 +5913,12 @@ function ficheCheffe(e) {
         if (!neuf) { f.apporte.value = m === (tx ? tx.mode : v.mode) && tx ? tfVirgule(tx.apporte) : ""; f.confie.value = m === (tx ? tx.mode : v.mode) && tx ? tfVirgule(tx.confie) : ""; f.depuis.value = auj; }
       }
       el.querySelector("#fc-soc").hidden = !s; el.querySelector("#fc-socnom").hidden = !s || !!f.societe.value;
-      el.querySelector("#fc-taux-titre").textContent = m === "rattachee" ? "Part " + duChef({ civilite: f.civilite.value }) : LIB_TAUX[m][0]; el.querySelector("#fc-taux-sous").textContent = LIB_TAUX[m][1]; };
+      el.querySelector("#fc-taux-champs").hidden = !s;   // chef rattaché : rien à écrire, les deux rôles ont leur montant
+      el.querySelector("#fc-taux-titre").textContent = m === "rattachee" ? "Part " + duChef({ civilite: f.civilite.value }) + " : " + partsLib(auj) : LIB_TAUX[m][0]; el.querySelector("#fc-taux-sous").textContent = LIB_TAUX[m][1]; };
     f.onchange = majVue; majVue();
     f.onsubmit = async ev => {
       ev.preventDefault(); err.textContent = "";
-      const net = t => t.trim().replace(/\s+/g, " "), mode = f.mode.value, apporte = tfNombre(f.apporte.value), confie = tfNombre(f.confie.value), depuis = f.depuis.value;
+      const net = t => t.trim().replace(/\s+/g, " "), mode = f.mode.value, fixe = mode === "rattachee", apporte = fixe ? "" : tfNombre(f.apporte.value), confie = fixe ? "" : tfNombre(f.confie.value), depuis = f.depuis.value;
       const cheffeNom = [net(f.prenom.value), net(f.nomc.value)].filter(Boolean).join(" "), email = f.email ? f.email.value.trim().toLowerCase() : "", tel = f.telephone ? f.telephone.value.trim() : "", espace = !!(f.espace && f.espace.checked) && !f.cheffe.value;
       if (!net(f.prenom.value) || !net(f.nomc.value) || !net(f.nom.value)) { err.textContent = "Il manque le prénom, le nom du chef ou le nom de la structure."; return; }
       if (/[\/:*?"<>|]/.test(cheffeNom)) { err.textContent = "Son nom sert aussi pour son dossier : retire les caractères \ / : * ? \" < > |."; return; }
@@ -5923,9 +5926,9 @@ function ficheCheffe(e) {
       if (email && cacheProfils.some(p => (p.email || "").toLowerCase() === email)) { err.textContent = "Cet e-mail a déjà un compte : choisis-le dans « Son compte »."; return; }
       if (tel && !numeroSms(tel)) { err.textContent = "Portable non reconnu : écris-le comme 06 12 34 56 78."; return; }
       if (apporte === null || confie === null) { err.textContent = "Taux non reconnu : écris par exemple 3 ou 1,50."; return; }
-      if (!depuis) { err.textContent = "Choisis la date de début du taux."; return; }
-      const modeAvant = tx ? tx.mode : v.mode, tauxChange = neuf ? apporte !== "" || confie !== "" : (apporte !== "" || confie !== "") && (!tx || +apporte !== tx.apporte || +confie !== tx.confie || mode !== modeAvant);
-      if (!neuf && mode !== modeAvant && (apporte === "" || confie === "")) { err.textContent = "Changement de sorte : écris les deux nouveaux taux (ils commencent à la date choisie)."; return; }
+      if (!depuis) { err.textContent = "Choisis la date de début."; return; }
+      const modeAvant = tx ? tx.mode : v.mode, tauxChange = neuf ? apporte !== "" || confie !== "" : mode !== modeAvant ? fixe || apporte !== "" || confie !== "" : (apporte !== "" || confie !== "") && (!tx || +apporte !== tx.apporte || +confie !== tx.confie);
+      if (!neuf && !fixe && mode !== modeAvant && (apporte === "" || confie === "")) { err.textContent = "Changement de sorte : écris les deux nouveaux taux (ils commencent à la date choisie)."; return; }
       if (!neuf && mode !== modeAvant && !tauxChange) { err.textContent = "Changement de sorte : écris les nouveaux taux (ils commencent à la date choisie)."; return; }
       if (!neuf && tauxChange && depuis < tfAujourdhui()) { err.textContent = "Un nouveau taux commence au plus tôt aujourd'hui."; return; }
       if (!neuf && mode !== v.mode && !confirm(mode === "societe" ? `${v.cheffe_nom} passe en société.\n\nSes presta passent dans sa société (c'est elle qui les paie). Ses clients restent à OIKOS : tu choisis ensuite lesquels suivent son équipe.\nLes mois passés restent calculés comme avant.` : `${v.cheffe_nom} redevient ${femme(v) ? "rattachée" : "rattaché"} à OIKOS.\n\nSes presta repassent chez OIKOS. Les mois passés restent calculés comme avant.`)) return;
