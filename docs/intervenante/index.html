@@ -732,9 +732,15 @@ const ESSAIS_CODE = 5;           // erreurs de code à 4 chiffres avant de tout 
 const VERROU_MIN = 5;            // l'appli se reverrouille après 5 min en arrière-plan
 const ACTIVITES = ["Ménage", "Jardinage", "Bricolage"];
 
+/* Porte du chef de réseau (19/11/2026) : la même appli publiée aussi dans /chef/ s'ouvre directement sur l'espace du chef.
+   Chaque porte a SA connexion (clés à part sur le téléphone) : on peut être connecté en presta sur /intervenante/ et en chef sur /chef/ avec deux comptes différents. */
+const PORTE_CHEF = /\/chef\/(index\.html)?$/.test(location.pathname);
+const PFX = PORTE_CHEF ? "oikos-chef-" : "oikos-int-";
 const sb = window.supabase.createClient(SB_URL, SB_CLE, {
-  auth: { persistSession: true, autoRefreshToken: true, storageKey: "oikos-int-session" }
+  auth: { persistSession: true, autoRefreshToken: true, storageKey: PFX + "session" }
 });
+const autrePorte = () => PORTE_CHEF ? "../intervenante/" : "../chef/";
+const chefConnecteIci = () => { try { return !!localStorage.getItem("oikos-chef-session"); } catch (e) { return false; } };
 
 /* ===================== Outils ===================== */
 /* Icônes dessinées (trait fin) : les mêmes sur tous les téléphones, à la place des émojis */
@@ -745,8 +751,8 @@ const COCHE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES.val
 const app = document.getElementById("app");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const LS = {
-  get(k) { try { return JSON.parse(localStorage.getItem("oikos-int-" + k)); } catch (e) { return null; } },
-  set(k, v) { try { localStorage.setItem("oikos-int-" + k, JSON.stringify(v)); } catch (e) {} }
+  get(k) { try { return JSON.parse(localStorage.getItem(PFX + k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(PFX + k, JSON.stringify(v)); } catch (e) {} }
 };
 let tt;
 function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 3800); }
@@ -779,7 +785,7 @@ async function empreinte(texte) {
 }
 /* Efface tout ce que l'appli garde sur le téléphone : il ne reste qu'une coquille vide */
 function toutEffacer() {
-  try { Object.keys(localStorage).filter(k => k.startsWith("oikos-int")).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  try { Object.keys(localStorage).filter(k => k.startsWith(PFX)).forEach(k => localStorage.removeItem(k)); } catch (e) {}
   try { sessionStorage.clear(); } catch (e) {}
   moi = null; clients = []; brouillon = [];
 }
@@ -788,8 +794,6 @@ async function sortir() { try { await sb.auth.signOut({ scope: "local" }); } cat
 /* ===================== État ===================== */
 let moi = null, clients = [], onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
 if (new URLSearchParams(location.search).get("onglet") === "missions") onglet = "missions";
-/* Porte du chef de réseau (19/11/2026) : la même appli publiée aussi dans /chef/ s'ouvre directement sur l'espace du chef */
-const PORTE_CHEF = /\/chef\/(index\.html)?$/.test(location.pathname);
 const SOUS_TITRE = PORTE_CHEF ? "Espace chef de réseau" : "Espace intervenant";
 if (PORTE_CHEF) { document.title = "OIKOS Chef de réseau"; document.querySelectorAll(".i-sous").forEach(e => e.textContent = SOUS_TITRE); }
 let porteChefVue = false;   // compte qui n'est pas chef ouvert par /chef/ : prévenu une fois
@@ -1087,31 +1091,31 @@ const choixClient = (sel, nom = "client") => `<label class="f">Client<select nam
 const ONGLETS = [["jour", "jour", "Aujourd'hui"], ["missions", "mission", "Missions"], ["agenda", "agenda", "Agenda"], ["clients", "clients", "Clients"], ["mois", "reporting", "Reporting"], ["moi", "personne", "Moi"]];
 /* Espace du chef d'équipe (SQL 64) : un chef garde son appli de presta ; l'interrupteur de l'en-tête ouvre son espace de chef */
 const ONGLETS_CHEF = [["ch-accueil", "jour", "Accueil"], ["ch-planning", "agenda", "Planning"], ["ch-clients", "clients", "Clients"], ["ch-argent", "euro", "Argent"]];
-let espace = PORTE_CHEF || LS.get("espace") === "chef" ? "chef" : "presta";
+let espace = PORTE_CHEF ? "chef" : "presta";   // la porte décide : /chef/ = espace chef, /intervenante/ = presta
 const enChef = () => !!(moi && moi.cheffe_reseau) && espace === "chef";
 const ongletsActifs = () => enChef() ? ONGLETS_CHEF : ONGLETS;
 let ongletAffiche = null, sensSuivant = null;
 const rangOnglet = k => ongletsActifs().findIndex(x => x[0] === k);
 async function accueil(o) {
   if (o) onglet = o;
-  if (PORTE_CHEF && moi && !moi.cheffe_reseau && !porteChefVue) { porteChefVue = true; setTimeout(() => toast("Ce compte n'est pas chef de réseau : voici ton appli de presta."), 600); }
+  if (PORTE_CHEF && moi && !moi.cheffe_reseau && !porteChefVue) { porteChefVue = true; setTimeout(() => toast("Ce compte n'est pas chef de réseau. Pour l'espace chef, connecte ici le compte du chef : Moi › Me déconnecter, puis son e-mail."), 600); }
   if (enChef() && !onglet.startsWith("ch-") && onglet !== "messages" && onglet !== "materiel") onglet = "ch-accueil";
   if (!enChef() && onglet.startsWith("ch-")) onglet = "jour";
   couleurBarre(couleurTete());
   const avant = rangOnglet(ongletAffiche), apres = rangOnglet(onglet), change = onglet !== ongletAffiche;
   const sens = sensSuivant !== null ? sensSuivant : change && avant >= 0 && apres >= 0 ? Math.sign(apres - avant) : 0, animer = change || sensSuivant !== null;
   sensSuivant = null; ongletAffiche = onglet;
-  const sousTitre = moi && moi.cheffe_reseau
-    ? `<div class="esp-sw" role="group" aria-label="Espace"><button data-espace="presta" aria-pressed="${!enChef()}">Presta</button><button data-espace="chef" aria-pressed="${enChef()}">${chefMot()}</button></div>`
+  const avecSw = !!(PORTE_CHEF || (moi && moi.cheffe_reseau) || chefConnecteIci());
+  const sousTitre = avecSw
+    ? `<div class="esp-sw" role="group" aria-label="Espace"><button data-espace="presta" aria-pressed="${!PORTE_CHEF}" title="${PORTE_CHEF ? "Ouvre l'appli presta, avec sa propre connexion" : ""}">Presta</button><button data-espace="chef" aria-pressed="${PORTE_CHEF}" title="${PORTE_CHEF ? "" : "Ouvre l'espace chef, avec sa propre connexion"}">${chefMot()}</button></div>`
     : `<div class="entete-sous">Espace intervenant</div>`;
-  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite">${sousTitre}<button class="entete-msg${moi && moi.cheffe_reseau ? " court" : ""}" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}${moi && moi.cheffe_reseau ? "" : "Messages"}</button></div></header>
+  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite">${sousTitre}<button class="entete-msg${avecSw ? " court" : ""}" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}${avecSw ? "" : "Messages"}</button></div></header>
     <main class="page" id="contenu"><div class="charge" role="status" aria-label="Chargement"><svg viewBox="0 0 20 18" aria-hidden="true"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></main>
     <nav class="nav${enChef() ? " chef" : ""}${change ? " change" : ""}" aria-label="Onglets"><div><span class="nav-ind${apres < 0 ? " cache" : ""}" style="--p:${avant >= 0 ? avant : Math.max(apres, 0)}"></span>${ongletsActifs().map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ico(ic)}</span>${t}</button>`).join("")}</div></nav>`;
   app.querySelector("#ouvrir-messages").onclick = () => { vibre(5); accueil("messages"); };
   app.querySelectorAll("[data-espace]").forEach(b => b.onclick = () => {
     if (b.dataset.espace === espace) return;
-    espace = b.dataset.espace; LS.set("espace", espace); vibre(5); sensSuivant = 0; ongletAffiche = null;
-    accueil(espace === "chef" ? "ch-accueil" : "jour");
+    vibre(5); location.href = autrePorte();   // l'autre porte, avec sa propre connexion
   });
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) { vibre(5); accueil(b.dataset.onglet); } };
   const ind = app.querySelector(".nav-ind"); void ind.offsetWidth; if (apres >= 0) ind.style.setProperty("--p", apres);
