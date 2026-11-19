@@ -187,6 +187,15 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
   .em-gev{font-size:11px;padding:2px 24px 2px 4px}
   .em-carte{padding-left:0!important}
   .em-poignee{display:none}.em-gev.em-mod{cursor:pointer}.em-gev.em-mod:not(.a-env):not(.a-env2){padding-bottom:2px}
+  /* Semaine : les 7 jours tiennent dans la largeur de l'écran (comme un agenda de téléphone), le détail est dans la fenêtre du RDV ou en vue Jour */
+  .em-grille.em-sem{grid-template-columns:26px repeat(var(--n),minmax(0,1fr));min-width:0}
+  .em-sem .em-gh{font-size:11px;padding:2px 0 4px;line-height:1.15}.em-sem .em-gh .btn{padding:2px 0;min-width:0;width:100%;white-space:normal;font-size:11px}
+  .em-sem .em-gh .em-aujm{font-size:8.5px;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .em-sem .em-gh0 span{right:2px;font-size:9.5px}
+  .em-sem .em-gev{font-size:9.5px;line-height:1.15;padding:1px 2px!important;border-left-width:2px;overflow-wrap:anywhere;hyphens:auto}
+  .em-sem .em-gev b{display:block;font-size:9.5px}
+  .em-sem .em-tg,.em-sem .em-bas{display:none}
+  .em-sem .em-gad .em-gev{margin-bottom:2px}
 }
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .em-tg .ico{width:13px;height:13px}.em-tg[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -4532,7 +4541,7 @@ async function vueEmploi() {
         return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${x.perdu ? " perdu" : ""}${aa ? " ann" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod && !aa ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b> ${aa ? `${ico("croix")} Presta annulée<br>${esc(sansEmoji(x.titre))}` : `<br>${emNomCli(x, esc(sansEmoji(x.titre)))}`}${aa ? "" : rond(x, o.i)}${o.env}${mod && !aa ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
-    return `<div class="card em-carte" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
+    return `<div class="card em-carte" style="overflow-x:auto;padding:8px"><div class="em-grille${jl.length > 1 ? " em-sem" : ""}" style="--n:${jl.length}" data-h0="${h0}">
       <div></div>${jl.map(j => `<div class="em-gh${ymd(j) === aujourdhui ? " auj" : ""}"><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button>${ymd(j) === aujourdhui ? `<span class="em-aujm">aujourd'hui</span>` : ""}</div>`).join("")}
       ${jent.length ? `<div class="em-gh0" style="font-size:11px;color:var(--muted);padding:4px">Journée</div>${jl.map(j => `<div class="em-gad">${jent.filter(([x]) => x.jour === ymd(j)).map(([x, i]) => `<div class="em-gev ${emClasse(x)}" data-em-ouvrir="${i}">${esc(sansEmoji(x.titre))}</div>`).join("")}</div>`).join("")}` : ""}
       <div class="em-gh0" style="height:${H}px">${Array.from({ length: h1 - h0 }, (_, k) => `<span style="top:${k * PX + (k ? 0 : 7)}px">${h0 + k}h</span>`).join("")}</div>
