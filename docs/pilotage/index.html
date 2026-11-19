@@ -83,6 +83,12 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{text-align:left;padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}
 th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-top:0}
 .ligne{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+/* Analyses du dossier client : ocre = référence d'une mission ponctuelle, olive = d'une mission régulière, blanc = jamais utilisée */
+.an-ponct,.card.an-ponct{background:var(--warn-soft);border-left:5px solid var(--warn-vif)} .an-reg,.card.an-reg{background:var(--accent-soft);border-left:5px solid var(--accent)}
+.ligne.an-ponct,.ligne.an-reg{padding-inline:10px;border-radius:8px;margin-top:4px}
+.tag.an-ponct,.tag.an-reg{background:var(--surface);color:var(--ink);border:1px solid var(--warn-vif)} .tag.an-reg{border-color:var(--accent)}
+.an-legende i.an-ponct{border:2px solid var(--warn-vif)} .an-legende i.an-reg{border:2px solid var(--accent)}
+.an-legende{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px}.an-legende i{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid var(--line);vertical-align:-2px;margin-right:5px}
 .ligne:first-child{border-top:0}
 .cliquable{cursor:pointer} .cliquable:hover{border-color:var(--accent)}
 .err{color:var(--stop);font-weight:600}
@@ -7033,20 +7039,20 @@ async function vueDossiers() {
 }
 /* Un client d'un coup d'œil : ses dossiers de tâche, ce qui est écrit, ses photos, le juridique */
 async function dosEnsemble(c, corps, re) {
-  const [analyses, taches, photos, com, notes, jur] = await Promise.all([
-    q(sb.from("client_analyses").select("id,type,fait_le,etat,doc_url,doc_a_refaire").eq("client_id", c.id).order("fait_le", { ascending: false })),
+  const [analyses, taches, photos, com, notes, jur, missionsA] = await Promise.all([
+    q(sb.from("client_analyses").select("id,ref,demande_id,type,fait_le,etat,doc_url,doc_a_refaire").eq("client_id", c.id).order("fait_le", { ascending: false })),
     q(sb.from("taches").select("*").eq("client_id", c.id).not("dossier_nom", "is", null).order("cree_le", { ascending: false })),
     q(sb.from("client_photos").select("*").eq("client_id", c.id).is("supprime_le", null).order("prise_le", { ascending: false })),
     q(sb.from("client_commentaires").select("*").eq("client_id", c.id)),
     q(sb.from("notes_terrain").select("*").eq("client_id", c.id)),
-    q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("cree_le", { ascending: false }))]);
+    q(sb.from("client_juridique").select("*").eq("client_id", c.id).is("supprime_le", null).order("cree_le", { ascending: false })), missionsDuClient(c.id)]);
   const docs = taches.length ? await q(sb.from("tache_documents").select("*").in("tache_id", taches.map(t => t.id)).order("cree_le")) : [];
   const [urlsP, urlsT] = await Promise.all([urlsSignees(photos.map(p => p.apercu)), urlsDocs(docs)]);
   const fil = com.map(x => ({ ...x, qui: "Toi" + (x.partage ? " · partagé" : " · toi seul") })).concat(notes.filter(x => !x.compte_rendu).map(x => ({ ...x, qui: nomInterv(x.intervenante_id) + " · note de terrain" }))).sort((a, b) => a.cree_le < b.cree_le ? 1 : -1);
   const suivi = await blocSuiviDossier(notes, photos, urlsP);
   const reguliers = lignesRegulieres(c);
   corps.innerHTML = `${chefClientHtml(c)}${prestatairesActuels(c) ? `<p style="margin:0 0 6px"><b>Prestataire :</b> ${esc(prestatairesActuels(c))}${reguliers.length ? ` <button class="btn" type="button" data-changer-presta>${ico("mission")} Changer d'intervenante</button>` : ""}</p>` : ""}${prestaPotentiels(c) ? `<p style="margin:0 0 6px"><b>Prestataire potentiel :</b> ${esc(prestaPotentiels(c))}</p>` : ""}${elevesClient(c) ? `<p style="margin:0 0 12px"><b>Élèves :</b> ${esc(elevesClient(c))}</p>` : ""}${analyses.length ? `<section class="card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico("etincelle")} Analyses (${analyses.length})</h2>
-      ${analyses.map(a => `<div class="ligne"><span>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`).join("")}</section>` : ""}
+      ${legendeAnalyses}${analyses.map(a => { const role = roleAnalyse(a, missionsA); return `<div class="ligne ${role ? role.cls : ""}"><span>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)} ${tagRoleAnalyse(role)} ${tagAnalyse(a)}</span>${lienDocAnalyse(a)}</div>`; }).join("")}</section>` : ""}
     ${suivi}<section class="card"><h2 style="margin-top:0">${ico("dossier")} Dossiers de tâches (${taches.length})</h2>
       ${taches.map(t => { const l = docs.filter(d => d.tache_id === t.id); return `<div class="dos-tache" data-t="${t.id}"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow-wrap:anywhere">${esc(t.dossier_nom)}</b>
           <span class="row" style="flex:none">${t.fait_le ? `<span class="tag off">fait le ${jour(t.fait_le)}</span>` : `<span class="tag">à faire</span>`}${t.dossier_drive ? `<a class="btn flat" href="https://drive.google.com/drive/folders/${esc(t.dossier_drive)}" target="_blank" rel="noopener">Drive</a>` : `<span class="tag warn">rangement en cours</span>`}<button class="btn" data-ouvre>Ouvrir</button></span></div>
@@ -7090,8 +7096,20 @@ const jourAn = d => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", mo
 const tagAnalyse = a => { const [t, k] = ETATS_ANALYSE[a.etat] || [a.etat, "off"]; return `<span class="tag ${k}">${esc(t)}</span>`; };
 const lienDocAnalyse = a => a.doc_a_refaire && a.etat !== "abandonnee" ? `<span class="tag warn">document en préparation (5 min)</span>`
   : a.doc_url ? `<a class="btn" href="${esc(a.doc_url)}" target="_blank" rel="noopener">${ico("doc")} Document client</a>` : "";
-/* Se supprime seulement ce que le client n'a jamais reçu : pas proposée, pas de mail parti ou en partance */
-const analyseJetable = a => ["brouillon", "abandonnee"].includes(a.etat) && !a.propose_le && [null, undefined, "erreur"].includes(a.mail_etat);
+/* Une mission (demandes_devis) prend son analyse de référence par demande_id (analyse faite pour elle) ou par analyse_ref (choisie à l'estimation).
+   Une mission refusée ne compte plus. Une analyse acceptée a créé la routine du client : c'est la référence de son suivi régulier. */
+const missionsDuClient = async clientId => { const { data, error } = await sb.from("demandes_devis").select("id,titre,type_prestation,etat,analyse_ref").eq("client_id", clientId).neq("etat", "refusee"); return error ? null : data || []; };   // null = pas lu : rien ne se supprime
+const missionsDeLAnalyse = (a, missions) => missions.filter(d => d.id === a.demande_id || (a.ref && d.analyse_ref === a.ref));
+const roleAnalyse = (a, missions) => { const l = missionsDeLAnalyse(a, missions || []);
+  if (l.some(d => d.type_prestation === "regulier")) return { cls: "an-reg", texte: "Mission régulière : " + l.filter(d => d.type_prestation === "regulier").map(d => d.titre).join(", "), l };
+  if (a.etat === "acceptee") return { cls: "an-reg", texte: "Routine régulière du client", l };
+  if (l.length) return { cls: "an-ponct", texte: "Mission ponctuelle : " + l.map(d => d.titre).join(", "), l };
+  return null; };
+const tagRoleAnalyse = role => role ? `<span class="tag ${role.cls}">${esc(role.texte)}</span>` : "";
+const legendeAnalyses = `<p class="an-legende small muted"><span><i class="an-ponct"></i>référence d'une mission ponctuelle</span><span><i class="an-reg"></i>référence d'une mission régulière</span><span><i style="background:var(--surface)"></i>jamais utilisée</span></p>`;
+/* Une analyse inutile se supprime, sauf si elle sert de référence (mission ou routine) ou si un mail part en ce moment */
+const analyseJetable = (a, role, missions) => !!missions && !role && a.etat !== "acceptee" && !["a_envoyer", "en_cours"].includes(a.mail_etat);
+const clientARecuAnalyse = a => !!a.propose_le || a.etat === "proposee" || a.mail_etat === "envoye";
 /* Ce que le pont a retiré ou conservé à chaque arrivée (SQL 40). Tant que ce SQL n'est pas lancé : rien à montrer, et rien ne casse. */
 async function lireNettoyages(clientId, genres) {
   const { data, error } = await sb.from("nettoyages").select("*").eq("client_id", clientId).in("genre", genres).order("quand", { ascending: false }).limit(30);
@@ -7105,12 +7123,14 @@ function blocNettoyages(bilans) {
     ${bilans.map(b => `<div style="border-top:1px solid var(--line);padding:8px 0"><b>${jour(b.quand)} ${hm(b.quand)}</b> · ${esc(b.acquisition || "")}${liste("Supprimé", b.supprimes)}${liste("Conservé", b.conserves)}</div>`).join("")}</details>`;
 }
 async function dosAnalyses(c, corps, re) {
-  const [liste, bilans] = await Promise.all([q(sb.from("client_analyses").select("*").eq("client_id", c.id).order("fait_le", { ascending: false })), lireNettoyages(c.id, ["analyses", "fiches"])]);
+  const [liste, bilans, missions] = await Promise.all([q(sb.from("client_analyses").select("*").eq("client_id", c.id).order("fait_le", { ascending: false })), lireNettoyages(c.id, ["analyses", "fiches"]), missionsDuClient(c.id)]);
+  const roles = new Map(liste.map(a => [a.id, roleAnalyse(a, missions)]));
   const ouverte = liste.find(a => a.etat !== "abandonnee");
   const tab = v => (Array.isArray(v) ? v : []).filter(Boolean);
-  corps.innerHTML = (liste.some(a => "garder" in a && a.etat === "brouillon") ? `<p class="muted small" style="margin:0 0 10px">Quand une nouvelle analyse arrive, elle remplace les brouillons plus anciens du même type, sauf ceux que tu as gardés ou modifiés ici.</p>` : "") + (liste.map(a => { const r = a.rapport || {}, attente = ["a_envoyer", "en_cours"].includes(a.mail_etat), modif = a.etat === "brouillon" && !attente && !a.demande_id, jetable = analyseJetable(a), gardable = "garder" in a && a.etat === "brouillon" && !a.propose_le && !a.mail_etat; return `<details class="card" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
-      <summary class="row" style="cursor:pointer;justify-content:space-between"><b>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)}</b><span class="row">${tagAnalyse(a)}${gardable && a.garder ? `<span class="tag">Gardée</span>` : ""}${gardable ? `<button class="btn flat" data-garde>${a.garder ? "Ne plus garder" : "Garder"}</button>` : ""}${lienDocAnalyse(a)}</span></summary>
+  corps.innerHTML = (liste.length ? legendeAnalyses : "") + (liste.some(a => "garder" in a && a.etat === "brouillon") ? `<p class="muted small" style="margin:0 0 10px">Quand une nouvelle analyse arrive, elle remplace les brouillons plus anciens du même type, sauf ceux que tu as gardés ou modifiés ici.</p>` : "") + (liste.map(a => { const r = a.rapport || {}, role = roles.get(a.id), attente = ["a_envoyer", "en_cours"].includes(a.mail_etat), modif = a.etat === "brouillon" && !attente && !a.demande_id, jetable = analyseJetable(a, role, missions), gardable = "garder" in a && a.etat === "brouillon" && !a.propose_le && !a.mail_etat; return `<details class="card ${role ? role.cls : ""}" data-a="${a.id}" style="margin-bottom:12px" ${a === ouverte ? "open" : ""}>
+      <summary class="row" style="cursor:pointer;justify-content:space-between"><b>${a.type === "menage" ? ico("goutte") + " Ménage" : ico("feuille") + " Jardin"} · ${jourAn(a.fait_le)}</b><span class="row">${tagRoleAnalyse(role)}${tagAnalyse(a)}${gardable && a.garder ? `<span class="tag">Gardée</span>` : ""}${gardable ? `<button class="btn flat" data-garde>${a.garder ? "Ne plus garder" : "Garder"}</button>` : ""}${lienDocAnalyse(a)}${jetable ? `<button class="btn flat stop" data-supprimer title="Supprimer cette analyse inutile">${ico("corbeille")} Supprimer</button>` : ""}</span></summary>
       <div class="row" style="margin-top:10px">
+        ${role ? `<span class="muted small">${ico("cadenas")} Sert de référence (${esc(role.texte.charAt(0).toLowerCase() + role.texte.slice(1))}) : elle ne peut pas être supprimée.</span>` : ""}
         ${a.demande_id ? `<span class="muted small">Faite pour une demande de devis : la suite se passe dans l'onglet Devis.</span>` : ""}
         ${modif ? `<button class="btn primary" data-mail>${ico("mail")} Envoyer au client par mail</button><button class="btn" data-etat="proposee">Déjà remis autrement</button>` : ""}
         ${a.mail_etat === "a_envoyer" ? `<span class="tag warn">Mail validé pour ${esc(a.mail_a)} : il part dans les 5 minutes</span><button class="btn" data-mail-annule>Annuler l'envoi</button>` : ""}
@@ -7119,7 +7139,6 @@ async function dosAnalyses(c, corps, re) {
         ${a.mail_etat === "envoye" && a.mail_envoye_le && a.etat !== "brouillon" ? `<span class="muted small">Mail envoyé le ${jourAn(a.mail_envoye_le)} à ${esc(a.mail_a)}</span>` : ""}
         ${a.etat === "proposee" ? `<button class="btn primary" data-accepter>✓ Le client accepte : créer sa routine</button><button class="btn" data-etat="brouillon">Revenir au brouillon pour modifier</button>` : ""}
         ${modif || a.etat === "proposee" ? `<button class="btn flat stop" data-etat="abandonnee">Abandonner</button>` : ""}
-        ${jetable ? `<button class="btn flat stop" data-supprimer>${ico("corbeille")} Supprimer</button>` : ""}
         ${a.etat === "abandonnee" ? `<button class="btn" data-etat="brouillon">Reprendre</button>` : ""}
         ${a.etat === "acceptee" && a.accepte_le ? `<span class="muted small">Acceptée le ${jourAn(a.accepte_le)} : la routine se règle dans l'onglet Feuille de route.</span>` : ""}
         ${a.etat === "proposee" && a.propose_le ? `<span class="muted small">Proposée le ${jourAn(a.propose_le)}</span>` : ""}</div>
@@ -7155,11 +7174,17 @@ async function dosAnalyses(c, corps, re) {
       await maj(sb.from("client_analyses").update({ etat: b.dataset.etat, ...(b.dataset.etat === "proposee" ? { propose_le: maintenant } : {}), ...(b.dataset.etat === "brouillon" ? { mail_etat: null, mail_erreur: null, ...(!a.doc_url ? { doc_a_refaire: true } : {}) } : {}) }).eq("id", a.id));
       toast("Analyse : " + ETATS_ANALYSE[b.dataset.etat][0].toLowerCase()); return re();
     }
-    if (b.hasAttribute("data-supprimer")) {
-      if (!confirm("Supprimer définitivement l'analyse du " + jourAn(a.fait_le) + " de ce dossier ?" + (a.doc_drive_id ? " Son document client part à la corbeille du Drive." : ""))) return;
-      const { data, error } = await sb.from("client_analyses").delete().eq("id", a.id).in("etat", ["brouillon", "abandonnee"]).is("propose_le", null).or("mail_etat.is.null,mail_etat.eq.erreur").select("id");   // revérifié ici : un mail a pu partir entre-temps
+    if (b.hasAttribute("data-supprimer")) { e.preventDefault();   // le bouton est sur la ligne : ne pas plier ou déplier la fiche
+      if (!confirm("Supprimer définitivement l'analyse " + (a.type === "menage" ? "ménage" : "jardin") + " du " + jourAn(a.fait_le) + " de ce dossier ?"
+        + (clientARecuAnalyse(a) ? "\n\nLe client l'a déjà reçue : il garde son exemplaire, mais elle disparaît d'ici." : "")
+        + (a.doc_drive_id ? "\n\nSon document client part à la corbeille du Drive (récupérable 30 jours)." : ""))) return;
+      // revérifié juste avant : une mission a pu la prendre comme référence entre-temps
+      const missionsDuJour = await missionsDuClient(c.id);
+      if (!missionsDuJour) { toast("Pas supprimée : impossible de vérifier les missions, réessaie"); return re(); }
+      if (roleAnalyse(a, missionsDuJour)) { toast("Pas supprimée : elle sert maintenant de référence à une mission"); return re(); }
+      const { data, error } = await sb.from("client_analyses").delete().eq("id", a.id).neq("etat", "acceptee").or("mail_etat.is.null,mail_etat.not.in.(a_envoyer,en_cours)").select("id");
       if (error) return souci(error);
-      toast(data.length ? "Analyse supprimée" : "Pas supprimée : elle vient d'être proposée au client"); return re();
+      toast(data.length ? "Analyse supprimée" : "Pas supprimée : un mail part en ce moment ou elle vient d'être acceptée"); return re();
     }
     if (b.hasAttribute("data-mail")) return envoyerAnalyseMail(c, a, re);
     if (b.hasAttribute("data-mail-annule")) { await maj(sb.from("client_analyses").update({ mail_etat: null }).eq("id", a.id).eq("mail_etat", "a_envoyer")); toast("Envoi annulé, sauf si le mail venait de partir"); return re(); }
