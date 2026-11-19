@@ -630,6 +630,53 @@ label.f input,label.f select,label.f textarea{border:1.5px solid var(--line)}
 .rc-tuile{border-top:4px solid var(--accent)}
 .rc-tuile.grand b{color:var(--accent-fort)}
 th{background:var(--accent-soft);color:var(--accent-fort)}
+/* Espace du chef d'équipe (SQL 64) */
+.esp-sw{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--accent-soft)}
+.entete-msg.court{padding:0 12px}
+.esp-sw button{border:0;background:none;color:var(--ink);font:inherit;font-size:13px;font-weight:600;min-height:34px;padding:0 12px;border-radius:999px;cursor:pointer}
+.esp-sw button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.nav.chef div{grid-template-columns:repeat(4,1fr)}
+.nav.chef .nav-ind{width:25%}
+.ch-ligne{display:flex;justify-content:space-between;gap:10px;align-items:center;width:100%;padding:10px 0;border:0;border-top:1px solid var(--line);background:none;color:var(--ink);font:inherit;font-size:15px;text-align:left;cursor:pointer}
+.ch-ligne:first-of-type{border-top:0}
+.ch-ligne .tag{flex:none}
+.tag.stop{background:color-mix(in srgb,var(--stop) 16%,var(--surface));color:var(--stop)}
+.tag.go{background:color-mix(in srgb,var(--go) 16%,var(--surface));color:var(--go)}
+.tag.gris{background:var(--sunk);color:var(--muted)}
+.ch-pastille{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:6px;vertical-align:0}
+.ch-chiffres{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ch-chiffres div{background:var(--sunk);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;min-width:0}
+.ch-chiffres b{font-size:24px;font-variant-numeric:tabular-nums;color:var(--accent-fort)}
+.btn.ch-mini{min-height:40px;min-width:44px;padding:0 10px}
+.ch-carte{text-align:left;cursor:pointer}
+.ch-retour{align-self:flex-start;min-height:40px;padding:0;margin-bottom:4px}
+.ch-cal-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);margin-top:10px}
+.ch-cal{display:grid;grid-template-columns:34px repeat(var(--n),minmax(96px,1fr))}
+.ch-colh{font-size:13px;font-weight:600;text-align:center;padding:7px 4px;border-bottom:1px solid var(--line);border-left:1px solid var(--line);color:var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-colh.ch-coin{border-left:0}
+.ch-hrs{position:relative}
+.ch-hrs span{position:absolute;left:5px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ch-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px var(--px));cursor:copy}
+.ch-col.autre{cursor:default;background-color:var(--sunk)}
+.ch-ev{position:absolute;border:0;border-left:4px solid var(--c);background:color-mix(in srgb,var(--c) 20%,var(--surface));color:var(--ink);border-radius:8px;padding:3px 6px;text-align:left;display:flex;flex-direction:column;gap:1px;overflow:hidden;cursor:grab;font:inherit;font-size:12px;line-height:1.25;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ch-ev b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-ev span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+.ch-ev.fait{background:color-mix(in srgb,var(--go) 18%,var(--surface))}
+.ch-ev.annule{border-left-color:var(--stop);background:color-mix(in srgb,var(--stop) 14%,var(--surface));color:var(--stop);text-decoration:line-through;cursor:pointer}
+.ch-ev.perso{border-left-color:var(--muted);background:var(--sunk);color:var(--muted);cursor:pointer}
+.ch-ev.propose{outline:2px dashed var(--warn);outline-offset:-2px}
+.ch-ev.ajout{opacity:.8;cursor:pointer}
+.ch-ev.glisse{cursor:grabbing;box-shadow:0 6px 18px rgb(0 0 0 / .22);z-index:3}
+.ch-now{position:absolute;left:0;right:0;height:2px;background:var(--stop);pointer-events:none;z-index:2}
+.chip .ch-pastille{margin-right:5px}
+.prop-chef{background:var(--warn-soft);border-radius:16px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:10px;color:var(--ink)}
+.prop-chef>b{color:var(--warn)}
+.prop-ligne{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--warn) 30%,transparent)}
+.ch-big{font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent-fort)}
+.ch-pay{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 12px;align-items:center}
+.ch-pay .tag{justify-self:start}
+.ch-lien{border:0;background:none;padding:0;font:inherit;color:var(--ink);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.num{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -1033,18 +1080,33 @@ const choixClient = (sel, nom = "client") => `<label class="f">Client<select nam
 
 /* ===================== Accueil et onglets ===================== */
 const ONGLETS = [["jour", "jour", "Aujourd'hui"], ["missions", "mission", "Missions"], ["agenda", "agenda", "Agenda"], ["clients", "clients", "Clients"], ["mois", "reporting", "Reporting"], ["moi", "personne", "Moi"]];
+/* Espace du chef d'équipe (SQL 64) : un chef garde son appli de presta ; l'interrupteur de l'en-tête ouvre son espace de chef */
+const ONGLETS_CHEF = [["ch-accueil", "jour", "Accueil"], ["ch-planning", "agenda", "Planning"], ["ch-clients", "clients", "Clients"], ["ch-argent", "euro", "Argent"]];
+let espace = LS.get("espace") === "chef" ? "chef" : "presta";
+const enChef = () => !!(moi && moi.cheffe_reseau) && espace === "chef";
+const ongletsActifs = () => enChef() ? ONGLETS_CHEF : ONGLETS;
 let ongletAffiche = null, sensSuivant = null;
-const rangOnglet = k => ONGLETS.findIndex(x => x[0] === k);
+const rangOnglet = k => ongletsActifs().findIndex(x => x[0] === k);
 async function accueil(o) {
   if (o) onglet = o;
+  if (enChef() && !onglet.startsWith("ch-") && onglet !== "messages" && onglet !== "materiel") onglet = "ch-accueil";
+  if (!enChef() && onglet.startsWith("ch-")) onglet = "jour";
   couleurBarre(couleurTete());
   const avant = rangOnglet(ongletAffiche), apres = rangOnglet(onglet), change = onglet !== ongletAffiche;
   const sens = sensSuivant !== null ? sensSuivant : change && avant >= 0 && apres >= 0 ? Math.sign(apres - avant) : 0, animer = change || sensSuivant !== null;
   sensSuivant = null; ongletAffiche = onglet;
-  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite"><div class="entete-sous">Espace intervenant</div><button class="entete-msg" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}Messages</button></div></header>
+  const sousTitre = moi && moi.cheffe_reseau
+    ? `<div class="esp-sw" role="group" aria-label="Espace"><button data-espace="presta" aria-pressed="${!enChef()}">Presta</button><button data-espace="chef" aria-pressed="${enChef()}">${chefMot()}</button></div>`
+    : `<div class="entete-sous">Espace intervenant</div>`;
+  app.innerHTML = `<header class="entete"><div class="entete-marque">${MONO}OIKOS</div><div class="entete-droite">${sousTitre}<button class="entete-msg${moi && moi.cheffe_reseau ? " court" : ""}" id="ouvrir-messages" aria-label="Messages">${ico("bulle")}${moi && moi.cheffe_reseau ? "" : "Messages"}</button></div></header>
     <main class="page" id="contenu"><div class="charge" role="status" aria-label="Chargement"><svg viewBox="0 0 20 18" aria-hidden="true"><path pathLength="100" d="M10 1.6 18.6 16.6H1.4Z"/></svg></div></main>
-    <nav class="nav${change ? " change" : ""}" aria-label="Onglets"><div><span class="nav-ind${apres < 0 ? " cache" : ""}" style="--p:${avant >= 0 ? avant : Math.max(apres, 0)}"></span>${ONGLETS.map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ico(ic)}</span>${t}</button>`).join("")}</div></nav>`;
+    <nav class="nav${enChef() ? " chef" : ""}${change ? " change" : ""}" aria-label="Onglets"><div><span class="nav-ind${apres < 0 ? " cache" : ""}" style="--p:${avant >= 0 ? avant : Math.max(apres, 0)}"></span>${ongletsActifs().map(([k, ic, t]) => `<button data-onglet="${k}" ${k === onglet ? 'aria-current="page"' : ""}><span class="ic" aria-hidden="true">${ico(ic)}</span>${t}</button>`).join("")}</div></nav>`;
   app.querySelector("#ouvrir-messages").onclick = () => { vibre(5); accueil("messages"); };
+  app.querySelectorAll("[data-espace]").forEach(b => b.onclick = () => {
+    if (b.dataset.espace === espace) return;
+    espace = b.dataset.espace; LS.set("espace", espace); vibre(5); sensSuivant = 0; ongletAffiche = null;
+    accueil(espace === "chef" ? "ch-accueil" : "jour");
+  });
   app.querySelector(".nav").onclick = e => { const b = e.target.closest("[data-onglet]"); if (b) { vibre(5); accueil(b.dataset.onglet); } };
   const ind = app.querySelector(".nav-ind"); void ind.offsetWidth; if (apres >= 0) ind.style.setProperty("--p", apres);
   try {
@@ -1081,13 +1143,14 @@ async function accueil(o) {
     if (c.error) throw c.error;
     clients = c.data;
     await ({ jour: vueJour, agenda: vueAgenda, clients: vueClients, mois: vueMois, missions: vueMissions, messages: vueMessages, moi: vueMoi, papiers: vuePapiers, taches: vueTaches,
+      "ch-accueil": vueChefAccueil, "ch-planning": vueChefPlanning, "ch-clients": vueChefClients, "ch-argent": vueChefArgent,
       docs: () => window.DocsOikos ? DocsOikos.presta() : contenu("<h1>Mes documents</h1><p class='muted'>Mets l'appli à jour.</p>"),
       materiel: () => window.OutilsOikos ? OutilsOikos.page() : contenu("<h1>Mon matériel</h1><p class='muted'>Mets l'appli à jour.</p>") })[onglet]();
-    if (onglet === "agenda" || onglet === "jour") rappelsMission().catch(() => {});
+    if (onglet === "agenda" || onglet === "jour") { rappelsMission().catch(() => {}); propositionsDuChef().catch(() => {}); }
     if (window.DocsOikos) DocsOikos.rappel(onglet).catch(() => {});   // documents à lire et signer (SQL 65) : bandeau sur Aujourd'hui, bouton dans Moi
-    if (window.OutilsOikos) OutilsOikos.rappel(onglet).catch(() => {});   // mon matériel (SQL 77) : arrivée par un QR code, bandeau sur Aujourd'hui, bouton dans Moi
+    if (window.OutilsOikos) OutilsOikos.rappel(onglet).catch(() => {});   // mon matériel (SQL 77) : arrivée par un QR code, bandeau sur Aujourd'hui, bouton dans Moi, carte du chef
     if (animer) entree(sens);
-    didacticielSiBesoin();
+    if (!enChef()) didacticielSiBesoin();
   } catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${reseau(e) ? "Pas de réseau." : esc(e.message || e)}</p><button class="btn primary" style="margin-top:14px" onclick="accueil()">Réessayer</button>`; }
 }
 const contenu = html => { document.getElementById("contenu").innerHTML = html; };
@@ -3081,7 +3144,7 @@ async function envoyerPapier(piece, brut, plus) {
 /* ---------- Moi ---------- */
 async function vueMoi() {
   const statut = { "sous-traitant": "Sous-traitant (auto-entrepreneur)", salarie: "Salarié" }[moi.statut] || "Statut à préciser par OIKOS";
-  contenu(`<h1>${esc((moi.prenom || "") + " " + (moi.nom || ""))}</h1><p class="muted" style="margin-bottom:14px">${statut}</p>
+  contenu(`<h1>${esc((moi.prenom || "") + " " + (moi.nom || ""))}</h1><p class="muted" style="margin-bottom:14px">${statut}${moi.cheffe_reseau ? ` · ${chefMot().toLowerCase()} d'équipe (ton équipe : interrupteur en haut)` : ""}</p>
     <dl class="info card"><dt>E-mail</dt><dd>${esc(moi.email || "")}</dd><dt>Téléphone</dt><dd>${esc(moi.telephone || "—")}</dd>
       <dt>Adresse</dt><dd>${esc(moi.adresse || "—")}</dd><dt>Activités</dt><dd>${esc((moi.activites || []).join(", ") || "—")}</dd>
       <dt>Zones</dt><dd>${esc((moi.zones || []).map(z => "Zone " + z).join(", ") || "—")}</dd></dl>
@@ -3137,6 +3200,433 @@ async function monReseau() {
         const { error } = await sb.rpc("demander_au_reseau", { p_sorte: sorte, p_message: el.querySelector("#dem-msg").value.trim() || null });
         if (error) { ev.target.disabled = false; el.querySelector("#dem-err").textContent = error.code === "PGRST202" || error.code === "42883" ? "Pas encore prêt chez OIKOS : réessaie plus tard." : error.message; return; }
         fermer(); toast("Envoyé : OIKOS est prévenu."); monReseau();
+      };
+    });
+  };
+}
+
+/* ===================== Espace du chef d'équipe (SQL 64) =====================
+   Le chef reste un presta (sous-traitant) : côté « Presta », son appli habituelle ; côté « Chef », son équipe.
+   Tout passe par les fonctions chef_* de la base, qui ne rendent que son équipe (jamais le juridique, les prix
+   ni les autres équipes). Il ne change pas le planning d'un autre presta : il le lui PROPOSE, le presta accepte
+   ou refuse dans son appli (bloc « Ton chef d'équipe te propose »). Ses propres passages changent tout de suite. */
+let ch = null, chJour = debutJour(), chFiltre = "tous", chFiche = null, chFicheOnglet = "infos", chMois = null;
+const CH_COULEURS = ["#5C7A3E", "#3F6E9E", "#8A5A9E", "#B0702A", "#2E8A84", "#A0475E", "#6B6B3A"];
+const femmeChef = () => ((ch && ch.equipes && ch.equipes[0] && ch.equipes[0].civilite) || (moi && moi.civilite)) === "Madame";
+const chefMot = () => femmeChef() ? "Cheffe" : "Chef";
+const chEuros = n => (Math.round((+n || 0) * 100) / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+const chCourt = (t, n = 70) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+const chPasPret = e => e && (e.code === "PGRST202" || e.code === "42883" || /chef_|Could not find the function/i.test(e.message || "") && /function/i.test(e.message || ""));
+async function chRpc(nom, args) {
+  const { data, error } = await sb.rpc(nom, args);
+  if (error) throw chPasPret(error) ? new Error("L'espace " + chefMot().toLowerCase() + " n'est pas encore prêt chez OIKOS (SQL 64 à lancer).") : error;
+  return data;
+}
+async function chefCharger() {
+  ch = await chRpc("chef_ouverture");
+  ch.couleur = {}; ch.membres.forEach((m, i) => { ch.couleur[m.id] = CH_COULEURS[i % CH_COULEURS.length]; });
+  return ch;
+}
+const chCouleur = id => ch.couleur[id] || (ch.couleur[id] = CH_COULEURS[Object.keys(ch.couleur).length % CH_COULEURS.length]);
+const chPresta = id => ch.membres.find(m => m.id === id) || {};
+const chClient = id => ch.clients.find(c => c.id === id) || {};
+const chNomEquipe = () => ch.equipes.map(e => e.nom).join(" · ");
+const chPlanning = lun => chRpc("chef_planning", { p_debut: ymdTxt(lun), p_fin: ymdTxt(ajouterJours(lun, 6)) });
+const chFait = (pl, k) => pl.pointages.some(t => t.intervenante_id === k.intervenante_id && t.client_id === k.client_id && ymdTxt(new Date(t.arrivee)) === ymdTxt(new Date(k.debut)));
+const CH_MOTIFS = { invalide: "Vérifie le jour, l'heure et la durée (12 h au plus).", passe: "On ne peut pas proposer un passage pour un jour déjà passé.",
+  pas_son_equipe: "Ce passage n'est pas dans ton équipe.", pas_attribue: "Ce client n'est pas confié à ce presta : demande à OIKOS de le lui confier.",
+  deja_annule: "Ce passage est déjà annulé." };
+function chResume(x) {
+  const qui = x.client || chClient(x.client_id).nom || "le client", tous = x.portee === "tous";
+  if (x.sorte === "ajouter") return `ajouter un passage chez ${qui} le ${jourTxt(x.debut)} à ${heure(x.debut)}${tous ? ", chaque semaine" : ""}`;
+  if (x.sorte === "annuler") return `annuler le passage chez ${qui}${x.ancien_debut ? " du " + jourTxt(x.ancien_debut) : ""}${tous ? " et les suivants" : ""}`;
+  return `déplacer le passage chez ${qui} au ${jourTxt(x.debut)} à ${heure(x.debut)}${tous ? " (toutes les semaines)" : ""}`;
+}
+
+/* ---------- Accueil du chef ---------- */
+async function vueChefAccueil() {
+  await chefCharger();
+  const lun = debutSemaine(new Date()), pl = await chPlanning(lun);
+  const prevus = pl.creneaux.filter(k => !k.perso && !k.annule && ch.membres.some(m => m.id === k.intervenante_id));
+  const faits = prevus.filter(k => chFait(pl, k)).length, annules = pl.creneaux.filter(k => !k.perso && k.annule).length;
+  const items = [];
+  ch.annules.forEach(k => items.push(["Absence", "stop", `${esc(k.presta || "Un presta")} ne vient pas chez ${esc(k.client || "un client")} : ${esc(jourTxt(k.debut))}, ${heure(k.debut)}`, `data-ch-jour="${esc(k.debut)}"`]));
+  ch.demandes.forEach(d => items.push(["Demande", "warn", `${esc(chClient(d.client_id).nom || "Un client")} : « ${esc(chCourt(d.texte))} »`, `data-ch-fiche="${d.client_id}"`]));
+  const nd = {}; ch.non_declares.forEach(k => { (nd[k.intervenante_id] = nd[k.intervenante_id] || []).push(k); });
+  Object.entries(nd).forEach(([pid, l]) => items.push(["Heures", "warn", `${esc(chPresta(pid).prenom || "Un presta")} : ${l.length} passage${l.length > 1 ? "s" : ""} pas encore déclaré${l.length > 1 ? "s" : ""} (${esc(l.map(k => k.client || "?").filter((v, i, a) => a.indexOf(v) === i).join(", "))})`, `data-ch-jour="${esc(l[0].debut)}"`]));
+  ch.impayes.forEach(f => items.push(["Impayé", "stop", `${esc(f.client || chClient(f.client_id).nom || "Un client")} : facture ${esc(f.numero || "")} pas payée (${f.retard} j de retard)`, `data-ch-argent="1"`]));
+  const repondues = ch.propositions.filter(x => x.etat !== "attente"), enAttente = ch.propositions.filter(x => x.etat === "attente");
+  repondues.forEach(x => items.push([{ acceptee: "Accepté", refusee: "Refusé", perimee: "Plus valable", retiree: "Retiré" }[x.etat] || "Réponse", x.etat === "acceptee" ? "go" : "stop",
+    `${esc(x.presta || "Le presta")} : ${esc(chResume(x))}${x.motif ? ` · « ${esc(x.motif)} »` : ""}`, `data-ch-jour="${esc(x.debut || x.ancien_debut || "")}"`]));
+  if (enAttente.length) items.push(["En attente", "gris", `${enAttente.length} proposition${enAttente.length > 1 ? "s" : ""} en attente de réponse de tes presta`, `data-ch-planning="1"`]);
+  contenu(`<h1>${esc(chNomEquipe())}</h1><p class="muted" style="margin-bottom:14px">Ton espace de ${chefMot().toLowerCase()} : ton équipe, ses clients et son planning.</p>
+    <div class="stack">
+    <section class="card"><h2 style="margin:0">À regarder</h2>
+      ${items.length ? items.map(([t, k, txt, act]) => `<button class="ch-ligne" ${act}><span>${txt}</span><span class="tag ${k}">${t}</span></button>`).join("") : `<p class="muted small">Rien à regarder pour l'instant.</p>`}
+      ${repondues.length ? `<button class="btn flat" id="ch-vu">J'ai vu les réponses</button>` : ""}</section>
+    <section class="card"><h2 style="margin:0">Cette semaine</h2>
+      <div class="ch-chiffres"><div><b>${prevus.length}</b><span class="muted small">passages prévus</span></div><div><b>${faits}</b><span class="muted small">déjà déclarés</span></div><div><b>${annules}</b><span class="muted small">annulés</span></div></div>
+      <button class="btn doux" data-ch-planning="1"><span class="ic">${ico("agenda")}</span>Voir le planning de l'équipe</button></section>
+    <section class="card"><h2 style="margin:0">Mon équipe</h2>
+      ${ch.membres.map(m => `<div class="ligne"><span><b style="color:${chCouleur(m.id)}">${esc(((m.prenom || "") + " " + (m.nom || "")).trim() || "Presta")}</b>${m.moi ? ` <span class="muted small">(toi)</span>` : ""}${m.gele ? ` <span class="tag warn">Compte gelé</span>` : ""}<br>
+        <span class="muted small">${esc((m.activites || []).join(", ") || "—")}${(m.zones || []).length ? " · zone " + esc(m.zones.join("-")) : ""}</span></span>
+        ${m.telephone && !m.moi ? `<span class="row"><a class="btn ch-mini" href="${lienTel(m.telephone)}" aria-label="Appeler">${ico("tel")}</a><a class="btn ch-mini" href="${lienSMS(m.telephone, "")}" aria-label="SMS">${ico("bulle")}</a></span>` : ""}</div>`).join("")}</section>
+    <section class="card"><h2 style="margin:0">Demander au réseau</h2>
+      <p class="muted small">Préviens OIKOS : il fait passer un presta ou des clients d'un réseau à l'autre.</p>
+      <div class="stack" id="mon-reseau"><button class="btn" data-dem="presta"><span class="ic">${ico("personne")}</span>J'ai trop de clients : je veux un presta</button>
+        <button class="btn" data-dem="clients"><span class="ic">${ico("clients")}</span>J'ai trop de presta : je veux des clients</button></div></section>
+    </div>`);
+  monReseau();
+  const el = document.getElementById("contenu");
+  el.addEventListener("click", async e => {
+    const b = s => e.target.closest(s); let t;
+    if ((t = b("[data-ch-jour]")) && t.dataset.chJour) { chJour = debutJour(new Date(t.dataset.chJour)); chFiltre = "tous"; accueil("ch-planning"); }
+    else if ((t = b("[data-ch-fiche]"))) { chFiche = t.dataset.chFiche; chFicheOnglet = "infos"; accueil("ch-clients"); }
+    else if (b("[data-ch-planning]")) { chJour = debutJour(); accueil("ch-planning"); }
+    else if (b("[data-ch-argent]")) accueil("ch-argent");
+    else if (b("#ch-vu")) { await sb.rpc("chef_reponses_vues"); accueil("ch-accueil"); }
+  });
+}
+
+/* ---------- Planning de l'équipe : une colonne par presta, autant de clients que voulu dans la journée ----------
+   Toucher un passage : sa fenêtre (adresse, téléphone, changer, annuler). Glisser un passage : changer son heure
+   (à la souris tout de suite ; au doigt, après un appui de 0,4 s). Toucher une case vide : proposer un passage. */
+async function vueChefPlanning() {
+  await chefCharger();
+  const s0 = debutSemaine(chJour), auj = debutJour(), pl = await chPlanning(s0);
+  cache.chPl = pl;
+  const cols = ch.membres.map(m => ({ id: m.id, nom: m.prenom || "Presta", moi: m.moi }));
+  pl.creneaux.forEach(k => { if (!cols.some(c => c.id === k.intervenante_id)) cols.push({ id: k.intervenante_id, nom: k.presta || "Autre presta", autre: true }); });
+  const visibles = chFiltre === "tous" ? cols : cols.filter(c => c.id === chFiltre);
+  const d = chJour, d1 = ajouterJours(d, 1);
+  const prop = id => pl.propositions.find(x => x.creneau_id === id && x.etat === "attente");
+  const items = pl.creneaux.filter(k => new Date(k.debut) >= d && new Date(k.debut) < d1).map(k => ({ k, t: +new Date(k.debut), end: +new Date(k.fin) }));
+  const ajouts = pl.propositions.filter(x => x.sorte === "ajouter" && new Date(x.debut) >= d && new Date(x.debut) < d1);
+  const [h0, h1] = plage(items.concat(ajouts.map(x => ({ t: +new Date(x.debut), end: +new Date(x.fin) })))), PX = 48;
+  const y = t => ((t - d) / 36e5 - h0) * PX;
+  const s6 = ajouterJours(s0, 6);
+  let h = `<div class="ag-head"><button class="ag-nav" data-chnav="-7" aria-label="Semaine précédente">‹</button>
+    <div class="ag-title">${s0.getDate()} – ${s6.getDate()} ${esc(s6.toLocaleDateString("fr-FR", { month: "long" }))}</div><button class="ag-nav" data-chnav="7" aria-label="Semaine suivante">›</button>
+    ${d.getTime() !== auj.getTime() ? `<button class="btn ag-auj" data-chauj="1">Aujourd'hui</button>` : ""}</div>`;
+  h += `<div class="ag-week">` + [0, 1, 2, 3, 4, 5, 6].map(i => { const t = ajouterJours(s0, i), n = pl.creneaux.filter(k => !k.perso && !k.annule && new Date(k.debut) >= t && new Date(k.debut) < ajouterJours(t, 1)).length;
+    return `<button class="ag-d${t.getTime() === d.getTime() ? " sel" : ""}${t.getTime() === auj.getTime() ? " today" : ""}" data-chjour="${t.getTime()}"><span>${JOURS_C[t.getDay()]}</span><b>${t.getDate()}</b><i>${n ? "•".repeat(Math.min(n, 5)) : "&nbsp;"}</i></button>`; }).join("") + `</div>`;
+  h += `<div class="ag-dayname">${esc(jourTxt(d))}${d.getTime() === auj.getTime() ? " · aujourd'hui" : ""}</div>`;
+  h += `<div class="chips">${[["tous", "Toute l'équipe"]].concat(cols.map(c => [c.id, c.nom])).map(([id, n]) => `<button class="chip" data-chfiltre="${id}" aria-pressed="${chFiltre === id}"${id !== "tous" ? ` style="--c:${chCouleur(id)}"` : ""}>${id !== "tous" ? `<span class="ch-pastille"></span>` : ""}${esc(n)}</button>`).join("")}</div>`;
+  let g = `<div class="ch-cal-wrap"><div class="ch-cal" style="--n:${visibles.length};--px:${PX}px"><div class="ch-colh ch-coin"></div>`
+    + visibles.map(c => `<div class="ch-colh" style="--c:${chCouleur(c.id)}">${esc(c.nom)}${c.moi ? " (toi)" : ""}</div>`).join("")
+    + `<div class="ch-hrs" style="height:${(h1 - h0) * PX}px">${Array.from({ length: h1 - h0 }, (_, i) => `<span style="top:${i * PX + 2}px">${h0 + i}h</span>`).join("")}</div>`;
+  visibles.forEach(c => {
+    const col = items.filter(it => it.k.intervenante_id === c.id).sort((a, b) => a.t - b.t); couloirs(col);
+    g += `<div class="ch-col${c.autre ? " autre" : ""}" data-col="${c.id}" data-h0="${h0}" style="height:${(h1 - h0) * PX}px">`;
+    col.forEach(it => { const k = it.k, p = prop(k.id), fait = !k.annule && chFait(pl, k), top = Math.max(0, y(it.t)), ht = Math.max(24, y(it.end) - top - 2);
+      g += `<button class="ch-ev${k.annule ? " annule" : ""}${k.perso ? " perso" : ""}${p ? " propose" : ""}${fait ? " fait" : ""}" data-chev="${k.id}" style="--c:${chCouleur(c.id)};top:${top}px;height:${ht}px;left:calc(3px + (100% - 6px) * ${it.lane} / ${it.nl});width:calc((100% - 6px) / ${it.nl} - 2px)">
+        <b>${k.perso ? "Occupé" : esc(k.client || "Client")}</b><span>${hmCourt(new Date(k.debut))}–${hmCourt(new Date(k.fin))}${k.annule ? " · annulé" : p ? " · proposé" : fait ? " · déclaré" : ""}</span></button>`; });
+    ajouts.filter(x => x.intervenante_id === c.id).forEach(x => { const top = Math.max(0, y(+new Date(x.debut))), ht = Math.max(24, y(+new Date(x.fin)) - top - 2);
+      g += `<button class="ch-ev propose ajout" data-chprop="${x.id}" style="--c:${chCouleur(c.id)};top:${top}px;height:${ht}px;left:3px;width:calc(100% - 6px)"><b>${esc(chClient(x.client_id).nom || "Client")}</b><span>${hmCourt(new Date(x.debut))} · proposé</span></button>`; });
+    if (d.getTime() === auj.getTime()) { const n = y(Date.now()); if (n >= 0 && n <= (h1 - h0) * PX) g += `<div class="ch-now" style="top:${n}px"></div>`; }
+    g += `</div>`;
+  });
+  g += `</div></div>`;
+  contenu(`<div class="ag">${h}${visibles.length ? g : `<p class="muted">Personne dans ton équipe pour l'instant.</p>`}
+    <p class="muted small">Touche un passage pour l'ouvrir, glisse-le pour changer son heure (au doigt : appuie un instant avant de glisser), ou touche une case vide pour proposer un passage. Tes presta reçoivent la proposition dans leur appli et l'acceptent ; tes propres passages changent tout de suite.</p></div>`);
+  const el = document.getElementById("contenu");
+  let glisse = null, apresGlisse = false;
+  el.onclick = e => {
+    if (apresGlisse) { apresGlisse = false; return; }
+    const b = s => e.target.closest(s); let t;
+    if ((t = b("[data-chnav]"))) { chJour = ajouterJours(chJour, Number(t.dataset.chnav)); return accueil("ch-planning"); }
+    if (b("[data-chauj]")) { chJour = debutJour(); return accueil("ch-planning"); }
+    if ((t = b("[data-chjour]"))) { chJour = new Date(Number(t.dataset.chjour)); return accueil("ch-planning"); }
+    if ((t = b("[data-chfiltre]"))) { chFiltre = t.dataset.chfiltre; return accueil("ch-planning"); }
+    if ((t = b("[data-chprop]"))) return chFenetreAjout(pl.propositions.find(x => x.id === t.dataset.chprop));
+    if ((t = b("[data-chev]"))) return chFenetreRdv(pl.creneaux.find(k => k.id === t.dataset.chev), prop(t.dataset.chev));
+    if ((t = b(".ch-col")) && !t.classList.contains("autre")) {
+      const r = t.getBoundingClientRect(), min = h0 * 60 + Math.floor((e.clientY - r.top) / PX * 2) * 30;
+      chProposerAjout(t.dataset.col, aMinutes(d, min));
+    }
+  };
+  /* Glisser un passage pour changer son heure (par quarts d'heure, même jour) */
+  const finir = ok => {
+    if (!glisse) return; const g0 = glisse; glisse = null; clearTimeout(g0.minuteur);
+    if (!g0.actif) return;
+    g0.el.classList.remove("glisse");
+    if (!ok || g0.nouveau === g0.debut) { g0.el.style.top = g0.top + "px"; return; }   // pas bougé : le toucher ouvre le passage
+    apresGlisse = true; setTimeout(() => { apresGlisse = false; }, 400);
+    const k = pl.creneaux.find(x => x.id === g0.el.dataset.chev), duree = new Date(k.fin) - new Date(k.debut);
+    chChanger(k, new Date(g0.nouveau), new Date(g0.nouveau + duree), () => { g0.el.style.top = g0.top + "px"; });
+  };
+  el.addEventListener("pointerdown", e => {
+    const ev = e.target.closest(".ch-ev[data-chev]"); if (!ev || ev.classList.contains("perso") || ev.classList.contains("annule")) return;
+    const k = pl.creneaux.find(x => x.id === ev.dataset.chev); if (!k || new Date(k.debut) < debutJour()) return;
+    glisse = { el: ev, y0: e.clientY, top: parseFloat(ev.style.top), debut: +new Date(k.debut), nouveau: +new Date(k.debut), actif: false, id: e.pointerId };
+    const activer = () => { if (!glisse) return; glisse.actif = true; ev.classList.add("glisse"); vibre(15); try { ev.setPointerCapture(glisse.id); } catch (_) {} };
+    if (e.pointerType === "mouse") activer(); else glisse.minuteur = setTimeout(activer, 400);
+  });
+  el.addEventListener("pointermove", e => {
+    if (!glisse) return;
+    const dy = e.clientY - glisse.y0;
+    if (!glisse.actif) { if (Math.abs(dy) > 8) { clearTimeout(glisse.minuteur); glisse = null; } return; }
+    const pas = Math.round(dy / PX * 4) / 4;   // quarts d'heure
+    glisse.nouveau = glisse.debut + pas * 36e5;
+    glisse.el.style.top = Math.max(0, glisse.top + pas * PX) + "px";
+    glisse.el.querySelector("span").textContent = hmCourt(new Date(glisse.nouveau)) + " · relâche pour changer";
+  });
+  el.addEventListener("touchmove", e => { if (glisse && glisse.actif) e.preventDefault(); }, { passive: false });
+  el.addEventListener("pointerup", () => finir(true));
+  el.addEventListener("pointercancel", () => finir(false));
+}
+function chFenetreRdv(k, p) {
+  if (!k) return;
+  const pr = chPresta(k.intervenante_id), sien = k.intervenante_id === moi.id, cl = chClient(k.client_id), fait = cache.chPl && chFait(cache.chPl, k);
+  const futur = new Date(k.debut) >= debutJour();
+  feuille(`<h2 style="margin:0">${k.perso ? "Occupé" : esc(k.client || "Client")}</h2>
+    <p class="muted">${esc(k.presta || pr.prenom || "Presta")}${sien ? " (toi)" : ""} · ${esc(jourTxt(k.debut))} · ${heure(k.debut)} – ${heure(k.fin)}</p>
+    ${k.annule ? `<p><span class="tag stop">Annulé</span></p>` : fait ? `<p><span class="tag go">Déclaré par ${esc(k.presta || "le presta")}</span></p>` : ""}
+    ${p ? `<div class="prop-chef"><b>Proposé à ${esc(k.presta || "ton presta")}, en attente de sa réponse</b><span class="small">${esc(chResume({ ...p, client: k.client, ancien_debut: k.debut }))}</span>
+      <button class="btn" id="ch-retirer">Retirer ma proposition</button></div>` : ""}
+    ${k.perso ? `<p class="muted small">Rendez-vous personnel de ${esc(k.presta || "ce presta")} : seul le créneau est visible.</p>` : `
+    ${k.adresse ? `<p>${esc(k.adresse)}</p><div class="grid2"><a class="btn" href="${lienItineraire(k.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("itineraire")}</span>Google Maps</a>
+      <a class="btn" href="${lienWaze(k.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("voiture")}</span>Waze</a></div>` : ""}
+    ${k.telephone ? `<div class="grid2"><a class="btn" href="${lienTel(k.telephone)}"><span class="ic">${ico("tel")}</span>Appeler le client</a>
+      <a class="btn" href="${lienSMS(k.telephone, "")}"><span class="ic">${ico("bulle")}</span>SMS</a></div>` : ""}
+    ${!k.annule && futur ? `<button class="btn primary" id="ch-changer"><span class="ic">${ico("agenda")}</span>Changer l'heure ou le jour</button>
+      <button class="btn" id="ch-annuler" style="color:var(--stop);border-color:var(--stop)">Annuler ce passage</button>` : ""}
+    ${k.annule && futur && k.equipe ? `<button class="btn primary" id="ch-remplacer"><span class="ic">${ico("personne")}</span>Proposer un remplaçant</button>` : ""}
+    ${k.equipe ? `<button class="btn doux" id="ch-fiche"><span class="ic">${ico("personne")}</span>Fiche client</button>` : ""}
+    ${!sien && !k.annule && futur ? `<p class="muted small">${esc(k.presta || "Ton presta")} reçoit la proposition dans son appli et l'accepte ou la refuse : son planning ne change qu'à ce moment.</p>` : ""}`}
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    const q = s => el.querySelector(s);
+    if (q("#ch-changer")) q("#ch-changer").onclick = () => { fermer(); chChanger(k); };
+    if (q("#ch-annuler")) q("#ch-annuler").onclick = () => { fermer(); chAnnuler(k); };
+    if (q("#ch-fiche")) q("#ch-fiche").onclick = () => { fermer(); chFiche = k.client_id; chFicheOnglet = "infos"; accueil("ch-clients"); };
+    if (q("#ch-remplacer")) q("#ch-remplacer").onclick = () => { fermer(); chRemplacer(k); };
+    if (q("#ch-retirer")) q("#ch-retirer").onclick = async () => { const { error } = await sb.rpc("chef_retirer_proposition", { p_id: p.id }); if (error) return souci(error); fermer(); toast("Proposition retirée"); accueil("ch-planning"); };
+  });
+}
+function chFenetreAjout(x) {
+  if (!x) return;
+  feuille(`<h2 style="margin:0">${esc(chClient(x.client_id).nom || "Client")}</h2><p class="muted">${esc(chPresta(x.intervenante_id).prenom || "Presta")} · ${esc(jourTxt(x.debut))} · ${heure(x.debut)} – ${heure(x.fin)}${x.semaines > 1 ? ` · ${x.semaines} semaines` : ""}</p>
+    <div class="prop-chef"><b>Passage proposé, en attente de réponse</b></div>
+    <button class="btn" id="ch-retirer">Retirer ma proposition</button><button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    el.querySelector("#ch-retirer").onclick = async () => { const { error } = await sb.rpc("chef_retirer_proposition", { p_id: x.id }); if (error) return souci(error); fermer(); toast("Proposition retirée"); accueil("ch-planning"); };
+  });
+}
+/* Envoie la proposition et dit ce qui s'est passé */
+async function chEnvoyer(args, nomPresta, fermer, bouton) {
+  if (bouton) bouton.disabled = true;
+  const { data, error } = await sb.rpc("chef_proposer", { p_sorte: args.sorte, p_creneau: args.creneau || null, p_intervenante: args.intervenante || null, p_client: args.client || null,
+    p_debut: args.debut ? args.debut.toISOString() : null, p_fin: args.fin ? args.fin.toISOString() : null, p_portee: args.portee || "un", p_semaines: args.semaines || 1, p_message: args.message || null });
+  if (bouton) bouton.disabled = false;
+  if (error) return souci(error);
+  if (!data.ok) return toast(CH_MOTIFS[data.motif] || "Pas possible.");
+  fermer();
+  toast(data.etat === "acceptee" ? "C'est fait : ton planning est à jour" : `Proposition envoyée à ${nomPresta || "ton presta"}`);
+  accueil("ch-planning");
+}
+const chChampsQuand = (debut, fin) => `<div class="grid2"><label class="f">Jour<input type="date" id="ch-date" value="${ymdTxt(debut)}"></label>
+  <label class="f">Heure<input type="time" id="ch-heure" step="900" value="${pad2(debut.getHours())}:${pad2(debut.getMinutes())}"></label></div>
+  <label class="f">Durée (heures)<input type="text" id="ch-duree" inputmode="decimal" value="${String(Math.round((fin - debut) / 36e5 * 100) / 100).replace(".", ",")}"></label>`;
+const chLireQuand = el => { const j = el.querySelector("#ch-date").value, hm = el.querySelector("#ch-heure").value, h = parseFloat(el.querySelector("#ch-duree").value.replace(",", "."));
+  if (!j || !hm || !(h > 0)) return null; const debut = new Date(j + "T" + hm); return { debut, fin: new Date(debut.getTime() + h * 36e5) }; };
+const chPortee = () => `<div class="chips" id="ch-portee"><button type="button" class="chip" data-portee="un" aria-pressed="true">Seulement ce jour-là</button><button type="button" class="chip" data-portee="tous" aria-pressed="false">Toutes les semaines</button></div>`;
+const chBrancherPortee = el => { let v = "un"; el.querySelector("#ch-portee").onclick = e => { const b = e.target.closest("[data-portee]"); if (!b) return; v = b.dataset.portee; el.querySelectorAll("[data-portee]").forEach(x => x.setAttribute("aria-pressed", x === b)); }; return () => v; };
+function chChanger(k, debut, fin, siAnnule) {
+  debut = debut || new Date(k.debut); fin = fin || new Date(k.fin);
+  const sien = k.intervenante_id === moi.id; let envoye = false;
+  feuille(`<h2 style="margin:0">Changer le passage</h2><p class="muted">${esc(k.client || "Client")} · ${esc(k.presta || "Presta")}${sien ? " (toi)" : ""} · avant : ${esc(jourTxt(k.debut))}, ${heure(k.debut)}</p>
+    <form class="stack" id="ch-form">${chChampsQuand(debut, fin)}
+      <p class="muted small" style="margin:0">Ce passage revient chaque semaine ?</p>${chPortee()}
+      ${sien ? "" : `<label class="f">Un mot pour ${esc(k.presta || "ton presta")} (facultatif)<textarea id="ch-msg" maxlength="500" rows="2"></textarea></label>`}
+      <button class="btn primary big" type="submit">${sien ? "Changer" : "Proposer à " + esc(k.presta || "mon presta")}</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    const portee = chBrancherPortee(el);
+    el.querySelector("#ch-form").onsubmit = e => { e.preventDefault(); const q = chLireQuand(el); if (!q) return toast("Indique le jour, l'heure et la durée");
+      envoye = true; chEnvoyer({ sorte: "deplacer", creneau: k.id, debut: q.debut, fin: q.fin, portee: portee(), message: sien ? null : el.querySelector("#ch-msg").value.trim() }, k.presta, fermer, e.submitter); };
+  }, () => { if (!envoye && siAnnule) siAnnule(); });
+}
+function chAnnuler(k) {
+  const sien = k.intervenante_id === moi.id;
+  feuille(`<h2 style="margin:0">Annuler ce passage ?</h2><p class="muted">${esc(k.client || "Client")} · ${esc(k.presta || "Presta")} · ${esc(jourTxt(k.debut))}, ${heure(k.debut)}</p>
+    <form class="stack" id="ch-form"><p class="muted small" style="margin:0">Ce passage revient chaque semaine ?</p>${chPortee()}
+      ${sien ? "" : `<label class="f">Pourquoi (facultatif, lu par ${esc(k.presta || "ton presta")})<textarea id="ch-msg" maxlength="500" rows="2"></textarea></label>`}
+      <p class="muted small" style="margin:0">Pense à prévenir le client.</p>
+      <button class="btn stop big" type="submit">${sien ? "Annuler le passage" : "Proposer l'annulation"}</button><button class="btn flat" type="button" data-fermer>Garder le passage</button></form>`, (el, fermer) => {
+    const portee = chBrancherPortee(el);
+    el.querySelector("#ch-form").onsubmit = e => { e.preventDefault();
+      chEnvoyer({ sorte: "annuler", creneau: k.id, portee: portee(), message: sien ? null : el.querySelector("#ch-msg").value.trim() }, k.presta, fermer, e.submitter); };
+  });
+}
+/* Passage annulé : les presta de l'équipe qui ont déjà ce client peuvent le remplacer */
+function chRemplacer(k) {
+  const qui = ((chClient(k.client_id).presta) || []).filter(p => p.id && p.id !== k.intervenante_id && ch.membres.some(m => m.id === p.id));
+  feuille(`<h2 style="margin:0">Qui peut remplacer ?</h2><p class="muted">${esc(k.client || "Client")} · ${esc(jourTxt(k.debut))}, ${heure(k.debut)} – ${heure(k.fin)}</p>
+    ${qui.length ? `<div class="stack">${qui.map(p => `<button class="btn" data-rempl="${p.id}" style="--c:${chCouleur(p.id)}"><span class="ch-pastille"></span>${esc(p.prenom || "Presta")}${p.id === moi.id ? " (moi)" : ""}</button>`).join("")}</div>`
+      : `<p class="muted">Personne d'autre de ton équipe n'a ce client. C'est OIKOS qui confie les clients : demande-le par Messages.</p>`}
+    <button class="btn flat" data-fermer>Fermer</button>`, (el, fermer) => {
+    el.onclick = e => { const b = e.target.closest("[data-rempl]"); if (b) { fermer(); chProposerAjout(b.dataset.rempl, new Date(k.debut), k.client_id, new Date(k.fin)); } };
+  });
+}
+function chProposerAjout(prestaId, debut, clientId, fin) {
+  const pr = chPresta(prestaId), sien = prestaId === moi.id;
+  if (debut < debutJour()) return toast("Ce jour est passé.");
+  const possibles = ch.clients.filter(c => (c.presta || []).some(p => p.id === prestaId)).sort((a, b) => (b.id === clientId) - (a.id === clientId));
+  if (!possibles.length) return feuille(`<h2 style="margin:0">Pas de client pour ${esc(pr.prenom || "ce presta")}</h2><p class="muted">Aucun client de ton équipe ne lui est encore confié. C'est OIKOS qui confie les clients : demande-le à OIKOS par Messages.</p><button class="btn flat" data-fermer>Fermer</button>`);
+  feuille(`<h2 style="margin:0">${sien ? "Ajouter un passage" : "Proposer un passage à " + esc(pr.prenom || "ton presta")}</h2>
+    <form class="stack" id="ch-form"><label class="f">Client<select id="ch-client">${possibles.map(c => `<option value="${c.id}">${esc(c.nom)}</option>`).join("")}</select></label>
+      ${chChampsQuand(debut, fin || new Date(debut.getTime() + 2 * 36e5))}
+      <label class="f">Répéter<select id="ch-sem"><option value="1">Une seule fois</option>${[4, 8, 12, 26].map(n => `<option value="${n}">Chaque semaine, pendant ${n} semaines</option>`).join("")}</select></label>
+      ${sien ? "" : `<label class="f">Un mot pour ${esc(pr.prenom || "ton presta")} (facultatif)<textarea id="ch-msg" maxlength="500" rows="2"></textarea></label>`}
+      <button class="btn primary big" type="submit">${sien ? "Ajouter" : "Proposer"}</button><button class="btn flat" type="button" data-fermer>Annuler</button></form>`, (el, fermer) => {
+    el.querySelector("#ch-form").onsubmit = e => { e.preventDefault(); const q = chLireQuand(el); if (!q) return toast("Indique le jour, l'heure et la durée");
+      chEnvoyer({ sorte: "ajouter", intervenante: prestaId, client: el.querySelector("#ch-client").value, debut: q.debut, fin: q.fin, semaines: Number(el.querySelector("#ch-sem").value),
+        message: sien ? null : el.querySelector("#ch-msg").value.trim() }, pr.prenom, fermer, e.submitter); };
+  });
+}
+
+/* ---------- Clients de l'équipe, et la fiche de chacun (rien de juridique) ---------- */
+async function vueChefClients() {
+  await chefCharger();
+  if (chFiche) return chefFicheClient(chFiche);
+  const demandes = new Set(ch.demandes.map(d => d.client_id));
+  const carte = c => `<button class="card ch-carte" data-ch-ouvrir="${c.id}" data-q="${esc(sansAcc(c.nom + " " + (c.adresse || "") + " " + (c.presta || []).map(p => p.prenom).join(" ")))}">
+      <span class="client-nom">${esc(c.nom)} ›</span><span class="muted">${esc(c.adresse || "")}</span>
+      <span class="row">${(c.presta || []).map(p => `<span class="tag" style="--c:${chCouleur(p.id)}"><span class="ch-pastille"></span>${esc(p.prenom || "?")}</span>`).join("")}
+        ${c.temps_semaine_min ? `<span class="tag">${heuresTxt(c.temps_semaine_min)} / sem.</span>` : ""}
+        <span class="tag ${c.apporte ? "go" : "gris"}">${c.apporte ? "Apporté par moi" : "Confié par OIKOS"}</span>
+        ${demandes.has(c.id) ? `<span class="tag warn">Demande</span>` : ""}</span></button>`;
+  contenu(`<h1>Clients de l'équipe</h1><p class="muted" style="margin-bottom:10px">${ch.clients.length} client${ch.clients.length > 1 ? "s" : ""}. Touche un client pour sa fiche.</p>
+    ${ch.clients.length > 5 ? `<input type="search" class="pk-champ" id="ch-q" placeholder="Chercher un client, une adresse, un presta…" autocomplete="off" style="margin-bottom:10px">` : ""}
+    <div class="stack" id="ch-liste">${ch.clients.length ? ch.clients.map(carte).join("") : `<p class="muted">Aucun client dans ton équipe pour l'instant.</p>`}</div>`);
+  const el = document.getElementById("contenu");
+  el.onclick = e => { const b = e.target.closest("[data-ch-ouvrir]"); if (b) { chFiche = b.dataset.chOuvrir; chFicheOnglet = "infos"; accueil("ch-clients"); } };
+  const q = document.getElementById("ch-q");
+  if (q) q.oninput = () => { const v = sansAcc(q.value).trim(); el.querySelectorAll("[data-q]").forEach(c => { c.hidden = !!v && !c.dataset.q.includes(v); }); };
+}
+async function chefFicheClient(id) {
+  const f = await chRpc("chef_fiche_client", { p_client: id }), c = f.client;
+  const ONG = [["infos", "Infos"], ["route", "Feuille de route"], ["dossier", "Dossier"], ["passages", "Passages"]];
+  const freq = j => (FREQS.find(([v]) => Number(v) === j) || [0, j ? "Tous les " + j + " jours" : "Une seule fois"])[1];
+  const ETATS_D = { nouvelle: "Nouvelle", vue: "Vue par OIKOS", en_cours: "En cours", traitee: "Traitée", refusee: "Refusée" };
+  const corps = {
+    infos: () => `<dl class="info card"><dt>Accès (digicode, étage…)</dt><dd>${esc(c.acces || "—")}</dd><dt>Clé</dt><dd>${esc(c.cle || "—")}</dd>
+        <dt>Consignes</dt><dd style="white-space:pre-wrap">${esc(c.consignes || "—")}</dd></dl>
+      ${f.consignes.length ? `<section class="card"><h2 style="margin:0">Demandé pour les prochains passages</h2>${f.consignes.map(k => `<div class="ligne"><span>${esc(k.libelle)}</span><span class="tag">${k.jour ? esc(jourTxt(k.jour)) : "Prochain passage"}</span></div>`).join("")}</section>` : ""}
+      ${f.demandes.length ? `<section class="card"><h2 style="margin:0">Demandes du client</h2>${f.demandes.map(d => `<div class="ligne"><span><span class="muted small">${esc(jourTxt(d.cree_le))} · ${esc(d.activite)}</span><br>${esc(d.texte)}${d.reponse ? `<br><span class="muted small">Réponse d'OIKOS : ${esc(d.reponse)}</span>` : ""}</span><span class="tag ${d.etat === "traitee" ? "go" : d.etat === "refusee" ? "gris" : "warn"}">${ETATS_D[d.etat] || esc(d.etat)}</span></div>`).join("")}
+        <p class="muted small">Le prix et le devis restent à OIKOS.</p></section>` : ""}
+      ${f.infos_oikos.length ? `<section class="card"><h2 style="margin:0">Infos d'OIKOS</h2>${f.infos_oikos.map(x => `<div class="ligne"><span><span class="muted small">${esc(jourTxt(x.cree_le))}</span><br><span style="white-space:pre-wrap">${esc(x.texte)}</span></span></div>`).join("")}</section>` : ""}`,
+    route: () => f.route.length ? `<section class="card">${f.route.map(t => `<div class="ligne"><span><b>${esc(t.titre)}</b>${t.detail ? `<br><span class="muted small">${esc(t.detail)}</span>` : ""}<br><span class="muted small">${esc(freq(t.frequence_jours))}${t.derniere_fois ? " · fait le " + esc(new Date(t.derniere_fois).toLocaleDateString("fr-FR")) : " · pas encore fait"}</span></span><span class="tag${t.priorite >= 4 ? " warn" : ""}">Priorité ${t.priorite}</span></div>`).join("")}</section>`
+      : `<p class="muted">Pas encore de feuille de route pour ce client.</p>`,
+    dossier: () => `<h2 style="margin:6px 0 8px">Photos</h2><div class="card"><div class="photos" id="ch-photos">${f.photos.length ? `<p class="muted small">Chargement…</p>` : `<p class="muted small">Aucune photo pour l'instant.</p>`}</div></div>
+      <h2 style="margin:6px 0 8px">Documents</h2><div class="card">${f.documents.length ? f.documents.map(x => `<div class="ligne"><span>${esc(x.titre)}<br><span class="muted small">${x.date_doc ? esc(new Date(x.date_doc + "T12:00").toLocaleDateString("fr-FR")) : ""}</span></span>
+        ${x.chemin ? `<button class="btn ch-mini" data-ch-doc="${esc(x.chemin)}" aria-label="Ouvrir">${ico("doc")}</button>` : `<a class="btn ch-mini" href="${esc(x.lien)}" target="_blank" rel="noopener" aria-label="Ouvrir">${ico("doc")}</a>`}</div>`).join("") : `<p class="muted small">Aucun document.</p>`}</div>`,
+    passages: () => `<section class="card"><h2 style="margin:0">Prochains passages</h2>${f.prochains.length ? f.prochains.map(k => `<div class="ligne"><span>${esc(jourTxt(k.debut))}, ${heure(k.debut)} – ${heure(k.fin)}</span><span class="tag" style="--c:${chCouleur(k.intervenante_id)}"><span class="ch-pastille"></span>${esc(k.presta || "?")}</span></div>`).join("") : `<p class="muted small">Aucun passage prévu.</p>`}</section>
+      <section class="card"><h2 style="margin:0">Derniers passages faits</h2>${f.passages.length ? f.passages.map(k => `<div class="ligne"><span>${esc(jourTxt(k.arrivee))}</span><span class="muted">${heuresTxt((new Date(k.depart) - new Date(k.arrivee)) / 6e4)} · ${esc(k.presta || "?")}</span></div>`).join("") : `<p class="muted small">Aucun passage déclaré.</p>`}</section>`
+  };
+  contenu(`<button class="btn flat ch-retour" data-ch-retour>‹ Clients de l'équipe</button>
+    <h1>${esc(c.nom)}</h1><p class="row" style="margin-bottom:12px"><span class="tag ${c.apporte ? "go" : "gris"}">${c.apporte ? "Apporté par moi" : "Confié par OIKOS"}</span>${c.activite ? `<span class="tag">${esc(c.activite)}</span>` : ""}${c.zone ? `<span class="tag">Zone ${c.zone}</span>` : ""}</p>
+    <div class="stack">
+    ${c.adresse ? `<div class="grid2"><a class="btn" href="${lienItineraire(c.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("itineraire")}</span>Google Maps</a>
+      <a class="btn" href="${lienWaze(c.adresse)}" target="_blank" rel="noopener"><span class="ic">${ico("voiture")}</span>Waze</a></div>` : ""}
+    ${c.telephone ? `<div class="grid3"><a class="btn" href="${lienTel(c.telephone)}"><span class="ic">${ico("tel")}</span>Appeler</a><a class="btn" href="${lienSMS(c.telephone, "")}"><span class="ic">${ico("bulle")}</span>SMS</a>
+      <a class="btn" href="${lienWhatsApp(c.telephone)}" target="_blank" rel="noopener"><span class="ic">${ico("whatsapp")}</span>WhatsApp</a></div>` : ""}
+    <dl class="info card"><dt>Adresse</dt><dd>${esc(c.adresse || "—")}</dd><dt>Téléphone</dt><dd>${c.telephone ? `<a class="lien" href="${lienTel(c.telephone)}">${esc(c.telephone)}</a>` : "—"}</dd>
+      <dt>Heures prévues</dt><dd>${c.temps_semaine_min ? heuresTxt(c.temps_semaine_min) + " par semaine" : "—"}</dd>
+      <dt>Ce mois-ci</dt><dd>${heuresTxt(f.minutes_faites)} faites sur ${heuresTxt(f.minutes_prevues)} prévues</dd>
+      <dt>Presta</dt><dd>${f.presta.length ? f.presta.map(p => `${esc(p.prenom || "?")}${p.activite ? " (" + esc(p.activite) + ")" : ""}${p.telephone && p.id !== moi.id ? ` · <a class="lien" href="${lienTel(p.telephone)}">${esc(p.telephone)}</a>` : ""}`).join("<br>") : "—"}</dd></dl>
+    <div class="chips" id="ch-ong">${ONG.map(([k, t]) => `<button class="chip" data-ch-ong="${k}" aria-pressed="${chFicheOnglet === k}">${t}</button>`).join("")}</div>
+    <div class="stack" id="ch-corps">${corps[chFicheOnglet]()}</div>
+    <p class="muted small">Le volet juridique, les prix et les factures restent à OIKOS.</p></div>`);
+  const el = document.getElementById("contenu");
+  const photos = async () => {
+    const z = document.getElementById("ch-photos"); if (!z || !f.photos.length) return;
+    const s = await sb.storage.from("dossiers").createSignedUrls(f.photos.map(p => p.apercu), 3600), urls = {};
+    if (!s.error) s.data.forEach(x => { if (x.signedUrl) urls[x.path] = x.signedUrl; });
+    z.innerHTML = f.photos.map(p => `<figure class="photo"><button class="vignette" data-src="${esc(urls[p.apercu] || "")}" aria-label="Agrandir"><img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || CATS[p.categorie] || "Photo")}" loading="lazy"></button>
+      <figcaption><b>${CATS[p.categorie] || "Photo"}</b>${p.legende ? " · " + esc(p.legende) : ""}<br><span class="muted">${esc(jourTxt(p.prise_le))}</span></figcaption></figure>`).join("");
+  };
+  if (chFicheOnglet === "dossier") photos();
+  el.onclick = async e => {
+    const b = s => e.target.closest(s); let t;
+    if (b("[data-ch-retour]")) { chFiche = null; return accueil("ch-clients"); }
+    if ((t = b("[data-ch-ong]"))) { chFicheOnglet = t.dataset.chOng; el.querySelectorAll("[data-ch-ong]").forEach(x => x.setAttribute("aria-pressed", x === t)); document.getElementById("ch-corps").innerHTML = corps[chFicheOnglet](); if (chFicheOnglet === "dossier") photos(); return; }
+    if ((t = b("[data-src]")) && t.dataset.src) return feuille(`<img src="${esc(t.dataset.src)}" alt="" style="width:100%;border-radius:12px"><button class="btn flat" data-fermer>Fermer</button>`);
+    if ((t = b("[data-ch-doc]"))) { const { data, error } = await sb.storage.from("espace-client").createSignedUrl(t.dataset.chDoc, 300); if (error || !data) return toast("Document indisponible pour l'instant."); window.open(data.signedUrl, "_blank", "noopener"); }
+  };
+}
+
+/* ---------- Argent : sa part du mois et qui a payé ---------- */
+function chEtatClient(c) {
+  const fx = c.factures || [];
+  if (!fx.length) return ["Pas encore facturé", "gris"];
+  const r = fx.filter(x => x.etat === "retard");
+  if (r.length) return ["Retard " + Math.max(...r.map(x => x.retard || 0)) + " j", "stop"];
+  if (fx.some(x => x.etat === "partiel")) return ["Payé en partie", "warn"];
+  if (fx.some(x => x.etat === "attente")) return ["En attente", "warn"];
+  if (fx.every(x => x.etat === "paye" || x.etat === "annulee") && fx.some(x => x.etat === "paye")) return ["Payé", "go"];
+  return ["Facture annulée", "gris"];
+}
+async function vueChefArgent() {
+  await chefCharger();
+  if (!chMois) { const a = new Date(); chMois = new Date(a.getFullYear(), a.getMonth() - (a.getDate() <= 10 ? 1 : 0), 1); }
+  const r = await chRpc("chef_argent", { p_mois: ymdTxt(chMois) });
+  const rattachee = (r.modes || []).includes("rattachee"), avecHeures = r.clients.filter(c => +c.heures > 0);
+  const total = avecHeures.reduce((s, c) => s + (+c.part || 0), 0);
+  const paye = avecHeures.filter(c => chEtatClient(c)[0] === "Payé").reduce((s, c) => s + (+c.part || 0), 0);
+  const manque = avecHeures.some(c => c.taux_manquant);
+  const titre = chMois.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const lignes = r.clients.filter(c => +c.heures > 0 || (c.factures || []).length);
+  contenu(`<div class="ag-head"><button class="ag-nav" data-chmois="-1" aria-label="Mois précédent">‹</button><div class="ag-title">${esc(titre)}</div><button class="ag-nav" data-chmois="1" aria-label="Mois suivant">›</button></div>
+    <div class="stack">
+    ${rattachee ? `<section class="card"><h2 style="margin:0">Ma part du mois</h2><span class="ch-big">${chEuros(total)}</span>
+      <div class="ligne"><span>Déjà payée par les clients</span><b>${chEuros(paye)}</b></div><div class="ligne"><span>Clients pas encore payés</span><b>${chEuros(total - paye)}</b></div>
+      ${manque ? `<p class="muted small">Pour certains clients, OIKOS n'a pas encore fixé le taux de ta part : ils ne comptent pas encore.</p>` : ""}</section>`
+      : `<section class="card"><h2 style="margin:0">Ton équipe est en société</h2><p class="muted small">Le reversement à ta société s'affichera ici plus tard. En attendant, voici les heures et les paiements.</p></section>`}
+    <section class="card"><h2 style="margin:0">Qui a payé ?</h2>
+      ${lignes.length ? `<div class="ch-pay"><span class="muted small">Client</span><span class="muted small">Heures</span><span class="muted small">État</span>
+        ${lignes.map(c => { const [t, k] = chEtatClient(c); return `<button class="ch-lien" data-ch-fiche="${c.client_id}">${esc(c.nom || "Client")}${c.apporte ? ` <span class="muted small">· apporté</span>` : ""}</button><span class="num">${heuresTxt((+c.heures || 0) * 60)}</span><span class="tag ${k}">${t}</span>`; }).join("")}</div>`
+      : `<p class="muted small">Pas d'heures ni de facture ce mois-ci.</p>`}
+      <p class="muted small">Les factures d'un mois partent en général au début du mois suivant. L'état vient de VosFactures et se met à jour chaque heure.</p></section>
+    <section class="card"><h2 style="margin:0">Par presta</h2>${r.presta.length ? r.presta.map(p => `<div class="ligne"><span style="color:${chCouleur(p.id)};font-weight:600">${esc(p.prenom || "?")}</span><span class="num">${heuresTxt(p.heures * 60)}</span></div>`).join("") : `<p class="muted small">Aucune heure ce mois-ci.</p>`}</section>
+    </div>`);
+  document.getElementById("contenu").onclick = e => {
+    const b = s => e.target.closest(s); let t;
+    if ((t = b("[data-chmois]"))) { chMois = new Date(chMois.getFullYear(), chMois.getMonth() + Number(t.dataset.chmois), 1); return accueil("ch-argent"); }
+    if ((t = b("[data-ch-fiche]"))) { chFiche = t.dataset.chFiche; chFicheOnglet = "infos"; return accueil("ch-clients"); }
+  };
+}
+
+/* ---------- Côté presta : les propositions de son chef (sur Aujourd'hui et Agenda) ---------- */
+function texteProposition(x) {
+  const qui = nomClient(x.client_id), tous = x.portee === "tous";
+  if (x.sorte === "ajouter") return `Ajouter un passage chez ${qui} : ${jourTxt(x.debut)}, ${heure(x.debut)} – ${heure(x.fin)}${x.semaines > 1 ? `, chaque semaine pendant ${x.semaines} semaines` : ""}.`;
+  if (x.sorte === "annuler") return `Annuler ton passage chez ${qui} du ${jourTxt(x.ancien_debut)}, ${heure(x.ancien_debut)}${tous ? ", et les suivants à la même heure" : ""}.`;
+  return `Déplacer ton passage chez ${qui} du ${jourTxt(x.ancien_debut)}, ${heure(x.ancien_debut)} au ${jourTxt(x.debut)}, ${heure(x.debut)} – ${heure(x.fin)}${tous ? ", et les suivants de la même façon" : ""}.`;
+}
+async function propositionsDuChef() {
+  const ici = onglet, { data, error } = await sb.from("propositions_chef").select("*").eq("intervenante_id", moi.id).eq("etat", "attente").order("cree_le");
+  const el = document.getElementById("contenu");
+  if (error || !data || !data.length || !el || onglet !== ici) return;
+  const ancien = document.getElementById("prop-chef"); if (ancien) ancien.remove();
+  el.insertAdjacentHTML("afterbegin", `<section class="prop-chef" id="prop-chef"><b>${ico("agenda")} Ton chef d'équipe te propose</b>
+    ${data.map(x => `<div class="prop-ligne"><span>${esc(texteProposition(x))}</span>${x.message ? `<span class="muted small">« ${esc(x.message)} »</span>` : ""}
+      <div class="grid2"><button class="btn primary" data-prop-ok="${x.id}">Accepter</button><button class="btn" data-prop-non="${x.id}">Refuser</button></div></div>`).join("")}</section>`);
+  const zone = document.getElementById("prop-chef");
+  zone.onclick = async e => {
+    const ok = e.target.closest("[data-prop-ok]"), non = e.target.closest("[data-prop-non]");
+    if (ok) {
+      ok.disabled = true;
+      const r = await sb.rpc("repondre_proposition", { p_id: ok.dataset.propOk, p_accepte: true, p_motif: null });
+      if (r.error) { ok.disabled = false; return souci(r.error); }
+      toast(r.data.ok ? "C'est noté : ton planning est à jour" : r.data.motif === "perimee" ? "Ce passage a changé entre-temps : la proposition ne vaut plus" : "Cette proposition n'existe plus");
+      return accueil(onglet);
+    }
+    if (non) feuille(`<h2 style="margin:0">Refuser la proposition ?</h2><p class="muted">Ton chef d'équipe verra ta réponse.</p>
+      <label class="f">Pourquoi (facultatif)<textarea id="prop-motif" maxlength="500" rows="3"></textarea></label>
+      <button class="btn primary big" id="prop-envoyer">Refuser</button><button class="btn flat" data-fermer>Annuler</button>`, (f, fermer) => {
+      f.querySelector("#prop-envoyer").onclick = async ev => {
+        ev.target.disabled = true;
+        const r = await sb.rpc("repondre_proposition", { p_id: non.dataset.propNon, p_accepte: false, p_motif: f.querySelector("#prop-motif").value.trim() || null });
+        if (r.error) { ev.target.disabled = false; return souci(r.error); }
+        fermer(); toast("Réponse envoyée"); accueil(onglet);
       };
     });
   };
