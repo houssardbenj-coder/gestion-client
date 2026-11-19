@@ -1097,11 +1097,11 @@ const lienUrssaf = libelle => /vigilance/i.test(libelle || "") ? `<a class="btn 
 const vigGele = p => !!(p.actif && vigDe(p) && vigDe(p).gele);
 const vigTag = p => { const v = p.actif && vigDe(p); if (!v) return "";
   const passe = new Date() >= new Date(v.gel_le);
-  if (v.gele) return ` <span class="tag warn" title="${v.attente_le ? "Il a envoyé une attestation de vigilance que tu n'as pas validée en 7 jours : gelé jusqu'à ta validation" : "Attestation de vigilance de plus de 6 mois : gelé tout seul jusqu'à ce que tu valides la nouvelle"}">${ico("cadenas")} gelé : vigilance${v.attente_le ? " à valider" : ""}</span>`;
+  if (v.gele) return ` <span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, null)}" title="${v.attente_le ? "Il a envoyé une attestation de vigilance que tu n'as pas validée en 7 jours : gelé jusqu'à ta validation" : "Attestation de vigilance de plus de 6 mois : gelé tout seul jusqu'à ce que tu valides la nouvelle"}">${ico("cadenas")} gelé : vigilance${v.attente_le ? " à valider" : ""}</span>`;
   const libre = passe && v.libre_jusqu_au && new Date(v.libre_jusqu_au + "T23:59:59") >= new Date();
-  if (libre) return ` <span class="tag warn" title="Tu l'as dégelé : après cette date, gel tout seul s'il n'a pas de nouvelle attestation validée">vigilance : libre jusqu'au ${jour(v.libre_jusqu_au)}${v.attente_le ? ", attestation à valider" : ""}</span>`;
-  if (v.attente_le && new Date() >= new Date(v.demande_le)) return ` <span class="tag warn" title="Nouvelle attestation de vigilance reçue : Papiers › Voir, puis Valider ou Refuser">vigilance à valider${passe ? " avant le " + jour(v.attente_fin) : ""}</span>`;
-  if (new Date() >= new Date(v.demande_le)) return ` <span class="tag warn" title="Son appli lui demande la nouvelle attestation de vigilance">vigilance à renvoyer avant le ${jour(v.gel_le)}</span>`;
+  if (libre) return ` <span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, null)}" title="Tu l'as dégelé : après cette date, gel tout seul s'il n'a pas de nouvelle attestation validée">vigilance : libre jusqu'au ${jour(v.libre_jusqu_au)}${v.attente_le ? ", attestation à valider" : ""}</span>`;
+  if (v.attente_le && new Date() >= new Date(v.demande_le)) return ` <span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, null)}" title="Nouvelle attestation de vigilance reçue : Papiers › Voir, puis Valider ou Refuser">vigilance à valider${passe ? " avant le " + jour(v.attente_fin) : ""}</span>`;
+  if (new Date() >= new Date(v.demande_le)) return ` <span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, null)}" title="Son appli lui demande la nouvelle attestation de vigilance">vigilance à renvoyer avant le ${jour(v.gel_le)}</span>`;
   return ""; };
 async function chargerBase() {
   [cacheEquipes, cacheSocietes, cacheMembres] = await Promise.all([
@@ -1181,6 +1181,25 @@ document.addEventListener("click", e => {
   e.preventDefault(); e.stopPropagation();
   if (b.dataset.pers) ficheIntervenante(b.dataset.pers); else ficheClient(b.dataset.ficheClient);
 }, true);
+/* 19/11/2026 : tout message orange qui signale un manque mène à l'endroit où on le règle.
+   À mettre juste après la classe : `<span class="tag warn${vaVers({ presta, pli })}">` (ou { client, ong } ou { page }). */
+const vaVers = (o, titre = "Clique pour aller régler ça") => ` em-va" role="button" tabindex="0"${o.presta ? ` data-va-presta="${esc(o.presta)}"` : ""}${o.pli ? ` data-va-pli="${esc(o.pli)}"` : ""}${o.client ? ` data-va-client="${esc(o.client)}"` : ""}${o.ong ? ` data-va-ong="${esc(o.ong)}"` : ""}${o.page ? ` data-va-page="${esc(o.page)}"` : ""}${titre === null ? " data-va=\"1" : ` title="${esc(titre)}`}`;
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-va-presta],[data-va-client],[data-va-page]"); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const d = b.dataset, fen = b.closest(".fenetre");
+  if (d.vaPresta) {
+    // déjà dans sa fiche : on ouvre le pli sur place ; sinon on ouvre sa fiche avec le pli ouvert
+    const ici = d.vaPli && fen && fen.querySelector(`details[data-pli="${d.vaPli}"]`);
+    if (ici && fen.dataset.presta === d.vaPresta) { ici.open = true; pliOuvert[d.vaPli] = true; return ici.scrollIntoView({ block: "start", behavior: "smooth" }); }
+    if (d.vaPli) pliOuvert[d.vaPli] = true;
+    return ficheIntervenante(d.vaPresta);
+  }
+  if (d.vaClient) return ficheClient(d.vaClient, d.vaOng || "ensemble");
+  document.querySelectorAll(".voile").forEach(v => v.remove());
+  return afficher(d.vaPage);
+}, true);
+document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest(".em-va[role=button]")) { e.preventDefault(); e.target.click(); } });
 document.addEventListener("keydown", e => { if (e.key !== "Enter" && e.key !== " ") return; const b = e.target.closest && e.target.closest("span[data-pers],span[data-fiche-client]"); if (b) { e.preventDefault(); e.stopPropagation(); b.click(); } }, true);
 /* Écrire au presta sans quitter la page : les derniers messages, puis la zone d'envoi */
 async function ecrirePresta(id) {
@@ -1324,7 +1343,7 @@ function htmlLienPc() {
   const depuis = pcFile.vu ? Math.round((Date.now() - new Date(pcFile.vu)) / 6e4) : null;
   const vivant = depuis != null && depuis <= 3;
   return `<div class="rail-etat small" style="flex-wrap:wrap;gap:6px"><span class="point ${vivant ? "actif" : ""}"></span>Lien avec le PC : ${depuis == null ? "jamais vu" : vivant ? "en ligne" : "vu il y a " + (depuis < 120 ? depuis + " min" : Math.round(depuis / 60) + " h")}
-    ${pcFile.attente ? `<span class="tag">${pcFile.attente} en attente</span>` : ""}${pcFile.erreur ? `<span class="tag warn">${pcFile.erreur} pas faite${pcFile.erreur > 1 ? "s" : ""}</span>` : ""}
+    ${pcFile.attente ? `<span class="tag">${pcFile.attente} en attente</span>` : ""}${pcFile.erreur ? `<span class="tag warn em-va" role="button" tabindex="0" data-file-pc title="Clique pour voir ce qui n’a pas été fait et pourquoi">${pcFile.erreur} pas faite${pcFile.erreur > 1 ? "s" : ""}</span>` : ""}
     <button class="btn flat" data-file-pc type="button">Voir</button></div>`;
 }
 async function voirFilePc() {
@@ -4140,7 +4159,7 @@ async function emModifierHeure(x, apres, choix, info) {
       <p class="muted small" id="hr-autre-jour" style="margin:0 0 8px"${emMinuit(q1) !== emMinuit(x.t) ? "" : " hidden"}>Autre jour que prévu.${emVersionMsg(emAgCour, 35)}</p>
       ${occ ? `<p class="muted small" style="margin:4px 0">Ce RDV revient chaque semaine :</p><div class="seg" style="margin-bottom:8px"><button type="button" class="chip" data-hr-portee="un" aria-pressed="true">Seulement ce jour-là</button><button type="button" class="chip" data-hr-portee="tous" aria-pressed="false">Toutes les semaines</button></div>` : ""}
       ${serieNv ? `<p class="muted small">Ce RDV n'est pas encore arrivé sur le téléphone : l'heure change pour toutes les semaines. Pour un seul jour, attends qu'il soit dans Pense intelligent.</p>` : ""}
-      ${envoi ? `<p class="tag warn" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} Déjà mis dans reporting le ${esc(new Date(envoi.le).toLocaleDateString("fr-FR"))} : la ligne envoyée ne change pas. Corrige la durée dans Chiffres › Déclarer mes heures (ou dans SAISIE COURS si elle est déjà enregistrée).</p>` : ""}
+      ${envoi ? `<p class="tag warn${vaVers({ page: "heures" }, "Clique pour ouvrir Déclarer mes heures")}" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} Déjà mis dans reporting le ${esc(new Date(envoi.le).toLocaleDateString("fr-FR"))} : la ligne envoyée ne change pas. Corrige la durée dans Chiffres › Déclarer mes heures (ou dans SAISIE COURS si elle est déjà enregistrée).</p>` : ""}
       <p class="muted small">Le pilote affiche la nouvelle heure tout de suite ; Pense intelligent fait le même changement à sa prochaine ouverture.</p>
       <div class="row"><button class="btn primary" type="submit">Enregistrer${info ? " l'heure" : ""}</button><button class="btn flat" type="button" data-fermer>${info && !choix ? "Fermer" : "Annuler"}</button>${x.client && !info ? `<button class="btn flat" type="button" data-hr-fiche>${ico("personne")} Ouvrir la fiche</button>` : ""}</div></form>`, (f, fermer) => {
     if (info && info.brancher) info.brancher(f, fermer);
@@ -4567,7 +4586,6 @@ async function vueEmploi() {
     ${enSemaine ? semaine() : grille([jourD])}`);
   emGlisser(el, ag, PX, () => { if (onglet === "emploi") afficher("emploi"); }, envois);
   if (emCible) { const t = emCible; emCible = null; emMontrer(el, ag, t); }
-  el.onkeydown = e => { if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-em-va],[data-em-vieux]")) { e.preventDefault(); e.target.click(); } };
   el.onclick = e => {
     if (Date.now() - emGlisseLe < 400) return;   // fin d'un glisser, pas un clic
     const cli = e.target.closest("[data-em-cli]"); if (cli) return ficheClient(cli.dataset.emCli);   // le nom du client : sa fiche
@@ -4879,7 +4897,7 @@ async function vueReporting() {
     </div>
     <section class="card" style="margin-top:12px"><h3 style="margin-top:0">Chaque passage</h3>${pt.length ? pt.map(p => `<div class="ligne"><span><b>${esc(nomClient(p.client_id))}</b><br><span class="muted small">${jour(p.arrivee)}${p.creneau_connu !== false ? " · " + hm(p.arrivee) + " → " + (p.depart ? hm(p.depart) : "?") : ""}</span>${p.note ? `<br><span class="small">${esc(p.note)}</span>` : ""}
         <span class="row" style="gap:4px;margin-top:3px"><select data-rp-act="${p.id}" aria-label="Service" title="Service écrit dans son rapport (Type de service)" style="width:auto;padding:2px 6px;font-size:13px">${ACTIVITES_PASSAGE.map(a => `<option ${a === (p.activite || "Ménage") ? "selected" : ""}>${a}</option>`).join("")}</select>${p.corrige_par_gerant ? `<span class="tag">corrigé par OIKOS</span>` : ""}${p.exporte_le ? `<span class="tag">✓ dans son rapport</span>` : `<span class="tag warn">envoi en cours</span>`}${p.verrouille ? `<span class="tag">facturé</span>` : ""}</span></span>
-        <b style="flex:none">${p.depart ? heures(minutes(p)) : `<span class="tag warn">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</section>`);
+        <b style="flex:none">${p.depart ? heures(minutes(p)) : `<span class="tag warn${vaVers({ presta: p.intervenante_id || rpQui }, "Clique pour ouvrir sa fiche : l’heure de fin se met dans Ses passages")}">à compléter</span>`}</b></div>`).join("") : `<p class="muted">Aucun passage.</p>`}</section>`);
   dessinerConfirmations(gens);
   el.querySelector("#rp-qui").onchange = e => { rpQui = e.target.value; afficher("reporting"); };
   el.querySelector("#rp-fiche").onclick = () => { bnMois[rpQui] = rpMois; pliOuvert.benefice = true; ficheIntervenante(rpQui); };   // bénéfice du mois affiché ici
@@ -5403,7 +5421,7 @@ function cartePresta(p, pieces, docs) {
   return `<div class="pp-carte"><button class="card cliquable" style="text-align:left;width:100%;padding-right:48px" data-p="${p.id}">
       <b>${esc(nomPers(p))}</b>${pastilleCompte(p)}${estCheffe ? ` <span class="tag">${ico("drapeau")} ${chefMot((cacheEquipes || []).find(x => x.cheffe === p.id && x.active))}</span>` : ""}<br><span class="muted small">${esc(p.email || "")}</span><br>
       <span class="row" style="margin-top:6px">${p.actif ? `<span class="tag">${STATUTS[p.statut] || "statut à régler"}</span>` : `<span class="tag off">accès coupé</span>`}
-      ${p.actif && p.gele ? `<span class="tag warn">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}
+      ${p.actif && p.gele ? `<span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, "Clique pour ouvrir ses papiers")}">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}
       ${p.actif && p.mdp_provisoire ? `<span class="tag warn">compte pas encore activé</span>` : ""}
       <span class="tag ${papiers.manque ? "warn" : ""}">papiers ${papiers.ok}/${papiers.total}</span>
       ${nbMises ? `<span class="tag">${ico("mission")} mis à disposition${nbMises > 1 ? " (" + nbMises + ")" : ""}</span>` : ""}</span></button>
@@ -5753,7 +5771,7 @@ async function ficheIntervenante(id) {
   const etatPap = papiersDe(p, pieces, docs);
   const aValider = docs.filter(d => d.piece_id && d.etat === "recu").length;
   const champ =(k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
-  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}</h1>
+  fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, "Clique pour ouvrir ses papiers")}">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}</h1>
       <span class="row"><button class="btn primary" id="ecrire" title="Lui envoyer un message dans son appli">${ico("bulle")} Lui écrire</button>${p.actif ? `<button class="btn ${p.gele || vigGele(p) ? "go" : ""}" id="gel" title="Gelé : il consulte son appli, mais ne peut que modifier ses informations et envoyer ses papiers">${p.gele || vigGele(p) ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}<button class="btn flat" data-fermer>Fermer</button></span></div>
     <div class="deux">
       <section class="card"><h3 style="margin-top:0">Réglages</h3>
@@ -5800,6 +5818,7 @@ async function ficheIntervenante(id) {
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><span class="row">${zoneSelectHtml(a)}<button class="btn stop" data-retire="${a.id}">Retirer</button></span></div>`).join("") || `<p class="muted small">Aucun.</p>`}
       <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></details>
     <details class="card pli" data-pli="tarifs" ${pliOuvert.tarifs ? "open" : ""}><summary>${ico("euro")} Tarifs à l'heure <span class="tag">toi seul</span></summary><div id="tfp"></div></details>`, (el, fermer) => {
+    el.dataset.presta = id;   // pour les messages orange qui ouvrent un pli de cette fiche
     const recharger = () => { fermer(); ficheIntervenante(id); };
     el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
     el.style.maxWidth = "1120px";   // place pour le tableau des passages
@@ -7899,7 +7918,7 @@ async function changerIntervenante(c, a, apres) {
       <p class="muted small" id="ci-effet" style="margin:0"></p>
       <div class="deux"><label class="f">À partir du<input type="date" name="date" value="${aujourdhui}" max="${aujourdhui}" ${a.debut && a.debut <= aujourdhui ? `min="${esc(a.debut)}"` : ""} required></label>
         <label class="f">Pourquoi (facultatif)<input type="text" name="pourquoi" maxlength="300"></label></div>
-      ${reste ? `<p class="small" style="margin:0"><span class="tag warn">${ico("alerte")} ${esc(ancien)} a encore ${esc(reste)} ici</span> <span class="muted">Ça ne bouge pas tout seul : à reprendre dans le planning et les tâches.</span></p>` : ""}
+      ${reste ? `<p class="small" style="margin:0"><span class="tag warn${vaVers({ page: "planning" }, "Clique pour ouvrir le Planning")}">${ico("alerte")} ${esc(ancien)} a encore ${esc(reste)} ici</span> <span class="muted">Ça ne bouge pas tout seul : à reprendre dans le planning et les tâches.</span></p>` : ""}
       <p class="muted small" style="margin:0">Les missions en cours chez ce client ne changent pas.</p>
       <p class="err" id="ci-err"></p>
       <div class="row"><button class="btn primary" type="submit">${ico("mission")} Changer d'intervenante</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>`, (el, fermer) => {
@@ -8080,10 +8099,11 @@ async function rapporteClient(c, zone, lignes) {
     const dates = [...new Set(ls.flatMap(a => [...grillesDe(tarifs, a.intervenante_id).map(g => g.a_partir_du), ...zonesTriees(a).map(z => z.depuis)]).filter(d => d && d > aujourd))].sort();
     const apres = dates[0] ? ls.map(a => a.intervenante_id ? tarifAu(tarifs, a.intervenante_id, act, zoneAu(a, dates[0]), dates[0]) : { taux: null }) : null;
     const moyenne = l => l.every(t => t.taux > 0) && l.length ? l.reduce((s, t) => s + t.taux, 0) / l.length : null;   // plusieurs presta : on partage les heures
-    const calcul = taux => taux == null ? `<span class="tag warn">${ico("alerte")} tarif manquant</span>` : `payé <b>${suEuros(h * SEMAINES_MOIS * taux)}</b>${prix ? ` · reste <b>${suEuros(h * SEMAINES_MOIS * (prix - taux))}</b>` : ""}`;
+    const sansTarifId = (payes.find(x => !(x.t.taux > 0) && x.a.intervenante_id) || {}).a;
+    const calcul = taux => taux == null ? `<span class="tag warn${sansTarifId ? vaVers({ presta: sansTarifId.intervenante_id, pli: "tarifs" }, "Clique pour ouvrir ses tarifs à l’heure") : ""}">${ico("alerte")} tarif manquant</span>` : `payé <b>${suEuros(h * SEMAINES_MOIS * taux)}</b>${prix ? ` · reste <b>${suEuros(h * SEMAINES_MOIS * (prix - taux))}</b>` : ""}`;
     const tNow = moyenne(payes.map(x => x.t)), tApres = apres ? moyenne(apres) : null;
     return `<div class="tf-bloc" data-act="${esc(act)}"><h3>${esc(act)}</h3>
-      ${payes.map(({ a, t }) => `<div class="ligne"><span>${esc(nomPresta(a))}${t.taux ? ` <span class="muted small">· ${esc(t.origine)}</span>` : ""}</span><span>${t.taux ? suEuros(t.taux) + " de l'heure" : `<span class="tag warn">${esc(t.pourquoi)}</span>`}</span></div>`).join("")}
+      ${payes.map(({ a, t }) => `<div class="ligne"><span>${esc(nomPresta(a))}${t.taux ? ` <span class="muted small">· ${esc(t.origine)}</span>` : ""}</span><span>${t.taux ? suEuros(t.taux) + " de l'heure" : `<span class="tag warn${a.intervenante_id ? vaVers({ presta: a.intervenante_id, pli: "tarifs" }, "Clique pour ouvrir ses tarifs à l’heure") : ""}">${esc(t.pourquoi)}</span>`}</span></div>`).join("")}
       <div class="deux" style="margin-top:6px"><label class="f">Prix de l'heure facturé au client<input type="text" inputmode="decimal" name="prix" value="${esc(tfVirgule(pv.prix))}" placeholder="—"></label>
         <label class="f">Heures par semaine<input type="text" inputmode="decimal" name="heures" value="${esc(tfVirgule(pv.heures_semaine))}" placeholder="${esc(tfVirgule(hEstime) || "—")}"></label></div>
       <p class="muted small" style="margin:4px 0 0">${+pv.heures_semaine > 0 ? "" : hEstime ? (acts.length === 1 && c.temps_semaine_min ? "Heures : le temps acheté de sa fiche. " : "Heures : la moyenne des 8 dernières semaines. ") : "Écris les heures par semaine pour voir la prévision. "}</p>
