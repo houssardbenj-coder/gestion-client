@@ -6511,7 +6511,9 @@ async function beneficePresta(boite, p, attrib) {
       <tbody>${rs.map(ligneHtml).join("")}<tr class="total"><td>Total ${titre}${manque ? ` <span class="tag warn">${ico("alerte")} incomplet</span>` : ""}</td><td class="n">${heures(s("h") * 60)}</td><td class="n">${suEuros(s("fact"))}</td><td class="n">${suEuros(s("paye"))}</td><td class="n"><b>${suEuros(s("fact") - s("paye"))}</b></td></tr></tbody></table></div>`;
   };
   const corps = bloc("OIKOS", "OIKOS") + bloc("BE", "Benjamin enseignement");
-  boite.innerHTML = nav + (corps || `<p class="muted small" style="margin:0">Aucun passage terminé ce mois-ci.</p>`)
+  const sansExcel = (!xl || !xl.services) && pts.length;
+  boite.innerHTML = nav + (sansExcel ? `<p class="tag warn" style="display:block;white-space:normal;margin:0 0 8px">${ico("alerte")} L'Excel n'est pas lisible d'ici : le PC n'a encore déposé aucune copie dans la base. Ouvre le pilote une fois sur le PC (Ctrl + F5) pour l'enregistrer ; ensuite le prix de l'heure sera pris dans l'Excel, même depuis le téléphone.</p>` : "")
+    + (corps || `<p class="muted small" style="margin:0">Aucun passage terminé ce mois-ci.</p>`)
     + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client${duExcel ? ` ; sinon celui de ses lignes de l'Excel, utilisé ici pour ${duExcel} passage${duExcel > 1 ? "s" : ""}` : ", sinon celui de ses lignes de l'Excel"}) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`
     + (equipeActuelle(p) ? `<p class="small" style="margin:6px 0 0">${eqPoint(equipeActuelle(p))}Dans l'équipe de <b>${esc(equipeActuelle(p).cheffe_nom)}</b> : la part ${duChef(equipeActuelle(p))} et ce qui reste à OIKOS sont dans Équipe › Réseau (en HT).</p>` : "");
 }
