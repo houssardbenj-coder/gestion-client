@@ -173,6 +173,18 @@ button.em-ev{cursor:pointer}button.em-ev:hover{background:var(--accent-soft)}
 .em-gev.em-mod{cursor:grab;user-select:none}.em-gev.glisse{cursor:grabbing;z-index:5;opacity:.85;box-shadow:0 4px 14px rgb(0 0 0 / .25);outline:2px solid var(--em,var(--accent))}
 .em-gev.em-mod{padding-bottom:10px}.em-fr-t{font-size:14px;margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--line)}.em-fr-infos{display:flex;flex-direction:column;gap:4px}.em-fr-infos .ico{width:14px;height:14px;vertical-align:-2px}
 .em-poignee{position:absolute;left:0;right:0;bottom:0;height:10px;cursor:ns-resize;touch-action:none;z-index:2}.em-poignee::after{content:"";position:absolute;left:50%;top:4px;width:22px;margin-left:-11px;height:3px;border-radius:2px;background:currentColor;opacity:.35}.em-gev:hover .em-poignee::after{opacity:.7}
+.em-nav{display:inline-flex;align-items:center;gap:8px}
+/* Emploi du temps sur le téléphone (19/11/2026) : vue Jour à l'ouverture, semaine plus serrée qui défile de côté avec la colonne des heures qui reste, pas de glisser au doigt */
+@media (max-width:720px){
+  .em-barre{gap:6px}.em-barre h1{flex:1 1 100%;margin-bottom:0}.em-barre>.row{flex:1 1 100%;gap:6px}
+  .em-nav{flex:1 1 100%;justify-content:space-between}.em-nav b{flex:1;text-align:center;font-size:15px}
+  .em-grille{grid-template-columns:34px repeat(var(--n),minmax(92px,1fr));min-width:calc(34px + var(--n) * 92px)}
+  .em-grille>div:first-child,.em-gh0{position:sticky;left:0;z-index:6;background:var(--surface)}
+  .em-gh0 span{right:4px;font-size:10px}.em-gh{font-size:12px;padding:2px 1px 4px}.em-gh .btn{padding:4px 2px}
+  .em-gev{font-size:11px;padding:2px 24px 2px 4px}
+  .em-carte{padding-left:0!important}
+  .em-poignee{display:none}.em-gev.em-mod{cursor:pointer}.em-gev.em-mod:not(.a-env):not(.a-env2){padding-bottom:2px}
+}
 .em-tg{position:absolute;top:2px;right:2px;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .em-tg .ico{width:13px;height:13px}.em-tg[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .em-maint{position:absolute;left:0;right:0;height:2px;background:var(--stop);z-index:2;pointer-events:none}
@@ -3514,7 +3526,7 @@ async function plBasculer(x, enlever) {
 const EM_SECTIONS = [["OIKOS", "OIKOS"], ["BE", "Benjamin enseignement"], ["PROSPECT", "Prospect"], ["CLIENT", "Client"], ["HP", "Hors prestation"], ["AUTRE", "Personnel"], ["TACHE", "Tâche"]];
 const EM_NOM = Object.fromEntries(EM_SECTIONS);
 const EM_SORTES = { rdv: "RDV", call: "À rappeler", occ: "Séance", cal: "Agenda", task: "Tâche", todo: "Routine", rec: "Chaque semaine" };
-let emSemaine = lundi(new Date()), emVue = "semaine", emJour = ymd(new Date());
+let emSemaine = lundi(new Date()), emVue = matchMedia("(max-width:720px)").matches ? "jour" : "semaine", emJour = ymd(new Date());
 const emClientDe = x => (x.cle && cacheClients.find(c => c.source_pense === x.cle)) || (x.nom && cacheClients.find(c => motsNom(c.nom) === motsNom(x.nom))) || (x.cle && emParEleve(x)) || null;
 /* Fiche du téléphone pas reliée à l'Excel (faite à la main, au nom de l'élève) : on cherche le client dont un élève porte ce prénom.
    Plusieurs possibles : celui dont le nom de famille est aussi là, sinon celui en cours ; toujours pas départagé = pas de client. */
@@ -3993,6 +4005,7 @@ function emPourquoiFixe(x, info) {
 function emGlisser(el, ag, PX, apres, envois) {
   el.onpointerdown = e => {   // #contenu sert à toutes les pages : une seule écoute, remplacée à chaque affichage
     if (e.button !== 0 || e.target.closest("button")) return;
+    if (e.pointerType === "touch") return;   // au doigt : on fait défiler, le toucher ouvre la fenêtre du RDV (Changer l'heure)
     const tu = e.target.closest(".em-gev.em-mod[data-em-ouvrir]"); if (!tu) return;
     const x = ag.elements[Number(tu.dataset.emOuvrir)]; if (!x || !emHeureModifiable(x)) return;
     e.preventDefault();
@@ -4186,15 +4199,15 @@ async function vueEmploi() {
         return `<div class="em-gev ${emClasse(x)}${x.rec || x.nv || x.hmod ? " att" : ""}${x.perdu ? " perdu" : ""}${aa ? " ann" : ""}${o.env ? (o.nb > 1 ? " a-env2" : " a-env") : ""}${mod && !aa ? " em-mod" : ""}" style="${pos}" data-em-ouvrir="${o.i}" title="${bulle}${mod ? " · clic : changer l'heure, maintenir et glisser : déplacer, tirer le bas : changer la fin" : ""}"><b>${emHeure(x)}</b> ${aa ? `${ico("croix")} Presta annulée<br>${esc(sansEmoji(x.titre))}` : `<br>${esc(sansEmoji(x.titre))}`}${aa ? "" : rond(x, o.i)}${o.env}${mod && !aa ? `<span class="em-poignee" title="Tirer vers le haut ou le bas pour changer la durée (fin : ${hm(fv)})"></span>` : ""}</div>`; }).join("");
       const maint = k === aujourdhui && minDe(Date.now()) >= h0 * 60 && minDe(Date.now()) < h1 * 60 ? `<div class="em-maint" style="top:${(minDe(Date.now()) - h0 * 60) / 60 * PX}px"></div>` : "";
       return `<div class="em-gcol" data-em-vide="${k}" style="height:${H}px;--px:${PX}px;background-position:0 0">${tuiles}${maint}</div>`; };
-    return `<div class="card" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
+    return `<div class="card em-carte" style="overflow-x:auto;padding:8px"><div class="em-grille" style="--n:${jl.length}" data-h0="${h0}">
       <div></div>${jl.map(j => `<div class="em-gh${ymd(j) === aujourdhui ? " auj" : ""}"><button class="btn flat small" data-em-jour="${ymd(j)}" title="Voir ce jour">${j.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}</button>${ymd(j) === aujourdhui ? `<span class="em-aujm">aujourd'hui</span>` : ""}</div>`).join("")}
       ${jent.length ? `<div class="em-gh0" style="font-size:11px;color:var(--muted);padding:4px">Journée</div>${jl.map(j => `<div class="em-gad">${jent.filter(([x]) => x.jour === ymd(j)).map(([x, i]) => `<div class="em-gev ${emClasse(x)}" data-em-ouvrir="${i}">${esc(sansEmoji(x.titre))}</div>`).join("")}</div>`).join("")}` : ""}
       <div class="em-gh0" style="height:${H}px">${Array.from({ length: h1 - h0 }, (_, k) => `<span style="top:${k * PX + (k ? 0 : 7)}px">${h0 + k}h</span>`).join("")}</div>
       ${jl.map(colonne).join("")}</div></div>`; };
   const semaine = () => grille(jours);
   const jourAncien = () => `<section class="card" style="margin-bottom:12px">${caseDe(() => true, (x, i) => `<div class="ligne em-l ${emClasse(x)}" style="border-left:4px solid var(--em);padding-left:8px"><span style="min-width:0"><b>${emHeure(x)}</b> ${esc(sansEmoji(x.titre))} <span class="tag off">${esc(x.sections.map(k => EM_NOM[k]).join(" + "))}</span>${x.rec ? ` <span class="muted small">pas encore pris par le téléphone</span>` : ""}${x.detail ? `<br><span class="muted small">${esc(sansEmoji(x.detail))}</span>` : ""}</span><span class="row">${action(x, i, false)}${x.client ? `<button class="btn" data-em-fiche="${i}">${ico("personne")} Ouvrir la fiche</button>` : ""}</span></div>`, a => `<div style="margin-top:8px">${emAnnuleHtml(a)}</div>`) || `<p class="muted small" style="margin:0">Rien ce jour-là.</p>`}</section>`;
-  const el = contenu(`<div class="row" style="justify-content:space-between"><h1>Emploi du temps</h1>
-      <span class="row"><button class="btn" data-em-pas="-1" aria-label="${enSemaine ? "Semaine précédente" : "Jour précédent"}">‹</button><b>${esc(titre)}</b><button class="btn" data-em-pas="1" aria-label="${enSemaine ? "Semaine suivante" : "Jour suivant"}">›</button>
+  const el = contenu(`<div class="row em-barre" style="justify-content:space-between"><h1>Emploi du temps</h1>
+      <span class="row"><span class="em-nav"><button class="btn" data-em-pas="-1" aria-label="${enSemaine ? "Semaine précédente" : "Jour précédent"}">‹</button><b>${esc(titre)}</b><button class="btn" data-em-pas="1" aria-label="${enSemaine ? "Semaine suivante" : "Jour suivant"}">›</button></span>
       ${cestMaintenant ? "" : `<button class="btn flat" data-em-auj="1">${enSemaine ? "Cette semaine" : "Aujourd'hui"}</button>`}
       <button class="chip" data-em-vue="semaine" aria-pressed="${enSemaine}">Semaine</button><button class="chip" data-em-vue="jour" aria-pressed="${!enSemaine}">Jour</button>
       <button class="btn primary" data-em-plus="1">${ico("plus")} RDV</button><button class="btn" id="em-maj">Actualiser</button></span></div>
