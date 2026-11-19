@@ -8426,40 +8426,83 @@ async function dosFil(c, corps, re) {
     if (b.dataset.lu) { await maj(sb.from("notes_terrain").update({ vue_le: new Date().toISOString() }).eq("id", b.dataset.lu)); compteurAVoir(); re(); }
   };
 }
+/* Photos du client rangées comme dans le Drive (19/11/2026) : Maison (et Dégâts), Missions ponctuelles › mission, Passages › jour · presta,
+   Devis › demande. Même règle que le Pont photos (cibleDePhoto_) : demande d'abord, puis passage, sinon Maison. Cases à cocher pour supprimer
+   plusieurs photos d'un coup, ou tout un groupe (corbeille du Drive au passage suivant du pont). */
+const MISSION_ACTIVE = ["en_cours", "finalisee"];
+function groupePhoto(p, demandes, passages) {
+  const d = p.demande_id && demandes.find(x => x.id === p.demande_id);
+  if (d) return d.type_prestation === "one_shot" && MISSION_ACTIVE.includes(d.etat)
+    ? { cle: "m-" + d.id, ordre: 1, titre: "Missions ponctuelles › " + d.titre, tri: d.accepte_le || d.cree_le }
+    : { cle: "d-" + d.id, ordre: 3, titre: "Devis › " + d.titre, tri: d.cree_le };
+  const pa = p.pointage_id && passages[p.pointage_id];
+  if (pa) return { cle: "p-" + pa.id, ordre: 2, titre: "Passages › " + jourAn(pa.arrivee) + " · " + nomInterv(pa.intervenante_id), tri: pa.arrivee };
+  return p.categorie === "degat" ? { cle: "degats", ordre: 0.5, titre: "Maison › Dégâts", tri: "" } : { cle: "maison", ordre: 0, titre: "Maison", tri: "" };
+}
 async function dosPhotos(c, corps, re) {
   const [photos, bilans] = await Promise.all([q(sb.from("client_photos").select("*").eq("client_id", c.id).is("supprime_le", null).order("prise_le", { ascending: false })), lireNettoyages(c.id, ["photos"])]);
+  const demandes = (cacheDemandes || []).filter(d => d.client_id === c.id);
+  const ids = [...new Set(photos.map(p => p.pointage_id).filter(Boolean))], passages = {};
+  if (ids.length) { const r = await sb.from("pointages").select("id,arrivee,intervenante_id").in("id", ids); (r.data || []).forEach(x => passages[x.id] = x); }
   const urls = await urlsSignees(photos.map(p => p.apercu));
-  corps.innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+  const groupes = [];
+  photos.forEach(p => { const g = groupePhoto(p, demandes, passages); let x = groupes.find(k => k.cle === g.cle); if (!x) groupes.push(x = { ...g, photos: [] }); x.photos.push(p); });
+  groupes.sort((a, b) => a.ordre - b.ordre || String(b.tri).localeCompare(String(a.tri)));
+  const missions = demandes.filter(d => d.type_prestation === "one_shot" && MISSION_ACTIVE.includes(d.etat));
+  const choisies = new Set();
+  const figure = p => `<figure class="photo" data-ph="${p.id}" style="position:relative"><label class="ph-coche" title="Cocher pour supprimer"><input type="checkbox" data-pcoche="${p.id}" aria-label="Choisir cette photo"></label>
+      <button class="vignette" data-ouvrir title="Ouvrir la photo complète"><img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || CATS[p.categorie])}" loading="lazy"></button>
+      <figcaption><b>${CATS[p.categorie] || "Photo"}</b>${p.legende ? " · " + esc(p.legende) : ""}<br>
+        <span class="muted small">${jour(p.prise_le)} ${hm(p.prise_le)} · ${p.auteur === moi.id ? "toi" : esc(nomInterv(p.auteur))}${p.drive_id ? " · ✓ dans le Drive" : " · rangement en cours"}${p.partage ? "" : " · masquée"}${p.garder ? " · gardée" : ""}</span>
+        <span class="row" style="margin-top:4px;gap:2px">${p.vue_le ? "" : `<button class="btn" data-plu>Fait</button>`}<button class="btn flat" data-ppart>${p.partage ? "Masquer" : "Montrer"} aux intervenants</button>${"garder" in p ? `<button class="btn flat" data-pgarde title="Une photo gardée n'est jamais retirée, même en double">${p.garder ? "Ne plus garder" : "Garder"}</button>` : ""}<button class="btn flat stop" data-psup>Supprimer</button></span></figcaption></figure>`;
+  corps.innerHTML = `<style>.ph-coche{position:absolute;top:6px;left:6px;z-index:1;background:var(--surface);border-radius:8px;padding:4px 6px;box-shadow:var(--ombre);line-height:0;cursor:pointer}.ph-coche input{width:20px;height:20px;margin:0;cursor:pointer}
+      .ph-groupe{margin-top:14px}.ph-groupe>summary{cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ph-barre{position:sticky;bottom:8px;z-index:2;margin-top:10px}</style>
+    <div class="card" style="display:flex;flex-direction:column;gap:8px">
       <div class="deux"><label class="f">Catégorie<select id="pcat">${Object.entries(CATS).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
-        <label class="f">Légende (facultatif)<input type="text" id="pleg" maxlength="500" placeholder="Ex. évier fendu sous le robinet"></label></div>
+        <label class="f">Où la ranger<select id="pou"><option value="">Maison (photo générale)</option>${missions.map(d => `<option value="${d.id}">Mission ponctuelle : ${esc(d.titre)}</option>`).join("")}</select></label></div>
+      <label class="f">Légende (facultatif)<input type="text" id="pleg" maxlength="500" placeholder="Ex. évier fendu sous le robinet"></label>
       <label class="chk"><input type="checkbox" id="ppart" checked>Visible par les intervenants qui ont ce client</label>
       <div class="row"><button class="btn primary" id="pchoix">${ico("photo")} Ajouter des photos</button>
-        <span class="muted small">Rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Photos) en quelques minutes. Tu peux aussi les glisser directement dans ce dossier. Le travail ou le dégât, jamais les personnes, papiers ou objets de valeur.</span></div>
+        <span class="muted small">Rangées dans le Drive d'OIKOS (CLIENTS OIKOS › ${esc(c.nom.toUpperCase())} › Photos › Maison, Missions ponctuelles ou Passages) en quelques minutes. Un dégât va dans Maison › Dégâts. Tu peux aussi les glisser directement dans ces dossiers. Le travail ou le dégât, jamais les personnes, papiers ou objets de valeur.</span></div>
       <input type="file" id="pfic" accept="image/*" multiple hidden></div>
-    <div class="photos">${photos.map(p => `<figure class="photo" data-ph="${p.id}"><button class="vignette" data-ouvrir title="Ouvrir la photo complète"><img src="${esc(urls[p.apercu] || "")}" alt="${esc(p.legende || CATS[p.categorie])}" loading="lazy"></button>
-        <figcaption><b>${CATS[p.categorie] || "Photo"}</b>${p.legende ? " · " + esc(p.legende) : ""}<br>
-          <span class="muted small">${jour(p.prise_le)} ${hm(p.prise_le)} · ${p.auteur === moi.id ? "toi" : esc(nomInterv(p.auteur))}${p.drive_id ? " · ✓ dans le Drive" : " · rangement en cours"}${p.partage ? "" : " · masquée"}${p.garder ? " · gardée" : ""}</span>
-          <span class="row" style="margin-top:4px;gap:2px">${p.vue_le ? "" : `<button class="btn" data-plu>Fait</button>`}<button class="btn flat" data-ppart>${p.partage ? "Masquer" : "Montrer"} aux intervenants</button>${"garder" in p ? `<button class="btn flat" data-pgarde title="Une photo gardée n'est jamais retirée, même en double">${p.garder ? "Ne plus garder" : "Garder"}</button>` : ""}<button class="btn flat stop" data-psup>Supprimer</button></span></figcaption></figure>`).join("")
-      || `<p class="muted">Aucune photo pour l'instant.</p>`}</div>${blocNettoyages(bilans)}`;
-  const champ = corps.querySelector("#pfic");
+    ${groupes.map(g => `<details class="ph-groupe" open data-groupe="${esc(g.cle)}"><summary>${ico(g.cle.startsWith("m-") ? "mission" : g.cle.startsWith("p-") ? "agenda" : g.cle.startsWith("d-") ? "doc" : "dossier")} ${esc(g.titre)} <span class="muted small">${g.photos.length} photo${g.photos.length > 1 ? "s" : ""}</span>
+        <button class="btn flat" type="button" data-ptout="${esc(g.cle)}">Tout cocher</button></summary>
+      <div class="photos">${g.photos.map(figure).join("")}</div></details>`).join("") || `<p class="muted" style="margin-top:12px">Aucune photo pour l'instant.</p>`}
+    <div class="card row ph-barre" id="pbarre" hidden><b id="pnb"></b><button class="btn stop" id="psupsel">${ico("corbeille")} Supprimer les photos cochées</button><button class="btn flat" id="paucune">Tout décocher</button></div>${blocNettoyages(bilans)}`;
+  const champ = corps.querySelector("#pfic"), barre = corps.querySelector("#pbarre");
+  const majBarre = () => { barre.hidden = !choisies.size; corps.querySelector("#pnb").textContent = choisies.size + (choisies.size > 1 ? " photos cochées" : " photo cochée");
+    corps.querySelectorAll("[data-pcoche]").forEach(x => x.checked = choisies.has(x.dataset.pcoche)); };
   corps.querySelector("#pchoix").onclick = () => { champ.value = ""; champ.click(); };
   champ.onchange = async () => {
     const fichiers = [...champ.files]; if (!fichiers.length) return;
-    const d = { client_id: c.id, categorie: corps.querySelector("#pcat").value, legende: corps.querySelector("#pleg").value.trim() || null, partage: corps.querySelector("#ppart").checked };
+    const ou = corps.querySelector("#pou").value;
+    const d = { client_id: c.id, categorie: corps.querySelector("#pcat").value, legende: corps.querySelector("#pleg").value.trim() || null, partage: corps.querySelector("#ppart").checked, ...(ou ? { demande_id: ou } : {}) };
     try { for (let i = 0; i < fichiers.length; i++) { toast(`Envoi de la photo ${i + 1} sur ${fichiers.length}…`); await envoyerPhoto(fichiers[i], d); }
       toast(fichiers.length > 1 ? fichiers.length + " photos ajoutées" : "Photo ajoutée"); }
     catch (e) { souci(e); }
     re();
   };
+  corps.onchange = e => { const x = e.target.closest("[data-pcoche]"); if (!x) return; x.checked ? choisies.add(x.dataset.pcoche) : choisies.delete(x.dataset.pcoche); majBarre(); };
   corps.onclick = async e => {
-    const b = e.target.closest("button"), fig = b && b.closest("[data-ph]"); if (!fig) return;
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.ptout) { e.preventDefault(); const g = groupes.find(k => k.cle === b.dataset.ptout); const tous = g.photos.every(p => choisies.has(p.id));
+      g.photos.forEach(p => tous ? choisies.delete(p.id) : choisies.add(p.id)); b.textContent = tous ? "Tout cocher" : "Tout décocher"; return majBarre(); }
+    if (b.id === "paucune") { choisies.clear(); corps.querySelectorAll("[data-ptout]").forEach(x => x.textContent = "Tout cocher"); return majBarre(); }
+    if (b.id === "psupsel") {
+      const l = photos.filter(p => choisies.has(p.id)); if (!l.length) return;
+      const gardees = l.filter(p => p.garder).length;
+      if (!confirm(`Supprimer ${l.length > 1 ? "ces " + l.length + " photos" : "cette photo"} ? ${l.length > 1 ? "Elles partent" : "Elle part"} aussi à la corbeille du Drive d'OIKOS (récupérable 30 jours).${gardees ? `\n\nAttention : ${gardees > 1 ? gardees + " d'entre elles sont marquées « gardées »" : "une d'entre elles est marquée « gardée »"}.` : ""}`)) return;
+      await maj(sb.from("client_photos").update({ supprime_le: new Date().toISOString() }).in("id", l.map(p => p.id)));
+      toast(l.length > 1 ? l.length + " photos supprimées" : "Photo supprimée"); compteurAVoir(); return re();
+    }
+    const fig = b.closest("[data-ph]"); if (!fig) return;
     const p = photos.find(x => x.id === fig.dataset.ph);
     if (b.hasAttribute("data-ouvrir")) return voirPhoto(p, urls[p.apercu]);
     if (b.hasAttribute("data-plu")) { await maj(sb.from("client_photos").update({ vue_le: new Date().toISOString() }).eq("id", p.id)); compteurAVoir(); re(); }
     if (b.hasAttribute("data-ppart")) { await maj(sb.from("client_photos").update({ partage: !p.partage }).eq("id", p.id)); re(); }
     if (b.hasAttribute("data-pgarde")) { await maj(sb.from("client_photos").update({ garder: !p.garder }).eq("id", p.id)); toast(p.garder ? "Photo plus gardée" : "Photo gardée"); re(); }
-    if (b.hasAttribute("data-psup")) { if (!confirm("Supprimer cette photo ? Elle part aussi à la corbeille du Drive.")) return;
-      await maj(sb.from("client_photos").update({ supprime_le: new Date().toISOString() }).eq("id", p.id)); toast("Photo supprimée"); re(); }
+    if (b.hasAttribute("data-psup")) { if (!confirm("Supprimer cette photo ? Elle part aussi à la corbeille du Drive d'OIKOS (récupérable 30 jours).")) return;
+      await maj(sb.from("client_photos").update({ supprime_le: new Date().toISOString() }).eq("id", p.id)); toast("Photo supprimée"); compteurAVoir(); re(); }
   };
 }
 /* La photo en grand dans le tableau de bord (l'aperçu, toujours dans la base) + lien vers l'original,
