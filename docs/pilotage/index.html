@@ -1162,10 +1162,17 @@ const nomInterv = id => nomPers(cacheProfils.find(p => p.id === id) || {});
 /* Nom d'un presta cliquable : ouvre sa fiche, partout dans le pilote (écouteur unique plus bas). Gérant ou inconnu = texte simple. */
 const estPresta = id => { const p = id && cacheProfils.find(x => x.id === id); return !!(p && p.role !== "gerant"); };
 const persLien = id => estPresta(id) ? `<button type="button" class="pers-lien" data-pers="${esc(id)}" title="Ouvrir sa fiche">${esc(nomInterv(id))}</button>` : esc(nomInterv(id));
+/* Nom d'un client cliquable : ouvre sa fiche client. En <span> pour pouvoir aller dans un bouton (ligne de tâche). */
+const estClientConnu = id => !!(id && cacheClients.some(c => c.id === id));
+const clientLien = id => estClientConnu(id) ? `<span role="link" tabindex="0" class="pers-lien" data-fiche-client="${esc(id)}" title="Ouvrir sa fiche client">${esc(nomClient(id))}</span>` : esc(nomClient(id));
+/* Un texte qui contient le nom : seul le nom devient cliquable, le reste est échappé */
+const lierNom = (texte, nom, lien) => { const t = String(texte || ""), i = nom ? t.indexOf(nom) : -1; return i < 0 ? esc(t) : esc(t.slice(0, i)) + lien + esc(t.slice(i + nom.length)); };
 document.addEventListener("click", e => {
-  const b = e.target.closest && e.target.closest("[data-pers]"); if (!b) return;
-  e.preventDefault(); e.stopPropagation(); ficheIntervenante(b.dataset.pers);
+  const b = e.target.closest && e.target.closest("[data-pers],[data-fiche-client]"); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  if (b.dataset.pers) ficheIntervenante(b.dataset.pers); else ficheClient(b.dataset.ficheClient);
 }, true);
+document.addEventListener("keydown", e => { if (e.key !== "Enter" && e.key !== " ") return; const b = e.target.closest && e.target.closest("span[data-pers],span[data-fiche-client]"); if (b) { e.preventDefault(); e.stopPropagation(); b.click(); } }, true);
 /* Écrire au presta sans quitter la page : les derniers messages, puis la zone d'envoi */
 async function ecrirePresta(id) {
   const p = cacheProfils.find(x => x.id === id); if (!p) return;
@@ -2441,17 +2448,17 @@ async function lignesDuJour() {
   const detailDemande = d => [d.titre, d.activite, etiquetteClient(d.client_id)].filter(Boolean).join(" · ");
   const signes = cacheDemandes.filter(devisSigne);
   // 1. Ce qui a une date ou engage un client
-  echeances.forEach(x => faire.push({ icone: "balance", quoi: "Rappel juridique : " + x.titre, detail: [nomClient(x.client_id), "le " + new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")].join(" · "), action: "Ouvrir le dossier", agir: () => ficheClient(x.client_id, "juridique"),
+  echeances.forEach(x => faire.push({ icone: "balance", client: x.client_id, quoi: "Rappel juridique : " + x.titre, detail: [nomClient(x.client_id), "le " + new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")].join(" · "), action: "Ouvrir le dossier", agir: () => ficheClient(x.client_id, "juridique"),
     autres: [["Marquer fait", async () => { await maj(sb.from("client_juridique").update({ traite: true }).eq("id", x.id)); jourDernier = { texte: "Rappel marqué fait", defaire: () => sb.from("client_juridique").update({ traite: false }).eq("id", x.id) }; re(); }]] }));
-  signes.forEach(d => faire.push({ icone: "stylo", quoi: nomC(d) + " a signé le devis", detail: detailDemande(d), action: "Envoyer l'ordre de mission", agir: () => accepterDemande(d, cacheClients.find(k => k.id === d.client_id), re),
+  signes.forEach(d => faire.push({ icone: "stylo", client: d.client_id, quoi: nomC(d) + " a signé le devis", detail: detailDemande(d), action: "Envoyer l'ordre de mission", agir: () => accepterDemande(d, cacheClients.find(k => k.id === d.client_id), re),
     autres: [["Ouvrir le client", () => ficheClient(d.client_id, "devis")], ["Voir la liste des devis", () => ouvrirSection("ATTENTE")]] }));
   // 2. Les réponses et décisions attendues de toi
   taches.filter(t => estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || "")).forEach(t => faire.push({ icone: "mission", qui: t.intervenante_id, quoi: nomInterv(t.intervenante_id) + " a répondu à une proposition", detail: t.commentaire, action: "Voir la réponse", agir: () => ouvrirSection("ATTENTE"),
     autres: [["Marquer fait", async () => { await maj(vu("taches", t.id)); jourDernier = { texte: "Réponse marquée faite", defaire: () => pasVu("taches", t.id) }; re(); }]] }));
-  demandesTaches.forEach(t => faire.push({ icone: "personne", qui: t.cree_par, quoi: nomInterv(t.cree_par) + " propose un changement de feuille de route", detail: [nomClient(t.client_id), t.titre || t.texte].filter(Boolean).join(" · "), action: "Décider", agir: () => afficher("avoir"), autres: [["Ouvrir le client", () => ficheClient(t.client_id, "route")]] }));
+  demandesTaches.forEach(t => faire.push({ icone: "personne", qui: t.cree_par, client: t.client_id, quoi: nomInterv(t.cree_par) + " propose un changement de feuille de route", detail: [nomClient(t.client_id), t.titre || t.texte].filter(Boolean).join(" · "), action: "Décider", agir: () => afficher("avoir"), autres: [["Ouvrir le client", () => ficheClient(t.client_id, "route")]] }));
   const ids = cacheDemandes.filter(d => d.etat === "en_cours");
   const tachesMissions = ids.length ? await sb.from("taches").select("id,demande_id,fait_le").in("demande_id", ids.map(d => d.id)).then(r => r.data || []) : [];
-  ids.filter(d => { const l = tachesMissions.filter(t => t.demande_id === d.id); return l.length && l.every(t => t.fait_le); }).forEach(d => faire.push({ icone: "drapeau", quoi: nomC(d) + " : prestation à finaliser", detail: detailDemande(d), action: "Voir la prestation", agir: () => ouvrirSection("PRESTA"), autres: [["Ouvrir le client", () => ficheClient(d.client_id, "devis")]] }));
+  ids.filter(d => { const l = tachesMissions.filter(t => t.demande_id === d.id); return l.length && l.every(t => t.fait_le); }).forEach(d => faire.push({ icone: "drapeau", client: d.client_id, quoi: nomC(d) + " : prestation à finaliser", detail: detailDemande(d), action: "Voir la prestation", agir: () => ouvrirSection("PRESTA"), autres: [["Ouvrir le client", () => ficheClient(d.client_id, "devis")]] }));
   const ecAtt = await espaceAttente();   // appli client (SQL 53) : zéro sans erreur si elle n'est pas installée
   if (ecAtt.total) faire.push({ icone: "alerte", quoi: ecAtt.total + (ecAtt.total > 1 ? " demandes de clients dans l'appli" : " demande de client dans l'appli"),
     detail: [[ecAtt.demandes, "demande de service", "demandes de service"], [ecAtt.modifs, "sur la feuille de route", "sur la feuille de route"], [ecAtt.messages, "message non lu", "messages non lus"], [ecAtt.urssaf, "formulaire URSSAF", "formulaires URSSAF"]].filter(x => x[0]).map(x => x[0] + " " + (x[0] > 1 ? x[2] : x[1])).join(" · "),
@@ -2459,11 +2466,11 @@ async function lignesDuJour() {
   if (nbMessages) faire.push({ icone: "bulle", quoi: nbMessages + (nbMessages > 1 ? " messages non lus" : " message non lu"), detail: "", action: "Lire", agir: () => afficher("messages"), autres: [] });
   docs.forEach(d => faire.push({ icone: "doc", qui: d.intervenante_id, quoi: nomInterv(d.intervenante_id) + " a envoyé : " + d.libelle, detail: "à vérifier · " + jour(d.cree_le), action: "Voir le papier", agir: () => voirFichier(d.fichier),
     autres: [["Valider", async () => { await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).eq("id", d.id)); re(); }], ["Refuser", () => refuserDoc(d.id, re)]] }));
-  notes.forEach(n => faire.push({ icone: "bulle", qui: n.intervenante_id, quoi: nomInterv(n.intervenante_id) + " a laissé une note", detail: nomClient(n.client_id) + " · " + n.texte + (n.reste ? " · Reste : " + n.reste : ""), action: "Fait", agir: async () => { await maj(vu("notes_terrain", n.id)); jourDernier = { texte: "Note marquée faite", defaire: () => pasVu("notes_terrain", n.id) }; re(); },
+  notes.forEach(n => faire.push({ icone: "bulle", qui: n.intervenante_id, client: n.client_id, quoi: nomInterv(n.intervenante_id) + " a laissé une note", detail: nomClient(n.client_id) + " · " + n.texte + (n.reste ? " · Reste : " + n.reste : ""), action: "Fait", agir: async () => { await maj(vu("notes_terrain", n.id)); jourDernier = { texte: "Note marquée faite", defaire: () => pasVu("notes_terrain", n.id) }; re(); },
     autres: [["Ouvrir le client", () => ficheClient(n.client_id, "fil")]] }));
   // Mes propres tâches (À faire › Moi) pour aujourd'hui ou en retard
   const miennes = await sb.from("taches").select("*").eq("intervenante_id", moi.id).is("fait_le", null).lte("echeance", ymd(new Date())).order("echeance").then(r => r.data || []);
-  miennes.forEach(t => faire.push({ icone: "drapeau", quoi: t.texte, detail: t.echeance < ymd(new Date()) ? "en retard · prévu le " + t.echeance.split("-").reverse().join("/") : "à faire aujourd'hui", action: "Fait",
+  miennes.forEach(t => faire.push({ icone: "drapeau", client: t.client_id, quoi: t.texte, detail: t.echeance < ymd(new Date()) ? "en retard · prévu le " + t.echeance.split("-").reverse().join("/") : "à faire aujourd'hui", action: "Fait",
     agir: async () => { await maj(sb.from("taches").update({ fait_le: new Date().toISOString() }).eq("id", t.id)); jourDernier = { texte: "Tâche faite", defaire: () => sb.from("taches").update({ fait_le: null }).eq("id", t.id) }; re(); },
     autres: [["Ouvrir", () => ficheTache(t, re)], ["Voir mon À faire", () => { taQui = "moi"; afficher("taches"); }]] }));
   const nbRoutine = adNombre();
@@ -2471,15 +2478,15 @@ async function lignesDuJour() {
   if (garde.liste.length) faire.push({ icone: "dossier", quoi: "Fichiers des presta à regarder", detail: garde.liste.length + " en attente", action: "Voir", agir: () => afficher("avoir"), autres: [] });
   if (tampon.length) faire.push({ icone: "telecharger", quoi: tampon.length + (tampon.length > 1 ? " clients à traiter" : " client à traiter") + " dans la zone tampon", detail: "Nouveaux clients VosFactures ou extraction", action: "Traiter", agir: () => ouvrirSection(null), autres: [] });
   // En attente d'une réponse
-  cacheDemandes.filter(d => enAttenteDevis(d) && !devisSigne(d)).forEach(d => attente.push({ icone: "chrono", quoi: nomC(d), detail: [ETATS_DEMANDE[d.etat][0], detailDemande(d)].join(" · "), action: "Voir", agir: () => ouvrirSection("ATTENTE"), autres: [["Ouvrir le client", () => ficheClient(d.client_id, "devis")]] }));
+  cacheDemandes.filter(d => enAttenteDevis(d) && !devisSigne(d)).forEach(d => attente.push({ icone: "chrono", client: d.client_id, quoi: nomC(d), detail: [ETATS_DEMANDE[d.etat][0], detailDemande(d)].join(" · "), action: "Voir", agir: () => ouvrirSection("ATTENTE"), autres: [["Ouvrir le client", () => ficheClient(d.client_id, "devis")]] }));
   // Pour information
-  taches.filter(t => !(estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || ""))).forEach(t => info.push({ icone: "ok", qui: t.intervenante_id, quoi: nomInterv(t.intervenante_id) + (t.fait_le ? " a coché une tâche" : " a modifié une tâche"), detail: t.texte, action: "Fait", table: "taches", id: t.id, autres: [["Ouvrir", () => ficheTache(t, re)]] }));
+  taches.filter(t => !(estProposition(t) && t.fait_le && /^Je /.test(t.commentaire || ""))).forEach(t => info.push({ icone: "ok", qui: t.intervenante_id, client: t.client_id, quoi: nomInterv(t.intervenante_id) + (t.fait_le ? " a coché une tâche" : " a modifié une tâche"), detail: t.texte, action: "Fait", table: "taches", id: t.id, autres: [["Ouvrir", () => ficheTache(t, re)]] }));
   docsTaches.forEach(d => info.push({ icone: "dossier", qui: d.ajoute_par, quoi: nomInterv(d.ajoute_par) + " a ajouté un document", detail: d.nom || d.legende, action: "Fait", table: "tache_documents", id: d.id, autres: [] }));
   const parClient = {}; photos.forEach(p => { const k = p.client_id + "|" + (estPresta(p.auteur) ? p.auteur : ""); (parClient[k] = parClient[k] || []).push(p); });   // par client et par presta : on sait qui a envoyé
   Object.entries(parClient).forEach(([k, l]) => { const [id, qui] = k.split("|"), n = l.length + (l.length > 1 ? " nouvelles photos" : " nouvelle photo");
-    info.push({ icone: "photo", qui: qui || undefined, quoi: qui ? nomInterv(qui) + " a envoyé " + n : n, detail: nomClient(id), action: "Voir", agir: () => ficheClient(id, "photos"), table: "client_photos", ids: l.map(p => p.id), autres: [] }); });
+    info.push({ icone: "photo", qui: qui || undefined, client: id, quoi: qui ? nomInterv(qui) + " a envoyé " + n : n, detail: nomClient(id), action: "Voir", agir: () => ficheClient(id, "photos"), table: "client_photos", ids: l.map(p => p.id), autres: [] }); });
   const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  prevus.filter(x => x.client_id && !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut))).forEach(x => info.push({ icone: "agenda", qui: x.intervenante_id, quoi: nomInterv(x.intervenante_id) + " n'a pas déclaré un passage", detail: nomClient(x.client_id) + " · " + jour(x.debut) + " " + hm(x.debut), action: "Voir le reporting", agir: () => afficher("reporting"), autres: [] }));
+  prevus.filter(x => x.client_id && !pts.some(p => p.intervenante_id === x.intervenante_id && p.client_id === x.client_id && memeJour(p.arrivee, x.debut))).forEach(x => info.push({ icone: "agenda", qui: x.intervenante_id, client: x.client_id, quoi: nomInterv(x.intervenante_id) + " n'a pas déclaré un passage", detail: nomClient(x.client_id) + " · " + jour(x.debut) + " " + hm(x.debut), action: "Voir le reporting", agir: () => afficher("reporting"), autres: [] }));
   return { faire, attente, info };
 }
 const TONS_JOUR = { balance: "urgent", stylo: "urgent", alerte: "urgent", personne: "decider", mission: "decider", drapeau: "decider", telecharger: "decider", dossier: "decider", doc: "decider", bulle: "info", mail: "info", ok: "info", photo: "info", agenda: "info" };
@@ -2487,9 +2494,13 @@ function htmlLigne(l, i, principal, zone) {
   // Le nom du presta en tête de ligne ouvre sa fiche ; « Lui écrire » rejoint les autres actions
   const nomQ = l.qui && estPresta(l.qui) ? nomInterv(l.qui) : "";
   if (nomQ && !(l.autres || []).some(a => a[0] === "Lui écrire")) l.autres = [...(l.autres || []), ["Voir sa fiche", () => ficheIntervenante(l.qui)], ["Lui écrire", () => ecrirePresta(l.qui)]];
+  // Le nom du client (dans le titre ou le détail) ouvre sa fiche client ; « Fiche client » rejoint les autres actions
+  const nomCl = estClientConnu(l.client) ? nomClient(l.client) : "";
+  if (nomCl && !(l.autres || []).some(a => a[0] === "Fiche client")) l.autres = [...(l.autres || []), ["Fiche client", () => ficheClient(l.client)]];
+  const titre = nomQ && l.quoi.startsWith(nomQ) ? persLien(l.qui) + lierNom(l.quoi.slice(nomQ.length), nomCl, clientLien(l.client)) : lierNom(l.quoi, nomCl, clientLien(l.client));
+  const detailHtml = l.detail ? (nomCl && l.quoi.includes(nomCl) ? esc(l.detail) : lierNom(l.detail, nomCl, clientLien(l.client))) : "";
   const autres = l.autres || [];
-  const titre = nomQ && l.quoi.startsWith(nomQ) ? persLien(l.qui) + esc(l.quoi.slice(nomQ.length)) : esc(l.quoi);
-  return `<div class="jour-ligne" data-j="${zone}${i}"><span class="jour-icone ${TONS_JOUR[l.icone] || ""}">${ico(l.icone)}</span><div class="jour-texte"><b>${titre}</b>${l.detail ? `<span>${esc(l.detail)}</span>` : ""}</div>
+  return `<div class="jour-ligne" data-j="${zone}${i}"><span class="jour-icone ${TONS_JOUR[l.icone] || ""}">${ico(l.icone)}</span><div class="jour-texte"><b>${titre}</b>${detailHtml ? `<span>${detailHtml}</span>` : ""}</div>
     <button class="btn ${principal ? "primary" : ""}" data-j-agir>${esc(l.action)}</button>${autres.length ? `<button class="btn flat" data-j-plus aria-expanded="false">Autres actions</button><div class="jour-autres" hidden>${autres.map((a, n) => `<button data-j-autre="${n}">${esc(a[0])}</button>`).join("")}</div>` : ""}</div>`;
 }
 async function vueJour() {
@@ -3516,7 +3527,7 @@ async function vueAVoir() {
     ${demandesTaches.length ? `<section class="card" id="ve-propositions" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("personne")} Propositions des presta sur les feuilles de route <span class="tag warn">${demandesTaches.length}</span></h2>${demandesTaches.map(t => ligneDemandeTache(t, true)).join("")}</section>` : ""}
     <div class="deux" style="margin-top:12px">
       <section class="card" id="ve-notes"><h2 style="margin-top:0">Notes de terrain <span class="tag">${notes.length}</span></h2>
-        ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${persLien(n.intervenante_id)}</b> · ${esc(nomClient(n.client_id))}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
+        ${notes.length ? notes.map(n => `<div class="ligne"><span><b>${persLien(n.intervenante_id)}</b> · ${clientLien(n.client_id)}${n.pointage_id ? " (passage)" : ""}<br><span class="muted small">${jour(n.cree_le)} ${hm(n.cree_le)}</span><br>${esc(n.texte)}</span>
           <button class="btn" data-lu="${n.id}">Fait</button></div>`).join("") : `<p class="muted">Rien de nouveau.</p>`}</section>
       <section class="card" id="ve-papiers"><h2 style="margin-top:0">Papiers reçus à vérifier <span class="tag">${papiersRecus.length}</span></h2>
         ${papiersRecus.length ? papiersRecus.map(d => `<div class="ligne"><span><b>${persLien(d.intervenante_id)}</b><br>${esc(d.libelle)} <span class="muted small">· ${jour(d.cree_le)}</span></span>
@@ -3528,25 +3539,25 @@ async function vueAVoir() {
     ${taches.length ? `<section class="card" id="ve-taches" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">À faire : du nouveau chez les intervenants <span class="tag">${taches.length}</span></h2>
         <button class="btn" data-tlu="tout">Tout marquer fait</button></div>
       ${taches.map(t => `<div class="ligne"><span><b>${persLien(t.intervenante_id)}</b> ${t.fait_le ? "a coché ✓" : t.cree_par === t.intervenante_id ? "a ajouté ou modifié dans sa liste" : "a commenté ou remis à faire"} : ${esc(t.texte)}${t.commentaire ? `<br><span class="muted small">${ico("bulle")} ${esc(t.commentaire)}</span>` : ""}
-          ${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
+          ${t.client_id ? `<span class="tag">${clientLien(t.client_id)}</span>` : ""}<br><span class="muted small">${jour(t.fait_le || t.cree_le)} ${hm(t.fait_le || t.cree_le)}</span></span>
         <span class="row" style="flex:none"><button class="btn" data-touvre="${t.id}">Ouvrir</button><button class="btn" data-tlu="${t.id}">Fait</button></span></div>`).join("")}</section>` : ""}
     ${docsTaches.length ? `<section class="card" id="ve-documents" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ico("dossier")} Nouveaux documents dans les dossiers <span class="tag">${docsTaches.length}</span></h2>
         <button class="btn" data-dlu="tout">Tout marquer fait</button></div>
       ${docsTaches.map(d => { const t = tachesDesDocs.find(x => x.id === d.tache_id) || {}; return `<div class="ligne"><span><b>${persLien(d.ajoute_par)}</b> ${d.chemin || d.drive_url ? "a ajouté " + esc(d.nom) + (d.legende ? " : " + esc(d.legende) : "") : "a écrit : " + esc(d.legende)}<br><span class="muted small">Dossier « ${esc(t.dossier_nom || t.texte || "?")} » · ${jour(d.cree_le)} ${hm(d.cree_le)}</span></span>
         <span class="row" style="flex:none">${d.chemin || d.drive_url ? `<button class="btn" data-dvoir="${esc(d.drive_url || d.chemin)}">Voir</button>` : ""}<button class="btn" data-douvre="${d.tache_id}">Ouvrir le dossier</button><button class="btn" data-dlu="${d.id}">Fait</button></span></div>`; }).join("")}</section>` : ""}
     ${echeances.length ? `<section class="card" id="ve-juridique" style="margin-top:12px;border-color:var(--warn)"><h2 style="margin-top:0">${ico("balance")} Rappels juridiques (7 prochains jours ou en retard) <span class="tag warn">${echeances.length}</span></h2>
-      ${echeances.map(x => `<div class="ligne"><span><b>${esc(nomClient(x.client_id))}</b> · ${esc(TYPES_J[x.type])} : ${esc(x.titre)}<br><span class="muted small">rappel le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span></span>
+      ${echeances.map(x => `<div class="ligne"><span><b>${clientLien(x.client_id)}</b> · ${esc(TYPES_J[x.type])} : ${esc(x.titre)}<br><span class="muted small">rappel le ${new Date(x.echeance + "T12:00").toLocaleDateString("fr-FR")}</span></span>
         <span class="row"><button class="btn" data-dossier="${x.client_id}|juridique">Ouvrir le dossier</button><button class="btn go" data-jtraite="${x.id}">Fait</button></span></div>`).join("")}</section>` : ""}
     ${photos.length ? `<section class="card" id="ve-photos" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${ico("photo")} Nouvelles photos des intervenants <span class="tag">${photos.length}</span></h2>
         <button class="btn" data-phlu="tout">Tout marquer fait</button></div>
       <div class="photos">${photos.slice(0, 12).map(p => `<figure class="photo"><button class="vignette" data-dossier="${p.client_id}|photos" title="Ouvrir le dossier"><img src="${esc(apercusAVoir[p.apercu] || "")}" alt="" loading="lazy"></button>
-        <figcaption><b>${esc(nomClient(p.client_id))}</b> · ${CATS[p.categorie] || "Photo"}${p.legende ? " · " + esc(p.legende) : ""}<br><span class="muted small">${persLien(p.auteur)} · ${jour(p.prise_le)} ${hm(p.prise_le)}</span>
+        <figcaption><b>${clientLien(p.client_id)}</b> · ${CATS[p.categorie] || "Photo"}${p.legende ? " · " + esc(p.legende) : ""}<br><span class="muted small">${persLien(p.auteur)} · ${jour(p.prise_le)} ${hm(p.prise_le)}</span>
           <div><button class="btn" data-phlu="${p.id}" style="margin-top:4px">Fait</button></div></figcaption></figure>`).join("")}</div>
       ${photos.length > 12 ? `<p class="muted small" style="margin-top:6px">… et ${photos.length - 12} autre(s) : « Tout marquer fait » ou ouvre le dossier du client.</p>` : ""}</section>` : ""}
     <section class="card" id="ve-passages" style="margin-top:12px"><h2 style="margin-top:0">Prévus mais pas encore déclarés (7 derniers jours)</h2>
-      ${nonDeclares.length ? nonDeclares.map(x => `<div class="ligne"><span><b>${persLien(x.intervenante_id)}</b> chez ${esc(nomClient(x.client_id))}</span><span class="muted">${jour(x.debut)} ${hm(x.debut)}–${hm(x.fin)}</span></div>`).join("") : `<p class="muted">Tout ce qui était prévu a été déclaré.</p>`}</section>
+      ${nonDeclares.length ? nonDeclares.map(x => `<div class="ligne"><span><b>${persLien(x.intervenante_id)}</b> chez ${clientLien(x.client_id)}</span><span class="muted">${jour(x.debut)} ${hm(x.debut)}–${hm(x.fin)}</span></div>`).join("") : `<p class="muted">Tout ce qui était prévu a été déclaré.</p>`}</section>
     ${douteux.length ? `<section class="card" id="ve-gps" style="margin-top:12px"><h2 style="margin-top:0">Anciens pointages GPS à vérifier</h2>
-      <table><tr><th>Qui</th><th>Client</th><th>Quand</th><th>Pourquoi</th></tr>${douteux.map(p => `<tr><td>${esc(nomInterv(p.intervenante_id))}</td><td>${esc(nomClient(p.client_id))}</td><td>${jour(p.arrivee)} ${hm(p.arrivee)}–${p.depart ? hm(p.depart) : "?"}</td><td>${esc(raisonDoute(p))}</td></tr>`).join("")}</table></section>` : ""}`);
+      <table><tr><th>Qui</th><th>Client</th><th>Quand</th><th>Pourquoi</th></tr>${douteux.map(p => `<tr><td>${persLien(p.intervenante_id)}</td><td>${clientLien(p.client_id)}</td><td>${jour(p.arrivee)} ${hm(p.arrivee)}–${p.depart ? hm(p.depart) : "?"}</td><td>${esc(raisonDoute(p))}</td></tr>`).join("")}</table></section>` : ""}`);
   el.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.aller) { const z = document.getElementById(b.dataset.aller); if (z) z.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
@@ -5112,7 +5123,7 @@ const taLigne = (t, nb, avecQui) => `<li class="${t.fait_le ? "is-done" : ""}" d
     <input type="checkbox" data-coche ${t.fait_le ? "checked" : ""} title="Fait" aria-label="Fait">
     <button class="tk-open" data-ouvre><span class="txt">${esc(t.texte)}</span>
       ${t.commentaire ? `<span class="t-note">${ico("bulle")} ${esc(t.commentaire)}</span>` : ""}
-      <span class="row" style="gap:4px;margin-top:2px">${avecQui ? `<span class="tag off">${esc(taNomQui(t.intervenante_id))}</span>` : ""}${t.dossier_nom ? `<span class="tag">${ico("dossier")} ${esc(t.dossier_nom)}${nb ? " · " + nb : ""}</span>` : ""}${t.cree_par === t.intervenante_id && t.intervenante_id !== moi.id ? `<span class="tag warn">ajoutée par lui</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}</span></button>
+      <span class="row" style="gap:4px;margin-top:2px">${avecQui ? `<span class="tag off">${estPresta(t.intervenante_id) ? `<span role="link" tabindex="0" class="pers-lien" data-pers="${esc(t.intervenante_id)}" title="Ouvrir sa fiche">${esc(taNomQui(t.intervenante_id))}</span>` : esc(taNomQui(t.intervenante_id))}</span>` : ""}${t.dossier_nom ? `<span class="tag">${ico("dossier")} ${esc(t.dossier_nom)}${nb ? " · " + nb : ""}</span>` : ""}${t.cree_par === t.intervenante_id && t.intervenante_id !== moi.id ? `<span class="tag warn">ajoutée par lui</span>` : ""}${t.client_id ? `<span class="tag">${clientLien(t.client_id)}</span>` : ""}</span></button>
     ${taBadge(t)}</li>`;
 /* « Moi » = le gérant : ses tâches sont dans la même table, à son propre nom (taches.intervenante_id = son profil). Rien à lancer dans la base. */
 const taNomQui = id => moi && id === moi.id ? "Moi" : nomInterv(id);
@@ -5196,6 +5207,7 @@ function ficheTache(t, apres = () => afficher("taches")) {
         ${qui.length > 1 ? `<label class="f">Pour qui ?<select name="qui">${qui.map(p => `<option value="${p.id}" ${p.id === t.intervenante_id ? "selected" : ""}>${p.id === moi.id ? "Moi" : esc(nomPers(p))}</option>`).join("")}</select></label>` : ""}
         <div class="f" style="display:flex;flex-direction:column;gap:6px"><span class="muted small">Pour quand ?</span>${taChips(taQuandDe(t.echeance), t.echeance)}</div>
         <label class="f">Client (facultatif)<select name="client_id"><option value="">— aucun —</option>${optionsClients(cacheClients.filter(c => c.etat !== "termine" || c.id === t.client_id), t.client_id)}</select></label>
+        ${estClientConnu(t.client_id) ? `<p style="margin:-4px 0 8px"><button type="button" class="btn flat" data-fiche-client="${esc(t.client_id)}">${ico("personne")} Ouvrir la fiche de ${esc(nomClient(t.client_id))}</button></p>` : ""}
         <label class="f">Commentaire<textarea name="commentaire" maxlength="2000" placeholder="Ce qui a été fait, ce qu'il reste, un numéro…">${esc(t.commentaire || "")}</textarea></label>
         <label class="chk"><input type="checkbox" name="fait" ${t.fait_le ? "checked" : ""} style="width:20px;height:20px">Fait</label>
         <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat stop" type="button" id="suppr">Supprimer</button></div></form>
@@ -5313,7 +5325,7 @@ async function archiveTaches() {
       const cles = Object.keys(parJour).sort().reverse();
       liste.innerHTML = cles.slice(0, jours).map(k => `<section class="card"><h3 style="margin:0 0 4px">${new Date(k + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h3>
         ${parJour[k].map(t => `<div class="ligne" data-t="${t.id}"><button class="tk-open" data-ouvre><span>✓ <b>${esc(t.texte)}</b></span>${t.commentaire ? `<span class="t-note">${ico("bulle")} ${esc(t.commentaire)}</span>` : ""}
-          <span class="row" style="gap:4px;margin-top:2px"><span class="tag off">${esc(nomInterv(t.intervenante_id))}</span>${t.dossier_nom ? `<span class="tag">${ico("dossier")} ${esc(t.dossier_nom)}${nb[t.id] ? " · " + nb[t.id] : ""}</span>` : ""}${t.client_id ? `<span class="tag">${esc(nomClient(t.client_id))}</span>` : ""}</span></button>
+          <span class="row" style="gap:4px;margin-top:2px"><span class="tag off">${esc(nomInterv(t.intervenante_id))}</span>${t.dossier_nom ? `<span class="tag">${ico("dossier")} ${esc(t.dossier_nom)}${nb[t.id] ? " · " + nb[t.id] : ""}</span>` : ""}${t.client_id ? `<span class="tag">${clientLien(t.client_id)}</span>` : ""}</span></button>
           <button class="btn flat" data-remet style="flex:none">Remettre à faire</button></div>`).join("")}</section>`).join("")
         || `<p class="muted">${faites.length ? "Rien ne correspond." : "Aucune tâche archivée pour l'instant. Une tâche cochée arrive ici dès le lendemain."}</p>`;
       if (cles.length > jours) liste.insertAdjacentHTML("beforeend", `<button class="btn" id="ta-plus">Voir plus</button>`);
