@@ -812,6 +812,7 @@ window.introOuverte = true;
 <script src="qr-oikos.js"></script><!-- fabrique des QR codes (fiche outil, SQL 77) -->
 <script src="facture-lue.js"></script><!-- lecture du n° et du montant des factures des presta (pdf.min.js chargé au besoin) -->
 <script src="materiel-oikos.js"></script><!-- inventaire du matériel (SQL 73) : page Équipe › Matériel -->
+<script src="recrutement-oikos.js"></script><!-- recrutement des presta et chefs (SQL 79) : page Équipe › Recrutement -->
 <script>
 /* ===================== Réglages ===================== */
 /* Icônes dessinées (trait fin) à la place des émojis, comme dans l'appli des intervenants */
@@ -978,11 +979,11 @@ function ecranConnexion(msg) {
 
 /* ===================== Cadre et onglets ===================== */
 /* Le menu du haut a 5 entrées. Les anciennes pages gardent leur nom interne : chacune a sa place dans une entrée, sous forme de sous-bouton. */
-const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["espace", "Appli client"], ["intervenantes", "Presta"], ["reseau", "Réseau"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["documents", "Documents"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"], ["materiel", "Matériel"]];
+const ONGLETS = [["jour", "Aujourd'hui"], ["taches", "À faire"], ["avoir", "Vue d'ensemble"], ["emploi", "Emploi du temps"], ["clients", "Clients"], ["dossiers", "Dossiers"], ["espace", "Appli client"], ["intervenantes", "Presta"], ["recrutement", "Recrutement"], ["reseau", "Réseau"], ["planning", "Planning"], ["reporting", "Reporting"], ["messages", "Messages"], ["documents", "Documents"], ["lignes", "Lignes Excel"], ["suivi", "Suivi Excel"], ["heures", "Déclarer mes heures"], ["ik", "Trajets IK"], ["papiers", "Papiers demandés"], ["materiel", "Matériel"]];
 const MENU = [
   { k: "jour", t: "Aujourd'hui", pages: ["jour", "taches", "avoir", "emploi"], bulle: "b-avoir" },
   { k: "clients", t: "Clients", pages: ["clients", "dossiers", "espace"], bulle: "b-clients" },
-  { k: "equipe", t: "Équipe", pages: ["intervenantes", "reseau", "planning", "reporting", "materiel"], bulle: "b-equipe" },
+  { k: "equipe", t: "Équipe", pages: ["intervenantes", "recrutement", "reseau", "planning", "reporting", "materiel"], bulle: "b-equipe" },
   { k: "messages", t: "Messages", pages: ["messages", "documents"], bulle: "b-messages" },
   { k: "chiffres", t: "Chiffres", pages: ["lignes", "suivi", "heures", "ik"] }];
 const groupeDe = o => MENU.find(m => m.pages.includes(o));
@@ -1007,7 +1008,7 @@ async function afficher(o) {
   document.getElementById("cherche-ouvrir").onclick = ouvrirRecherche;
   brancherSousMenu();
   compteurAVoir();
-  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, reseau: vueReseau, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi, espace: vueEspace, materiel: () => window.MaterielOikos ? MaterielOikos.page() : contenu("<h1>Matériel</h1><p class='muted'>Le fichier materiel-oikos.js manque à côté de la page.</p>"), documents: () => window.DocsOikos ? DocsOikos.pilote() : contenu("<h1>Documents</h1><p class='muted'>Le fichier documents-oikos.js manque à côté de la page.</p>") })[onglet]();
+  try { await ({ avoir: vueAVoir, messages: vueMessages, planning: vuePlanning, reporting: vueReporting, taches: vueTaches, intervenantes: vueIntervenantes, reseau: vueReseau, clients: vueClients, dossiers: vueDossiers, papiers: vuePapiers, suivi: vueSuivi, lignes: vueLignes, heures: vueHeures, ik: vueIk, jour: vueJour, emploi: vueEmploi, espace: vueEspace, recrutement: () => window.RecrutementOikos ? RecrutementOikos.page() : contenu("<h1>Recrutement</h1><p class='muted'>Le fichier recrutement-oikos.js manque à côté de la page.</p>"), materiel: () => window.MaterielOikos ? MaterielOikos.page() : contenu("<h1>Matériel</h1><p class='muted'>Le fichier materiel-oikos.js manque à côté de la page.</p>"), documents: () => window.DocsOikos ? DocsOikos.pilote() : contenu("<h1>Documents</h1><p class='muted'>Le fichier documents-oikos.js manque à côté de la page.</p>") })[onglet]();
     const zoneSous = document.getElementById("sous-menu-zone"); if (zoneSous) zoneSous.innerHTML = sousMenu(); }
   catch (e) { document.getElementById("contenu").innerHTML = `<h1>Oups</h1><p class="muted">${esc(e.message || e)}</p><button class="btn primary" style="margin-top:12px" onclick="afficher()">Réessayer</button>`; }
 }
