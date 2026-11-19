@@ -1198,11 +1198,132 @@ const ETATS_CARTE = { ok: "En place", partiel: "En partie", aucune: "Pas de solu
 let carteP = null, suiviP = null, pcRelie = false, railDemarre = false, railErreur = "", voletId = null, carteIndex = {};
 const retirerEmoji = t => String(t ?? "").replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]\uFE0F?\u20E3?/gu, "").replace(/\uFE0F/g, "").replace(/  +/g, " ");
 const sansEmoji = t => retirerEmoji(t).trim();
-async function pc(chemin, corps, delai) {
+async function pcDirect(chemin, corps, delai) {
   const r = await fetch(PC + chemin, { method: corps ? "POST" : "GET", headers: corps ? { "Content-Type": "application/json" } : {}, body: corps ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(delai || 3000) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.erreur || "Le PC a refusé");
+  if (!r.ok) { const e = new Error(j.erreur || "Le PC a refusé"); e.duPc = true; throw e; }
   return j;
+}
+/* ===================== Lien entre le téléphone et le PC (SQL 80) =====================
+   Le programme du PC (serveur.py, allumé avec Windows) dépose toutes les 30 s une copie de l'Excel dans la base
+   (pilote_documents « lignes » et « ik ») et relève la file demandes_pc. Ici :
+   - le PC répond : tout se passe comme avant, et la copie de la base est mise à jour au passage ;
+   - le PC ne répond pas (téléphone, autre lieu) : lire = la copie de l'Excel ; écrire = une demande dans la file,
+     faite par le PC dès qu'il la relève (en général moins d'une minute s'il est allumé). */
+const PC_COPIES = { "/lignes": "lignes", "/ik": "ik" };
+const PC_FILE = ["/lignes", "/lignes/supprimer", "/ik"];
+const EN_ATTENTE_PC = "Envoyé au PC : il l'écrit dans l'Excel dès qu'il le relève (moins d'une minute s'il est allumé). Suivi dans Administratif et tâches › Lien avec le PC.";
+const dateCopie = t => new Date(t).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const noteCopie = o => o && o._copie ? `<div class="card small" style="margin:8px 0">${ico("portable")} Le PC n'est pas joignable : voici la copie de l'Excel du <b>${dateCopie(o._copie)}</b>. Ce que tu changes part au PC, qui l'écrit dès qu'il le relève.</div>` : "";
+async function pcJoignable() { try { await pcDirect("/etat", null, 1500); return true; } catch (e) { return false; } }
+async function pc(chemin, corps, delai) {
+  try {
+    const r = await pcDirect(chemin, corps, delai);
+    if (PC_COPIES[chemin] && r && r.version) copierDansBase(PC_COPIES[chemin], String(r.version), r).catch(() => {});   // le téléphone verra la même chose
+    return r;
+  } catch (e) {
+    if (e.duPc || typeof sb === "undefined") throw e;            // le PC a répondu : c'est une vraie erreur
+    if (await pcJoignable()) throw e;                             // le PC est là mais lent : surtout ne pas écrire deux fois
+    if (!corps && PC_COPIES[chemin]) {
+      const c = await lireCopie(PC_COPIES[chemin]).catch(() => null);
+      if (c && c.contenu) {   // la copie, plus ce qui attend encore le PC : la page montre ce qui sera écrit
+        let o = { ...c.contenu, _copie: c.maj_le };
+        const { data } = await sb.from("demandes_pc").select("chemin,corps").in("etat", ["attente", "en_cours"]).order("cree_le");
+        (data || []).forEach(d => { if ((chemin === "/ik") === (d.chemin === "/ik")) o = { ...appliquerDemande(o, d.chemin, d.corps), _copie: c.maj_le }; });
+        return o;
+      }
+      throw e;
+    }
+    if (corps && PC_FILE.includes(chemin)) return pcEnFile(chemin, corps);
+    throw e;
+  }
+}
+/* Une écriture que le PC fera plus tard. On garde ce que les lignes visées contenaient : si l'Excel a changé entre-temps, le PC n'écrit rien. */
+async function pcEnFile(chemin, corps) {
+  const base = chemin === "/ik" ? ikP : lgP;
+  const nomDe = (l, o) => (o === "cours" ? l.prenom : l.client) || "";
+  const cle = (o, n) => { const l = ((lgP && lgP[o]) || []).find(x => x.ligne === n); return l ? { onglet: o, ligne: n, date: l.date, nom: nomDe(l, o), intervenant: l.intervenant || "" } : null; };
+  let attendu = [], resume = "";
+  if (chemin === "/lignes") {
+    attendu = (corps.changements || []).filter(c => c.ligne != null).map(c => cle(c.onglet, c.ligne)).filter(Boolean);
+    const n = (corps.changements || []).length, nouv = (corps.changements || []).filter(c => c.ligne == null).length;
+    const champs = [...new Set((corps.changements || []).flatMap(c => Object.keys(c.valeurs || {})))].join(", ");
+    resume = `${n} ligne${n > 1 ? "s" : ""} de l'Excel${nouv ? ` (dont ${nouv} nouvelle${nouv > 1 ? "s" : ""})` : ""} : ${champs}`;
+  } else if (chemin === "/lignes/supprimer") {
+    const a = cle(corps.onglet, corps.ligne); if (a) attendu = [a];
+    resume = `Vider la ligne ${corps.ligne} (${corps.onglet === "cours" ? "SAISIE COURS" : "SAISIE SERVICES"})${a ? " : " + a.date + ", " + a.nom : ""}`;
+  } else {
+    const t = corps.trajet || {};
+    if (!corps.confirmer && base && (base.trajets || []).some(x => x.date === t.date && norm(x.lieu || "") === norm(t.lieu || "")))
+      return { ...base, doublon: "Ce trajet est déjà inscrit à cette date dans IK BENJAMIN." };
+    resume = `Trajet IK du ${t.date || "?"} : ${t.lieu || "?"}`;
+  }
+  const { data, error } = await sb.from("demandes_pc").insert({ chemin, corps: { ...corps, version: undefined }, attendu, resume: resume.slice(0, 300) }).select("id").single();
+  if (error) {
+    if (/demandes_pc|relation|schema cache/i.test(error.message || "")) throw new Error("Le PC ne répond pas, et le lien téléphone-PC n'est pas encore installé (SQL 80 à lancer dans Supabase).");
+    throw new Error("Le PC ne répond pas et la demande n'a pas pu être déposée : " + (error.message || error));
+  }
+  pcFileCompter().catch(() => {});
+  return { ...appliquerDemande(base, chemin, corps), _copie: base && base._copie, _enAttente: data.id };
+}
+/* Ce que la page affiche en attendant le PC : la copie, avec le changement déjà fait */
+function appliquerDemande(base, chemin, corps) {
+  if (chemin === "/ik") return { ...(base || { trajets: [] }), trajets: [...((base && base.trajets) || []), { ...(corps.trajet || {}), _attente: true }], ajoute: { ligne: "en attente du PC" } };
+  const copie = JSON.parse(JSON.stringify(base || { cours: [], services: [], listes: {} }));
+  if (chemin === "/lignes") (corps.changements || []).forEach(c => {
+    const l = c.ligne != null && (copie[c.onglet] || []).find(x => x.ligne === c.ligne);
+    if (l) Object.assign(l, c.valeurs, { _attente: true });
+    else if (c.ligne == null) (copie[c.onglet] = copie[c.onglet] || []).unshift({ ligne: "…", ...c.valeurs, _attente: true });
+  });
+  else copie[corps.onglet] = (copie[corps.onglet] || []).filter(x => x.ligne !== corps.ligne);
+  return copie;
+}
+/* Le pilote ouvert sur un PC enregistre la clé de ce PC (son empreinte) : le programme du PC peut alors passer par la base */
+let relaisVerifie = false;
+async function enregistrerRelais() {
+  if (relaisVerifie || typeof sb === "undefined") return;
+  const r = await pcDirect("/relai", null, 5000);
+  const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(r.jeton)))].map(b => b.toString(16).padStart(2, "0")).join("");
+  const { data, error } = await sb.from("relais_pc").select("nom,jeton_hash").eq("nom", r.nom).maybeSingle();
+  if (error) return;   // SQL 80 pas encore lancé
+  if (!data || data.jeton_hash !== hex) { const { error: e2 } = await sb.from("relais_pc").upsert({ nom: r.nom, jeton_hash: hex }); if (e2) return; }
+  relaisVerifie = true;
+}
+/* Demandes en attente du PC : nombre dans Administratif et tâches, liste dans une fenêtre */
+let pcFile = { attente: 0, erreur: 0, vu: null, sansSql: false };
+async function pcFileCompter() {
+  if (typeof sb === "undefined") return;
+  const [d, r] = await Promise.all([sb.from("demandes_pc").select("etat").in("etat", ["attente", "en_cours", "erreur"]), sb.from("relais_pc").select("nom,vu_le")]);
+  if (d.error) { pcFile = { attente: 0, erreur: 0, vu: null, sansSql: true }; return; }
+  pcFile = { attente: d.data.filter(x => x.etat !== "erreur").length, erreur: d.data.filter(x => x.etat === "erreur").length,
+    vu: (r.data || []).map(x => x.vu_le).filter(Boolean).sort().pop() || null, sansSql: false };
+  dessinerRail();
+}
+function htmlLienPc() {
+  if (pcFile.sansSql) return "";
+  const depuis = pcFile.vu ? Math.round((Date.now() - new Date(pcFile.vu)) / 6e4) : null;
+  const vivant = depuis != null && depuis <= 3;
+  return `<div class="rail-etat small" style="flex-wrap:wrap;gap:6px"><span class="point ${vivant ? "actif" : ""}"></span>Lien avec le PC : ${depuis == null ? "jamais vu" : vivant ? "en ligne" : "vu il y a " + (depuis < 120 ? depuis + " min" : Math.round(depuis / 60) + " h")}
+    ${pcFile.attente ? `<span class="tag">${pcFile.attente} en attente</span>` : ""}${pcFile.erreur ? `<span class="tag warn">${pcFile.erreur} pas faite${pcFile.erreur > 1 ? "s" : ""}</span>` : ""}
+    <button class="btn flat" data-file-pc type="button">Voir</button></div>`;
+}
+async function voirFilePc() {
+  const l = await q(sb.from("demandes_pc").select("*").order("cree_le", { ascending: false }).limit(40));
+  const ETAT = { attente: ["", "en attente du PC"], en_cours: ["", "le PC s'en occupe"], faite: ["go", "faite"], erreur: ["warn", "pas faite"], retiree: ["", "retirée"] };
+  const quand = t => new Date(t).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  fenetre(`<h2 style="margin:0">Lien avec le PC ${aide("Ce que le pilote n'a pas pu faire lui-même parce que le PC n'était pas joignable (téléphone, ailleurs). Le programme du PC, allumé avec Windows, relève cette liste toutes les 30 secondes et l'écrit dans l'Excel avec une copie de sécurité. Si la ligne a changé dans l'Excel entre-temps, il n'écrit rien et le dit ici.")}</h2>
+    <p class="small">${pcFile.vu ? "PC vu pour la dernière fois le " + quand(pcFile.vu) + "." : "Le PC n'est jamais passé : ouvre le pilote une fois sur le PC pour l'enregistrer."}</p>
+    ${l.length ? l.map(d => `<div class="ligne" data-dpc="${d.id}"><span style="min-width:0">${esc(d.resume || d.chemin)} <span class="tag ${ETAT[d.etat][0]}">${ETAT[d.etat][1]}</span>
+        <br><span class="muted small">demandé le ${quand(d.cree_le)}${d.fait_le ? " · " + quand(d.fait_le) : ""}${d.resultat ? " · " + esc(d.resultat) : ""}</span></span>
+        <span class="row" style="flex:none">${["attente", "erreur"].includes(d.etat) ? `<button class="btn flat" data-dpc-retirer type="button">Retirer</button>` : ""}${d.etat === "erreur" ? `<button class="btn" data-dpc-refaire type="button">Réessayer</button>` : ""}</span></div>`).join("") : `<p class="muted small">Rien pour l'instant.</p>`}
+    <div class="row" style="margin-top:8px"><button class="btn flat" data-fermer>Fermer</button></div>`, (el, fermer) => {
+    el.onclick = async e => {
+      const b = e.target.closest("button"), box = b && b.closest("[data-dpc]"); if (!box) return;
+      if (b.hasAttribute("data-dpc-retirer")) await maj(sb.from("demandes_pc").update({ etat: "retiree" }).eq("id", box.dataset.dpc).in("etat", ["attente", "erreur"]));
+      if (b.hasAttribute("data-dpc-refaire")) await maj(sb.from("demandes_pc").update({ etat: "attente", resultat: null }).eq("id", box.dataset.dpc).eq("etat", "erreur"));
+      fermer(); await pcFileCompter(); voirFilePc();
+    };
+  });
 }
 /* Copie de la base : seulement si elle a changé */
 const versionsCopie = {};
@@ -1231,6 +1352,7 @@ async function chargerDuPc() {
   const carte = await pc("/carte");
   const change = !carteP || carteP.version !== carte.version;
   carteP = carte; pcRelie = true; railErreur = "";
+  enregistrerRelais().catch(() => {});
   if (change) indexerCarte();
   copierDansBase("carte", carte.version, carte).catch(() => {});
   chargerSuiviPc().catch(() => {});
@@ -1252,6 +1374,8 @@ async function demarrerRail() {
     if (copie) { carteP = copie.contenu; carteP.copie_du = copie.maj_le; indexerCarte(); }
   }
   dessinerRail();
+  pcFileCompter().catch(() => {});
+  setInterval(() => pcFileCompter().catch(() => {}), 60 * 1000);
   await adCharger().catch(() => {});
   adRafraichir(adNombre() > 0);
   setInterval(verifierPc, 5 * 60 * 1000);   // garde le programme allumé tant que le pilotage est ouvert
@@ -1316,11 +1440,12 @@ function dessinerRail() {
   if (!r) return;
   const etat = pcRelie
     ? `<span class="point actif"></span>PC relié`
-    : `<span class="point"></span>${SUR_TELEPHONE ? "Sur le téléphone : lecture seule" : "PC non relié"} ${boutonRelier()}`;
+    : `<span class="point"></span>${SUR_TELEPHONE ? "Sur le téléphone" : "PC non relié"} ${boutonRelier()}`;
+  const lien = htmlLienPc();
   const fermer = `<button class="btn flat rail-ouvrir" data-fermer-rail>Fermer</button>`;
-  if (!carteP) { r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}<p class="muted small">Les boutons arrivent une fois le PC relié une première fois.</p>`; return; }
+  if (!carteP) { r.innerHTML = `<div class="rail-etat">${etat}</div>${lien}${fermer}<p class="muted small">Les boutons arrivent une fois le PC relié une première fois.</p>`; return; }
   const titres = { admin: "Administratif", entreprise: "Tâches ponctuelles" };
-  r.innerHTML = `<div class="rail-etat">${etat}</div>${fermer}` + htmlRoutineRail() + carteP.branches.map(b => `<details class="rail-branche" ${railOuvert(b.id, false) ? "open" : ""} data-groupe="${esc(b.id)}"><summary>${titres[b.id] || esc(sansEmoji(b.t))}</summary><div class="rail-liste">${(b.enfants || []).map(blocRail).join("")}</div></details>`).join("");
+  r.innerHTML = `<div class="rail-etat">${etat}</div>${lien}${fermer}` + htmlRoutineRail() + carteP.branches.map(b => `<details class="rail-branche" ${railOuvert(b.id, false) ? "open" : ""} data-groupe="${esc(b.id)}"><summary>${titres[b.id] || esc(sansEmoji(b.t))}</summary><div class="rail-liste">${(b.enfants || []).map(blocRail).join("")}</div></details>`).join("");
   r.querySelectorAll("details[data-groupe]").forEach(d => { d.ontoggle = () => retenirRail(d.dataset.groupe, d.open); });
 }
 /* ===================== Routine administrative : le mois et le trimestre, à cocher =====================
@@ -1515,6 +1640,7 @@ document.addEventListener("click", async e => {
   const proc = e.target.closest("[data-proc]");
   if (proc) { document.getElementById("rail")?.classList.remove("ouvert"); return ouvrirVolet(proc.dataset.proc); }
   if (e.target.closest("[data-fermer-volet]")) return fermerVolet();
+  if (e.target.closest("[data-file-pc]")) return voirFilePc().catch(souci);
   if (e.target.closest("[data-fermer-rail]")) return document.getElementById("rail")?.classList.remove("ouvert");
   if (e.target.closest("[data-relier]")) return relierPc();
   const allerLigne = e.target.closest("[data-aller-ligne]");
@@ -1719,7 +1845,7 @@ async function lgEnregistrer() {
     lgP = await pc("/lignes", { version: lgP.version, changements: chg }, 90000);
     lgModifs = {}; lgNouvelles = { cours: [], services: [] };
     suiviP = null; chargerSuiviPc().catch(() => {});
-    toast("Enregistré dans l'Excel. Une copie de sécurité a été faite avant.");
+    toast(lgP._enAttente ? EN_ATTENTE_PC : "Enregistré dans l'Excel. Une copie de sécurité a été faite avant.");
     lgEnvoi = false; lgEntete(); lgDessiner();
   } catch (e) {
     lgEnvoi = false; lgBarre();
@@ -1770,7 +1896,7 @@ async function lgSupprimer(o, num) {
     catch (e) { suite = ". Mais le passage de l'appli n'a pas pu être supprimé (" + (e.message || e) + ") : fais-le dans sa fiche › Ses passages"; }
   }
   suiviP = null; chargerSuiviPc().catch(() => {});
-  toast(`Ligne ${l.ligne} supprimée de l'Excel${suite}.`);
+  toast(lgP._enAttente ? `Ligne ${l.ligne} : ${EN_ATTENTE_PC}` : `Ligne ${l.ligne} supprimée de l'Excel${suite}.`);
   lgEntete(); lgDessiner();
 }
 function lgEntete() {
@@ -1790,10 +1916,10 @@ async function vueLignes() {
   const titre = `<div class="row" style="justify-content:space-between"><h1>Lignes Excel ${aide("Les lignes des onglets SAISIE COURS et SAISIE SERVICES du TABLEAU DE BORD. Clique dans une case, change-la, puis Enregistrer dans l'Excel. Une copie de sécurité est faite avant chaque enregistrement. Une case écrite en gris est calculée par l'Excel : y taper un nombre le remplace, la vider remet le calcul.")}</h1><span id="lg-haut" class="row"></span></div>`;
   try { lgP = await pc("/lignes", null, 30000); }
   catch (e) {
-    if (SUR_TELEPHONE) return contenu(`${titre}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : ces lignes ne s'ouvrent et ne se modifient que depuis le PC.</p>`);
+    if (SUR_TELEPHONE) return contenu(`${titre}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : aucune copie n'est encore arrivée du PC. Elle arrive dès que le PC est allumé avec le lien installé (SQL 80).</p>`);
     return contenu(`${titre}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour voir et modifier les lignes.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
   }
-  const el = contenu(`${titre}<div id="lg-entete"></div><div id="lg-msg"></div>
+  const el = contenu(`${titre}${noteCopie(lgP)}<div id="lg-entete"></div><div id="lg-msg"></div>
     <datalist id="lg-eleves">${lgP.listes.eleves.map(x => `<option value="${esc(x.prenom)}">${esc(x.client)}</option>`).join("")}</datalist>
     <datalist id="lg-clients">${lgP.listes.clients.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
     <datalist id="lg-intervenants">${lgP.listes.intervenants.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
@@ -1857,7 +1983,7 @@ const ikTitre = () => `<h1>Trajets IK ${aide("Les adresses des trajets du mois, 
 async function vueIk() {
   try { ikP = await pc("/ik", null, 30000); }
   catch (e) {
-    if (SUR_TELEPHONE) return contenu(`${ikTitre()}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : les trajets IK ne s'ouvrent que depuis le PC.</p>`);
+    if (SUR_TELEPHONE) return contenu(`${ikTitre()}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : aucune copie n'est encore arrivée du PC. Elle arrive dès que le PC est allumé avec le lien installé (SQL 80).</p>`);
     return contenu(`${ikTitre()}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour voir les trajets IK.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
   }
   ikDessiner();
@@ -1922,7 +2048,7 @@ async function ikAjouter(f, confirmer) {
     if (r.doublon) { b.disabled = false; if (confirm(r.doublon + " L'ajouter quand même ?")) return ikAjouter(f, true); return; }
     ikP = r; ikErreur = ""; ikSource = "";
     ikMois = new Date(Number(trajet.date.slice(0, 4)), Number(trajet.date.slice(5, 7)) - 1, 1);
-    toast("Trajet ajouté dans l'Excel (ligne " + r.ajoute.ligne + ")");
+    toast(r._enAttente ? EN_ATTENTE_PC : "Trajet ajouté dans l'Excel (ligne " + r.ajoute.ligne + ")");
     ikDessiner();
   } catch (e) { ikErreur = e.message || String(e); ikDessiner(); }
 }
@@ -2079,7 +2205,7 @@ const hdTitre = () => `<h1>Déclarer mes heures ${aide("Tes cours, depuis le PC,
 async function vueHeures() {
   try { lgP = await pc("/lignes", null, 30000); }
   catch (e) {
-    if (SUR_TELEPHONE) return contenu(`${hdTitre()}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : les heures se déclarent ici seulement depuis le PC.</p>`);
+    if (SUR_TELEPHONE) return contenu(`${hdTitre()}<p class="muted" style="margin-top:10px">L'Excel est sur le PC : aucune copie n'est encore arrivée du PC. Elle arrive dès que le PC est allumé avec le lien installé (SQL 80).</p>`);
     return contenu(`${hdTitre()}<p class="muted" style="margin:10px 0">L'Excel est sur ce PC : relie-le pour déclarer tes heures.</p>${boutonRelier()}${/refusé|inconnu/.test(e.message || "") ? `<p class="err small" style="margin-top:8px">${esc(e.message)}</p>` : ""}`);
   }
   await hdMemoireLire();
@@ -2222,7 +2348,7 @@ async function hdEnregistrer(bouton) {
   hdBrouillon = hdBrouillon.filter(l => l.cote); hdGarder(); hdErreur = "";
   hdMois = (d => new Date(d.getFullYear(), d.getMonth(), 1))(new Date(lignes[nb - 1].jour + "T12:00"));
   suiviP = null; chargerSuiviPc().catch(() => {});
-  toast(nb + " cours enregistré" + (nb > 1 ? "s" : "") + " dans l'Excel. Une copie de sécurité a été faite avant.");
+  toast(lgP._enAttente ? nb + " cours : " + EN_ATTENTE_PC : nb + " cours enregistré" + (nb > 1 ? "s" : "") + " dans l'Excel. Une copie de sécurité a été faite avant.");
   hdDessiner();
 }
 
@@ -3703,7 +3829,7 @@ async function emEnvoyer(x, apres) {
 }
 /* L'élève d'un RDV (prénom de la fiche CLIENTS COURS si on le trouve) ; lit l'Excel si le PC est relié */
 async function emEleveDuRdv(x) {
-  if (!lgP && !SUR_TELEPHONE) { try { lgP = await pc("/lignes", null, 15000); } catch (e) {} }   // PC pas relié : l'élève se choisira dans la page
+  if (!lgP) { try { lgP = await pc("/lignes", null, 15000); } catch (e) {} }   // PC pas relié : l'élève se choisira dans la page
   const c = x.client, eleves = (c && c.eleves) || [], motsTitre = new Set(norm(sansEmoji(x.titre || "")).split(" "));
   const eleve = eleves.find(e => motsTitre.has(norm(e).split(" ")[0])) || (eleves.length === 1 ? eleves[0] : "");
   const ecrit = eleve ? norm(eleve).split(" ")[0] : hdMots(sansEmoji(x.titre || "")).join(" ").slice(0, 60);
@@ -3750,13 +3876,12 @@ async function emVersReporting(x, k) {
   hdBrouillon.push({ eleve: prenom, ecrit, jour: x.jour, minutes, tarif: "", moitie: !!prenom && !!lgP && hdMoitieHabituelle(prenom), note: "",
     lu: "RDV de l'emploi du temps, " + emHeure(x) + " : " + sansEmoji(x.titre || ""), cle: Math.random().toString(36).slice(2), rdv: k });
   hdGarder();
-  return "Mis dans reporting : à vérifier puis enregistrer dans Chiffres › Déclarer mes heures (sur ce PC).";
+  return "Mis dans reporting : à vérifier puis enregistrer dans Chiffres › Déclarer mes heures.";
 }
 /* Le trajet d'un RDV hors prestation : lieu, adresse et motif notés à sa création ; adresse manquante = demandée une fois */
 async function emTrajet(x) {
-  if (SUR_TELEPHONE) { toast("L'Excel est sur le PC : mets ce RDV dans IK depuis le PC."); return null; }
   try { if (!ikP) ikP = await pc("/ik", null, 30000); }
-  catch (e) { toast("L'Excel est sur le PC : relie-le (Chiffres › Trajets IK), puis réessaie."); return null; }
+  catch (e) { toast("L'Excel est sur le PC et aucune copie n'est encore arrivée : réessaie depuis le PC."); return null; }
   const n = x.hp, lieu = String(n.lieu || n.objet || sansEmoji(x.titre || "")).trim().slice(0, 120);
   const connu = (ikP.lieux || []).find(l => norm(l[0]) === norm(lieu));
   const t = { date: x.jour, lieu, adresse: String(n.adresse || (connu && connu[1]) || "").trim().slice(0, 300), motif: String(n.objet || "").trim().slice(0, 200) };
@@ -3783,6 +3908,7 @@ async function emVersIk(trajet) {
       r = await pc("/ik", { version: ikP.version, trajet, confirmer: true }, 60000);
     }
     ikP = r;
+    if (r._enAttente) return "Mis dans IK : " + EN_ATTENTE_PC;
     return "Mis dans IK : trajet ajouté dans IK BENJAMIN (ligne " + r.ajoute.ligne + ").";
   } catch (e) { ikP = null; throw e; }   // relu au prochain essai (l'Excel a pu changer)
 }
@@ -5604,6 +5730,7 @@ async function calculReseau(m0, m1) {
   const tarifs = await chargerTarifs();
   if (tarifs === false) return { erreur: "Il faut d'abord lancer le SQL 50 (tarifs à l'heure des presta)." };
   const pts = await q(sb.from("pointages").select("id,intervenante_id,client_id,arrivee,depart,activite").gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).not("depart", "is", null));
+  const xl = await lignesPourCalcul();
   const enCours = (a, date) => (!a.debut || a.debut <= date) && (!a.fin || a.fin >= date);
   const groupes = {}, cours = { h: 0 }, alertes = {}, sortants = {};
   const groupe = e => { const k = e ? e.id : "direct"; return groupes[k] || (groupes[k] = { equipe: e, prestas: {} }); };
@@ -5618,7 +5745,10 @@ async function calculReseau(m0, m1) {
     const e = equipeClientAu(x.client_id, date), g = groupe(e);
     const r = g.prestas[p.id] || (g.prestas[p.id] = { presta: p, h: 0, hc: 0, ht: 0, paye: 0, cheffe: 0, verser: 0, oikos: 0, apporte: 0, dispo: 0, dispoH: 0, dispoDe: new Set(), manque: new Set() });
     r.h += h;
-    const t = tarifAu(tarifs, p.id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
+    let t = tarifAu(tarifs, p.id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
+    if (!prix || !(t.taux > 0)) { const ex = prixExcelAu(xl, c, act, date, p);
+      if (ex && !prix) prix = ex.prix;
+      if (ex && ex.paye && !(t.taux > 0)) t = { taux: ex.paye, origine: "Excel" }; }
     const tx = e ? tauxEquipeAu(e, date) : null, soc = modeEq(e, tx) === "societe";
     /* Le presta vient d'un autre réseau que le client : il faut une mise à disposition (SQL 58) */
     const eP = cacheMembres ? equipeAuJour(p, date) : e, croise = !!cacheMembres && idReseau(eP) !== idReseau(e);
@@ -6072,6 +6202,29 @@ function clientsApportes(e) {
    (Clients › Prestataires › « Ce que rapporte ce client », clients.prevision) moins son tarif à l'heure du jour du passage
    (tarifs_presta, zone de la ligne client-presta ce jour-là, comme « Déjà fait »). Rien n'est écrit ; l'appli des presta ne lit rien de cela.
    OIKOS et Benjamin enseignement sont comptés à part (Cours = Benjamin enseignement), sans total commun. */
+/* Prix de l'heure facturé au client quand sa fiche n'en a pas (« Ce que rapporte ce client » vide) :
+   celui des lignes de SAISIE SERVICES, qui sert à sa facture (taux de la ligne, sinon de sa fiche CLIENTS SERVICES).
+   Même client et même activité ; la ligne du même jour d'abord, sinon la plus proche. Lu sur le PC ou dans sa copie. */
+async function lignesPourCalcul() {
+  if (lgP && lgP.services) return lgP;
+  try { lgP = await pc("/lignes", null, 30000); } catch (e) { return null; }
+  return lgP;
+}
+function memeClientExcel(nomExcel, c) {
+  const civ = new Set(["m", "mr", "mme", "mlle", "monsieur", "madame", "mademoiselle", "et"]);
+  const mots = t => norm(t).split(" ").filter(m => m.length > 1 && !civ.has(m)), a = mots(nomExcel), b = mots(c && c.nom);
+  if (!a.length || !b.length) return false;
+  const [pt, gd] = a.length <= b.length ? [a, b] : [b, a];
+  return pt.every(m => gd.includes(m));
+}
+function prixExcelAu(xl, c, act, date, p) {
+  if (!xl || !xl.services || !c) return null;
+  const ls = xl.services.filter(l => l.taux > 0 && norm(l.activite) === norm(act) && memeClientExcel(l.client, c));
+  if (!ls.length) return null;
+  const ecart = l => Math.abs(new Date(l.date) - new Date(date)) + (p && memeIntervenant(l.intervenant, p) ? 0 : 1);
+  const l = ls.reduce((m, x) => ecart(x) < ecart(m) ? x : m);
+  return { prix: +l.taux, paye: l.date === date && p && memeIntervenant(l.intervenant, p) && l.paye > 0 ? +l.paye : null };
+}
 const bnMois = {};   // mois affiché, par presta
 async function beneficePresta(boite, p, attrib) {
   const id = p.id, auj = new Date();
@@ -6085,14 +6238,19 @@ async function beneficePresta(boite, p, attrib) {
   const tarifs = await chargerTarifs();
   if (tarifs === false) { boite.innerHTML = nav + `<p class="muted small" style="margin:0">Il faut d'abord lancer le SQL 50 dans Supabase (tarifs à l'heure des presta).</p>`; return; }
   const pts = await q(sb.from("pointages").select("id,client_id,arrivee,depart,activite").eq("intervenante_id", id).gte("arrivee", m0.toISOString()).lt("arrivee", m1.toISOString()).not("depart", "is", null).order("arrivee"));
+  const xl = await lignesPourCalcul();
+  let duExcel = 0;
   const enCours = (a, date) => (!a.debut || a.debut <= date) && (!a.fin || a.fin >= date);
   const ligneDu = (cid, date) => { const l = (attrib || []).filter(a => a.client_id === cid); return l.find(a => enCours(a, date) && !ligneDeMission(a)) || l.find(a => enCours(a, date)) || null; };
   const groupes = { OIKOS: {}, BE: {} };
   pts.forEach(x => {
     const date = ymd(new Date(x.arrivee)), c = cacheClients.find(k => k.id === x.client_id) || {}, a = ligneDu(x.client_id, date);
     const act = x.activite || (a && a.activite) || activitePrincipale(activitesClient(c));
-    const t = tarifAu(tarifs, id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
+    let t = tarifAu(tarifs, id, act, a ? zoneAu(a, date) : null, date), prix = +((c.prevision || {})[act] || {}).prix || 0;
     const h = (new Date(x.depart) - new Date(x.arrivee)) / 36e5; if (!(h > 0)) return;
+    if (!prix || !(t.taux > 0)) { const e = prixExcelAu(xl, c, act, date, p);
+      if (e && !prix) { prix = e.prix; duExcel++; }
+      if (e && e.paye && !(t.taux > 0)) t = { taux: e.paye, origine: "Excel" }; }
     const g = groupes[act === "Cours" ? "BE" : "OIKOS"], cle = x.client_id + "|" + act;
     const r = g[cle] || (g[cle] = { client: x.client_id, act, h: 0, hc: 0, fact: 0, paye: 0, sansTarif: 0, sansPrix: 0, pourquoi: "" });
     r.h += h;
@@ -6111,7 +6269,7 @@ async function beneficePresta(boite, p, attrib) {
   };
   const corps = bloc("OIKOS", "OIKOS") + bloc("BE", "Benjamin enseignement");
   boite.innerHTML = nav + (corps || `<p class="muted small" style="margin:0">Aucun passage terminé ce mois-ci.</p>`)
-    + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`
+    + `<p class="muted small" style="margin:8px 0 0">Prix de l'heure facturé au client (Clients › sa fiche › Prestataires › Ce que rapporte ce client${duExcel ? ` ; sinon celui de ses lignes de l'Excel, utilisé ici pour ${duExcel} passage${duExcel > 1 ? "s" : ""}` : ", sinon celui de ses lignes de l'Excel"}) moins son tarif à l'heure du jour du passage. Une heure sans tarif ou sans prix n'est pas comptée. Charges, URSSAF, frais et trajets ne sont pas déduits.</p>`
     + (equipeActuelle(p) ? `<p class="small" style="margin:6px 0 0">${eqPoint(equipeActuelle(p))}Dans l'équipe de <b>${esc(equipeActuelle(p).cheffe_nom)}</b> : la part ${duChef(equipeActuelle(p))} et ce qui reste à OIKOS sont dans Équipe › Réseau (en HT).</p>` : "");
 }
 
@@ -6172,9 +6330,10 @@ async function facturesDuPresta(zone, p, factures, docs, recharger) {
         <br><span class="muted small">${controle(l)}</span>
         ${l.f && l.f.etat !== "validee" ? `<br><span class="small">${e.length ? ok(false) + " " + esc(e.join(" ; ")) : ok(true) + " tout correspond"}</span>` : ""}
         ${l.f && l.f.etat === "refusee" && l.f.motif ? `<br><span class="muted small">Motif : ${esc(l.f.motif)}</span>` : ""}
-        ${l.f && l.f.etat === "validee" && l.f.controle ? `<br><span class="muted small">${esc(l.f.controle)}</span>` : ""}</span>
+        ${l.f && l.f.etat === "validee" && l.f.controle ? `<br><span class="muted small">${esc(l.f.controle)}</span>` : ""}
+        ${l.f && l.f.etat === "validee" && l.f.numero && l.sansNum.length ? `<br><span class="small" style="color:var(--warn-vif)">${ico("alerte")} n° pas encore dans l'Excel sur ${l.sansNum.length} ligne(s)</span>` : ""}</span>
       <span class="row" style="flex:none">${l.pages.map((d, k) => `<button class="btn" data-voir="${esc(d.fichier)}">Voir${l.pages.length > 1 ? " p. " + (k + 1) : ""}</button>`).join("")}
-        ${l.f && l.f.etat !== "validee" ? `<button class="btn go" data-fm-ok>Valider</button>` : ""}${l.f && ["envoyee", "aucune"].includes(l.f.etat) ? `<button class="btn stop" data-fm-ko>Refuser</button>` : ""}</span></div>`; }).join("")
+        ${l.f && l.f.etat !== "validee" ? `<button class="btn go" data-fm-ok>Valider</button>` : ""}${l.f && l.f.etat === "validee" && l.f.numero && l.sansNum.length ? `<button class="btn" data-fm-xl>Écrire le n° dans l'Excel</button>` : ""}${l.f && ["envoyee", "aucune"].includes(l.f.etat) ? `<button class="btn stop" data-fm-ko>Refuser</button>` : ""}</span></div>`; }).join("")
     + (sansMois.length ? `<h3>Envoyées comme papier, sans mois ${aide("Il a envoyé sa facture par « Autres documents » au lieu du bouton du mois : elle est bien dans la case Factures de son dossier. Choisis le mois pour la contrôler comme les autres.")}</h3>`
       + sansMois.map(d => `<div class="ligne" data-sm="${d.id}"><span style="min-width:0">${esc(d.libelle)} <span class="muted small">envoyée le ${jour(d.cree_le)}</span></span>
         <span class="row" style="flex:none"><button class="btn" data-voir="${esc(d.fichier.startsWith("drive:") && d.drive_url ? d.drive_url : d.fichier)}">Voir</button>
@@ -6234,6 +6393,15 @@ async function facturesDuPresta(zone, p, factures, docs, recharger) {
       if (l.pages.length) await maj(sb.from("documents").update({ etat: "refuse", motif: "Facture refusée", traite_le: new Date().toISOString() }).in("id", l.pages.map(d => d.id)));
       toast("Refusée : son appli lui redemande sa facture"); return recharger();
     }
+    if (b.hasAttribute("data-fm-xl")) {   // validée sans le PC (avant le lien téléphone-PC) : on rattrape
+      if (!confirm(`Écrire le n° « ${l.f.numero} » sur ${l.sansNum.length} ligne(s) de l'Excel (FACTURE INTERVENANT) ?`)) return;
+      b.disabled = true;
+      try {
+        const r = await pc("/lignes", { version: xl.version, changements: l.sansNum.map(x => ({ onglet: "services", ligne: x.ligne, valeurs: { facture_interv: l.f.numero } })) }, 90000);
+        lgP = r; suiviP = null;
+        toast(r._enAttente ? EN_ATTENTE_PC : "Écrit dans l'Excel. Une copie de sécurité a été faite avant."); return recharger();
+      } catch (x) { b.disabled = false; return souci(x); }
+    }
     if (!b.hasAttribute("data-fm-ok")) return;
     const e2 = ecarts(l), ecrire = l.f.etat === "envoyee" && l.f.numero && l.sansNum.length;
     if (l.f.etat === "envoyee" && l.pages.length) {   // relit le PDF : le n° et le montant tapés sont-ils bien ceux de la facture ?
@@ -6247,14 +6415,15 @@ async function facturesDuPresta(zone, p, factures, docs, recharger) {
       : l.f.etat === "envoyee" && !l.lx ? "Le PC n'est pas relié : valider sans écrire le numéro dans l'Excel ?" : "Valider ?"].filter(Boolean).join("\n\n"))) return;
     b.disabled = true;
     try {
+      let attente = false;
       if (ecrire) {
         const r = await pc("/lignes", { version: xl.version, changements: l.sansNum.map(x => ({ onglet: "services", ligne: x.ligne, valeurs: { facture_interv: l.f.numero } })) }, 90000);
-        lgP = r; suiviP = null;
+        lgP = r; suiviP = null; attente = !!r._enAttente;
       }
       await maj(sb.from("factures_mois").update({ etat: "validee", motif: null, traite_le: new Date().toISOString(),
-        controle: `Validée le ${new Date().toLocaleDateString("fr-FR")} : ${controle(l)}${ecrire ? ` · n° écrit sur ${l.sansNum.length} ligne(s) de l'Excel` : ""}${e2.length ? " · écart accepté : " + e2.join(" ; ") : ""}` }).eq("id", l.f.id));
+        controle: `Validée le ${new Date().toLocaleDateString("fr-FR")} : ${controle(l)}${ecrire ? ` · n° ${attente ? "envoyé au PC pour" : "écrit sur"} ${l.sansNum.length} ligne(s) de l'Excel` : ""}${e2.length ? " · écart accepté : " + e2.join(" ; ") : ""}` }).eq("id", l.f.id));
       if (l.pages.length) await maj(sb.from("documents").update({ etat: "valide", motif: null, traite_le: new Date().toISOString() }).in("id", l.pages.map(d => d.id)));
-      toast(ecrire ? "Validée et écrite dans l'Excel. Une copie de sécurité a été faite avant." : "Validée"); recharger();
+      toast(attente ? "Validée. " + EN_ATTENTE_PC : ecrire ? "Validée et écrite dans l'Excel. Une copie de sécurité a été faite avant." : "Validée"); recharger();
     } catch (x) { b.disabled = false; souci(x); }
   };
 }
