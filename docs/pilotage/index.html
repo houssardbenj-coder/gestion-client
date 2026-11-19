@@ -308,6 +308,11 @@ details.pli[open]>summary{margin-bottom:10px}
 .tf-bloc:first-child{border-top:0;margin-top:0}
 details.pli .pli-alerte{color:var(--warn-vif);display:inline-flex}
 details.pli .pli-ok{color:var(--go);display:inline-flex}
+/* fiche presta : l'essentiel en une ligne, le reste replié */
+.fp-faits{display:flex;flex-wrap:wrap;gap:14px 28px}
+.fp-fait{display:flex;flex-direction:column;gap:2px;min-width:0}
+.fp-fait b{font-size:16px}
+.fp-fait b.fp-pb{color:var(--warn-vif)}
 .vf{border-top:1px solid var(--line);margin-top:10px;padding-top:4px}
 .vf-l{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:.92em}
 .vf-l>span:last-child{min-width:0;overflow-wrap:anywhere}
@@ -5462,12 +5467,14 @@ function changerEquipe(p) {
   fenetre(`<h2 style="margin:0">Équipe de ${esc(nomPers(p))}</h2>
     <p style="margin:6px 0 0">Aujourd'hui : <b>${e ? eqPoint(e) + "équipe de " + esc(e.cheffe_nom) : "presta d'OIKOS (sans chef)"}</b></p>
     <form id="ce" style="display:grid;gap:10px;margin-top:10px">
+      ${(cacheEquipes || []).some(x => x.active) ? "" : `<p style="margin:0"><span class="tag warn">${ico("alerte")} Aucun chef créé</span> <span class="muted small">La liste n'a donc que « sans chef » : crée d'abord le chef, puis reviens ici.</span></p>`}
       <div class="deux"><label class="f">Désormais<select name="eq"><option value="">Presta d'OIKOS (sans chef)</option>${(cacheEquipes || []).filter(x => x.active).map(x => `<option value="${x.id}" ${e && e.id === x.id ? "selected" : ""}>Équipe de ${esc(x.cheffe_nom)}</option>`).join("")}</select></label>
         <label class="f">À partir du<input type="date" name="depuis" value="${auj}" max="${auj}"></label></div>
       <p class="muted small" style="margin:0">Les passages d'avant cette date restent comptés pour son ancienne équipe (ou pour OIKOS).</p>
       <p class="err" id="ce-err"></p>
-      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button class="btn flat" type="button" id="ce-nv-chef">${ico("plus")} Créer un chef</button><button class="btn flat" type="button" data-fermer>Annuler</button></div></form>
     ${per.length ? `<h3>Historique</h3>${per.map(m => { const x = equipeDe(m.equipe_id); return `<div class="ligne"><span>${x ? eqPoint(x) + "Équipe de " + esc(x.cheffe_nom) : "Équipe supprimée"}</span><span class="muted small">du ${tfDateFr(m.debut)}${m.fin ? " au " + tfDateFr(m.fin) : " à aujourd'hui"}</span></div>`; }).join("")}` : ""}`, (el, fermer) => {
+    el.querySelector("#ce-nv-chef").onclick = () => { fermer(); ficheCheffe(null); };
     el.querySelector("#ce").onsubmit = async ev => {
       ev.preventDefault();
       const f = ev.target, err = el.querySelector("#ce-err"), cible = f.eq.value || null, d = f.depuis.value;
@@ -5779,29 +5786,20 @@ async function ficheIntervenante(id) {
   const champ =(k, t) => p[k] ? `<div class="ligne"><span class="muted">${t}</span><span>${esc(Array.isArray(p[k]) ? p[k].join(", ") : p[k])}</span></div>` : "";
   fenetre(`<div class="row" style="justify-content:space-between"><h1>${esc(nomPers(p))}${pastilleCompte(p)}${p.actif && p.gele ? ` <span class="tag warn${vaVers({ presta: p.id, pli: "papiers" }, "Clique pour ouvrir ses papiers")}">${ico("cadenas")} gelé</span>` : ""}${vigTag(p)}</h1>
       <span class="row"><button class="btn primary" id="ecrire" title="Lui envoyer un message dans son appli">${ico("bulle")} Lui écrire</button>${p.actif ? `<button class="btn ${p.gele || vigGele(p) ? "go" : ""}" id="gel" title="Gelé : il consulte son appli, mais ne peut que modifier ses informations et envoyer ses papiers">${p.gele || vigGele(p) ? ico("ouvert") + " Dégeler" : ico("cadenas") + " Geler"}</button>` : ""}<button class="btn flat" data-fermer>Fermer</button></span></div>
-    <div class="deux">
-      <section class="card"><h3 style="margin-top:0">Réglages</h3>
-        <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
-        ${cacheEquipes ? `<div class="ligne" style="margin-top:8px"><span>Équipe : <b>${equipeActuelle(p) ? eqPoint(equipeActuelle(p)) + "équipe de " + esc(equipeActuelle(p).cheffe_nom) : "presta d'OIKOS"}</b></span><button class="btn flat" type="button" id="eqp-changer">Changer</button></div>` : ""}
-        <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
-        ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
-        ${p.archive_le ? `<p style="margin-top:6px"><span class="tag off">${ico("archive")} archivé le ${jour(p.archive_le)}</span></p><p class="muted small" style="margin-top:4px">Accès coupé et compte bloqué. Pour le rouvrir : Presta › Archivés › Sortir des archives.</p>` : `<label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert</label>
-        <p class="muted small" style="margin-top:4px">Décocher coupe l'accès : son appli s'efface, ses données restent ici. Archiver sur sa ligne (à tout moment) coupe l'accès et le range dans les archivés.</p>`}
-        <div class="row" style="margin-top:10px"><button class="btn primary" id="enr">Enregistrer</button>
-          <button class="btn flat" id="nv-code" title="Lui envoie par mail un nouveau code : il devra rechoisir son mot de passe">${ico("mail")} Nouveau code d'accès</button></div>
-        <h3>Liens</h3>
-        <div class="row">${p.feuille_heures ? `<a class="btn" href="${esc(p.feuille_heures)}" target="_blank" rel="noopener">${ico("reporting")} Feuille d'heures</a>` : `<span class="muted small">Feuille d'heures : créée par le pont Google</span>`}
-        ${p.dossier_drive ? `<a class="btn" href="https://drive.google.com/drive/folders/${esc(p.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Dossier Drive</a>` : ""}</div>
-        <h3>Heures du mois</h3><p><b>${heures(total)}</b> <span class="muted small">· ${pts.length} passage(s)</span></p></section>
-      <section class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Ses informations</h3>
-          <button class="btn flat" type="button" id="vf-btn" title="Contrôle son SIRET, son n° de TVA et l'état de son entreprise dans l'annuaire officiel, et la date de ses papiers">${ico("loupe")} Vérifier ses infos</button></div>
-        ${champ("email", "E-mail")}${champ("telephone", "Téléphone")}${champ("adresse", "Adresse")}${champ("date_naissance", "Naissance")}${champ("siret", "SIRET")}
-        ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
-        ${p.profil_complet ? "" : `<p class="muted small">Fiche pas encore remplie par lui.</p>`}<div id="vf"></div></section>
-    </div>
-    <details class="card pli" data-pli="benefice" ${pliOuvert.benefice !== false ? "open" : ""}><summary>${ico("euro")} Bénéfice du mois <span class="tag">toi seul</span></summary><div id="bnp"></div></details>
-    <section class="card"><h3 style="margin-top:0">Ses passages ${aide("Comme sa feuille d'heures, mais relié à son appli : ce que tu modifies ici change tout de suite dans son appli (marqué « corrigé par OIKOS »), et le pont réécrit la même ligne de sa feuille d'heures dans les 5 minutes.")}</h3>
-      <div id="pp"></div></section>
+    <section class="card fp-resume">
+      <div class="fp-faits">
+        <span class="fp-fait"><span class="muted small">Statut</span><b>${p.statut ? STATUTS[p.statut] || p.statut : "à régler"}</b></span>
+        ${cacheEquipes ? `<span class="fp-fait"><span class="muted small">Chef</span><span class="row" style="gap:6px"><b>${equipeActuelle(p) ? eqPoint(equipeActuelle(p)) + esc(equipeActuelle(p).cheffe_nom) : "aucun (OIKOS)"}</b><button class="btn flat" type="button" id="eqp-changer">Changer</button></span></span>` : ""}
+        <span class="fp-fait"><span class="muted small">Ce mois</span><b>${heures(total)} <span class="muted small" style="font-weight:400">· ${pts.length} passage${pts.length > 1 ? "s" : ""}</span></b></span>
+        <span class="fp-fait"><span class="muted small">Papiers</span><b class="${etatPap.manque ? "fp-pb" : ""}">${etatPap.ok}/${etatPap.total}${aValider ? ` <span class="muted small" style="font-weight:400">· ${aValider} à valider</span>` : ""}</b></span>
+        <span class="fp-fait"><span class="muted small">Appli</span><b class="${p.actif ? "" : "fp-pb"}">${p.archive_le ? "archivé" : p.actif ? "accès ouvert" : "accès coupé"}</b></span>
+      </div>
+      ${p.feuille_heures || p.dossier_drive ? `<div class="row" style="margin-top:10px">${p.feuille_heures ? `<a class="btn flat" href="${esc(p.feuille_heures)}" target="_blank" rel="noopener">${ico("reporting")} Feuille d'heures</a>` : ""}
+        ${p.dossier_drive ? `<a class="btn flat" href="https://drive.google.com/drive/folders/${esc(p.dossier_drive)}" target="_blank" rel="noopener">${ico("dossier")} Dossier Drive</a>` : ""}</div>` : ""}
+    </section>
+    <details class="card pli" data-pli="passages" ${pliOuvert.passages ? "open" : ""}><summary>${ico("reporting")} Ses passages <span class="tag">${heures(total)} ce mois</span></summary>
+      <p class="muted small" style="margin:0 0 8px">Ce que tu modifies ici change tout de suite dans son appli (marqué « corrigé par OIKOS ») et dans sa feuille d'heures dans les 5 minutes.</p>
+      <div id="pp"></div></details>
     <details class="card pli" data-pli="papiers" ${pliOuvert.papiers ? "open" : ""}><summary>${etatPap.manque ? `<span class="pli-alerte">${ico("alerte")}</span>` : `<span class="pli-ok">${ico("ok")}</span>`}Papiers
         ${etatPap.manque ? `<span class="tag warn">${etatPap.total - etatPap.ok} manquant${etatPap.total - etatPap.ok > 1 ? "s" : ""}</span>` : `<span class="tag">complets</span>`}
         ${aValider ? `<span class="tag">${aValider} à valider</span>` : ""}${props.length ? `<span class="tag">${props.length} trouvé${props.length > 1 ? "s" : ""} dans le Drive</span>` : ""}</summary>
@@ -5823,7 +5821,20 @@ async function ficheIntervenante(id) {
       ${aSonNom.length ? `<div class="ligne"><span style="min-width:0"><b>Notés à son nom, sans accès (${aSonNom.length})</b> ${aide("Son nom était seulement écrit sur ces clients, avant son compte. Tant que tu ne les ouvres pas, il ne les voit pas dans son appli.")}<br>${ENTREPRISES.map(([k, t]) => { const l = [...new Set(aSonNom.map(a => cacheClients.find(c => c.id === a.client_id)))].filter(c => dansEntreprise(c, k)); return l.length ? `<span class="muted small">${t} : ${l.map(c => esc(c.nom)).join(", ")}</span><br>` : ""; }).join("")}</span><button class="btn primary" data-ouvrir-clients>${ico("ouvert")} Lui ouvrir ces clients</button></div>` : ""}
       ${actives.map(a => `<div class="ligne"><span>${esc(nomClient(a.client_id))} <span class="muted small">depuis ${jour(a.debut)}</span></span><span class="row">${zoneSelectHtml(a)}<button class="btn stop" data-retire="${a.id}">Retirer</button></span></div>`).join("") || `<p class="muted small">Aucun.</p>`}
       <div class="row" style="margin-top:8px"><select id="nc" style="max-width:320px"><option value="">— confier un client —</option>${optionsClients(clientsEnCours().filter(c => !actives.some(a => a.client_id === c.id) && !dejaSuivi(c.id, nomPers(p))))}</select><button class="btn primary" id="conf">Confier</button></div></details>
-    <details class="card pli" data-pli="tarifs" ${pliOuvert.tarifs ? "open" : ""}><summary>${ico("euro")} Tarifs à l'heure <span class="tag">toi seul</span></summary><div id="tfp"></div></details>`, (el, fermer) => {
+    <details class="card pli" data-pli="benefice" ${pliOuvert.benefice ? "open" : ""}><summary>${ico("euro")} Bénéfice du mois <span class="tag">toi seul</span></summary><div id="bnp"></div></details>
+    <details class="card pli" data-pli="tarifs" ${pliOuvert.tarifs ? "open" : ""}><summary>${ico("euro")} Tarifs à l'heure <span class="tag">toi seul</span></summary><div id="tfp"></div></details>
+    <details class="card pli" data-pli="infos" ${pliOuvert.infos ? "open" : ""}><summary>${ico("personne")} Ses informations${p.profil_complet ? "" : ` <span class="tag warn">pas encore remplies</span>`}</summary>
+      ${champ("email", "E-mail")}${champ("telephone", "Téléphone")}${champ("adresse", "Adresse")}${champ("date_naissance", "Naissance")}${champ("siret", "SIRET")}
+      ${champ("activites", "Activités")}${champ("transport", "Déplacement")}${champ("iban", "IBAN")}${champ("urgence_nom", "Urgence")}${champ("urgence_tel", "Tél. urgence")}
+      <div class="row" style="margin-top:10px"><button class="btn flat" type="button" id="vf-btn" title="Contrôle son SIRET, son n° de TVA et l'état de son entreprise dans l'annuaire officiel, et la date de ses papiers">${ico("loupe")} Vérifier ses infos</button></div>
+      <div id="vf"></div></details>
+    <details class="card pli" data-pli="reglages" ${pliOuvert.reglages ? "open" : ""}><summary>${ico("reglages")} Réglages</summary>
+      <label class="f">Statut<select id="st"><option value="">— à régler —</option>${Object.entries(STATUTS).map(([k, t]) => `<option value="${k}" ${p.statut === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label class="chk" style="margin-top:8px"><input type="checkbox" id="ae" ${p.ae_a_creer ? "checked" : ""}>OIKOS crée son auto-entreprise</label>
+      ${factures ? `<label class="chk" style="margin-top:6px"><input type="checkbox" id="fpo" ${p.facture_par_oikos ? "checked" : ""}>OIKOS fait sa facture (autofacturation) ${aide("Coché : son appli ne lui demande pas sa facture du mois (comme ILAHA). Décoché : chaque début de mois, son appli lui demande d'importer sa facture, ou « Pas de presta ce mois-ci ».")}</label>` : ""}
+      ${p.archive_le ? `<p style="margin-top:6px"><span class="tag off">${ico("archive")} archivé le ${jour(p.archive_le)}</span> <span class="muted small">Pour le rouvrir : Presta › Archivés › Sortir des archives.</span></p>` : `<label class="chk" style="margin-top:6px"><input type="checkbox" id="ac" ${p.actif ? "checked" : ""}>Accès à l'appli ouvert ${aide("Décocher coupe l'accès : son appli s'efface, ses données restent ici. Archiver sur sa carte (à tout moment) coupe l'accès et le range dans les archivés.")}</label>`}
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="enr">Enregistrer</button>
+        <button class="btn flat" id="nv-code" title="Lui envoie par mail un nouveau code : il devra rechoisir son mot de passe">${ico("mail")} Nouveau code d'accès</button></div></details>`, (el, fermer) => {
     el.dataset.presta = id;   // pour les messages orange qui ouvrent un pli de cette fiche
     const recharger = () => { fermer(); ficheIntervenante(id); };
     el.querySelectorAll("details[data-pli]").forEach(d => { d.ontoggle = () => { pliOuvert[d.dataset.pli] = d.open; }; });
