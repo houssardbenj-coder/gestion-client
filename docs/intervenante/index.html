@@ -788,6 +788,11 @@ async function sortir() { try { await sb.auth.signOut({ scope: "local" }); } cat
 /* ===================== État ===================== */
 let moi = null, clients = [], onglet = "jour", moisVu = debutJour(new Date(new Date().setDate(1)));
 if (new URLSearchParams(location.search).get("onglet") === "missions") onglet = "missions";
+/* Porte du chef de réseau (19/11/2026) : la même appli publiée aussi dans /chef/ s'ouvre directement sur l'espace du chef */
+const PORTE_CHEF = /\/chef\/(index\.html)?$/.test(location.pathname);
+const SOUS_TITRE = PORTE_CHEF ? "Espace chef de réseau" : "Espace intervenant";
+if (PORTE_CHEF) { document.title = "OIKOS Chef de réseau"; document.querySelectorAll(".i-sous").forEach(e => e.textContent = SOUS_TITRE); }
+let porteChefVue = false;   // compte qui n'est pas chef ouvert par /chef/ : prévenu une fois
 let notifAVerifier = onglet === "missions";   // ouverte par une notification : mission ou message, on regarde ce qui attend
 let cache = {};   // créneaux, pointages du mois… rechargés à chaque affichage
 const nomClient = id => (clients.find(c => c.id === id) || {}).nom || "Client";
@@ -838,7 +843,7 @@ async function chargerMoi() {
 
 /* ===================== Écrans d'accès ===================== */
 function page(html, solo) { couleurBarre(couleurFond()); app.innerHTML = `<main class="page${solo ? " solo" : ""}">${html}</main>`; window.scrollTo(0, 0); }
-const LOGO = `<div class="marque-acc"><img class="tuile" src="logo-oikos.png" alt=""><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">Espace intervenant</div></div>`;
+const LOGO = `<div class="marque-acc"><img class="tuile" src="logo-oikos.png" alt=""><div class="marque-nom"><b>Oikos</b> Sud Services</div><div class="marque-sous">${SOUS_TITRE}</div></div>`;
 
 function ecranCode(message) {
   page(`${LOGO}
@@ -1082,13 +1087,14 @@ const choixClient = (sel, nom = "client") => `<label class="f">Client<select nam
 const ONGLETS = [["jour", "jour", "Aujourd'hui"], ["missions", "mission", "Missions"], ["agenda", "agenda", "Agenda"], ["clients", "clients", "Clients"], ["mois", "reporting", "Reporting"], ["moi", "personne", "Moi"]];
 /* Espace du chef d'équipe (SQL 64) : un chef garde son appli de presta ; l'interrupteur de l'en-tête ouvre son espace de chef */
 const ONGLETS_CHEF = [["ch-accueil", "jour", "Accueil"], ["ch-planning", "agenda", "Planning"], ["ch-clients", "clients", "Clients"], ["ch-argent", "euro", "Argent"]];
-let espace = LS.get("espace") === "chef" ? "chef" : "presta";
+let espace = PORTE_CHEF || LS.get("espace") === "chef" ? "chef" : "presta";
 const enChef = () => !!(moi && moi.cheffe_reseau) && espace === "chef";
 const ongletsActifs = () => enChef() ? ONGLETS_CHEF : ONGLETS;
 let ongletAffiche = null, sensSuivant = null;
 const rangOnglet = k => ongletsActifs().findIndex(x => x[0] === k);
 async function accueil(o) {
   if (o) onglet = o;
+  if (PORTE_CHEF && moi && !moi.cheffe_reseau && !porteChefVue) { porteChefVue = true; setTimeout(() => toast("Ce compte n'est pas chef de réseau : voici ton appli de presta."), 600); }
   if (enChef() && !onglet.startsWith("ch-") && onglet !== "messages" && onglet !== "materiel") onglet = "ch-accueil";
   if (!enChef() && onglet.startsWith("ch-")) onglet = "jour";
   couleurBarre(couleurTete());

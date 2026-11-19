@@ -1,0 +1,34 @@
+/* Garde seulement le code de l'appli (jamais les données) pour qu'elle s'ouvre vite.
+   Toujours le réseau d'abord : une nouvelle version arrive dès qu'il y a Internet. */
+const VERSION = "oikos-chef-1";   // porte /chef/ : monter ce numéro à chaque publication
+const FICHIERS = ["./", "index.html", "documents-oikos.js", "qr-oikos.js", "outils-oikos.js", "manifest.webmanifest", "icone-192.png", "icone-512.png", "logo-oikos.png", "logo-clair.png", "logo-mot.png"];
+
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FICHIERS)).then(() => self.skipWaiting()));
+});
+self.addEventListener("activate", e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+self.addEventListener("fetch", e => {
+  const u = new URL(e.request.url);
+  if (e.request.method !== "GET" || u.hostname.endsWith("supabase.co")) return;   // les données ne passent jamais par le cache
+  e.respondWith(fetch(e.request).then(r => {
+    if (r.ok && (u.origin === location.origin || u.hostname === "cdn.jsdelivr.net")) {
+      const copie = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copie));
+    }
+    return r;
+  }).catch(() => caches.match(e.request)));
+});
+
+/* Notification du téléphone : sans contenu (rien de privé ne transite), le texte est ici */
+self.addEventListener("push", e => {
+  e.waitUntil(self.registration.showNotification("OIKOS : du nouveau", { body: "Une mission ou un message t'attend. Touche pour voir.", icon: "icone-192.png", badge: "icone-192.png", tag: "oikos-nouveau", renotify: true, vibrate: [200, 100, 200] }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(l => {
+    const ouvert = l[0];
+    if (ouvert) { ouvert.postMessage("missions"); return ouvert.focus(); }
+    return self.clients.openWindow("./?onglet=missions");
+  }));
+});
