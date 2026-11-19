@@ -5940,11 +5940,14 @@ async function calculReseau(m0, m1) {
     /* Le presta vient d'un autre réseau que le client : il faut une mise à disposition (SQL 58) */
     const eP = cacheMembres ? equipeAuJour(p, date) : e, croise = !!cacheMembres && idReseau(eP) !== idReseau(e);
     const socP = croise && !!eP && modeEq(eP, tauxEquipeAu(eP, date)) === "societe", sansMise = croise && !miseAu(p.id, idReseau(e), date);
-    if (!(t.taux > 0)) r.manque.add("tarif du presta");
-    if (!prix) r.manque.add("prix client");
-    if (soc && !tx) r.manque.add("commission d'OIKOS pour sa société");
+    /* 19/11/2026 : on garde aussi QUI manque (client, activité, heures) pour que le message orange mène au bon endroit */
+    const noter = raison => { r.manque.add(raison); const de = (r.manqueDe || (r.manqueDe = {}))[raison] || (r.manqueDe[raison] = {}), k = (x.client_id || "?") + "|" + act;
+      const o = de[k] || (de[k] = { client: c.id ? c : null, act, h: 0, equipe: e, debut: date }); o.h += h; if (date < o.debut) o.debut = date; };
+    if (!(t.taux > 0)) noter("tarif du presta");
+    if (!prix) noter("prix client");
+    if (soc && !tx) noter("commission d'OIKOS pour sa société");
     if (sansMise) {
-      r.manque.add("mise à disposition");
+      noter("mise à disposition");
       const k = p.id + "|" + (idReseau(e) || "oikos"), al = alertes[k] || (alertes[k] = { presta: p, de: eP, vers: e, h: 0, debut: date });
       al.h += h; if (date < al.debut) al.debut = date;
     }
@@ -5977,7 +5980,8 @@ async function calculReseau(m0, m1) {
     if (soc) {
       const com = h * (apporte ? tx.apporte : tx.confie);
       r.oikos += com; r.verser += reste - com; r.cheffe += reste - com;
-      if (reste - com < 0) r.manque.add("prix client trop bas pour la mise à disposition");
+      if (reste - com < 0) { r.manque.add("prix client trop bas pour la mise à disposition"); const de = (r.manqueDe || (r.manqueDe = {}))["prix client trop bas pour la mise à disposition"] || (r.manqueDe["prix client trop bas pour la mise à disposition"] = {}), k = (x.client_id || "?") + "|" + act;
+        const o = de[k] || (de[k] = { client: c.id ? c : null, act, h: 0, equipe: e, debut: date }); o.h += h; }
     } else { const part = h * fr.client; r.cheffe += part; r.verser += part; r.oikos += reste - part; }
   });
   return { groupes, cours, alertes: Object.values(alertes), sortants };
@@ -6000,6 +6004,7 @@ async function vueReseau() {
     if (b.id === "nv-cheffe") return ficheCheffe(null);
     if (b.dataset.eqModif) return ficheCheffe(equipeDe(b.dataset.eqModif));
     if (b.dataset.eqClients) return clientsApportes(equipeDe(b.dataset.eqClients));
+    if (b.dataset.rsMq) { const r = avecManque[Number(b.dataset.rsMq)]; if (r) return ouvrirManque(r); return; }
     if (b.dataset.p) return ficheIntervenante(b.dataset.p);
     if (b.dataset.dispo) return miseADisposition(cacheProfils.find(x => x.id === b.dataset.dispo), b.dataset.vers || "oikos", b.dataset.depuis);
     if (b.dataset.demTraitee) { await maj(sb.from("demandes_reseau").update({ etat: "traitee", traitee_le: new Date().toISOString() }).eq("id", b.dataset.demTraitee)); toast("C'est noté : demande traitée"); compteurAVoir(); return demandesReseau(el.querySelector("#rs-dem")); }
@@ -6011,7 +6016,35 @@ async function vueReseau() {
   const res = await calculReseau(m0, m1), zone = el.querySelector("#rs");
   if (res.erreur) { zone.innerHTML = `<p class="muted">${esc(res.erreur)}</p>`; return; }
   const somme = (rs, f) => rs.reduce((t, r) => t + r[f], 0);
-  const manqueHtml = r => r.manque.size ? `<br><span class="tag warn">${ico("alerte")} ${r.h > r.hc ? heures((r.h - r.hc) * 60) + " pas comptée(s) : " : ""}à régler : ${esc([...r.manque].join(", "))}</span>` : "";
+  const avecManque = [];   // lignes qui ont un message orange : un clic dit quoi régler et où
+  const manqueHtml = r => r.manque.size ? `<br><button type="button" class="tag warn em-va" style="border:0;font:inherit;text-align:left;white-space:normal" data-rs-mq="${avecManque.push(r) - 1}" title="Clique pour voir quoi régler et y aller">${ico("alerte")} ${r.h > r.hc ? heures((r.h - r.hc) * 60) + " pas comptée(s) : " : ""}à régler : ${esc([...r.manque].join(", "))}</button>` : "";
+  /* Fenêtre du message orange : chaque manque, chez quel client, et le bouton qui ouvre l'endroit où le régler */
+  const ouvrirManque = r => {
+    const p = r.presta, blocs = Object.entries(r.manqueDe || {}).map(([raison, de]) => {
+      const lignes = Object.values(de).sort((x, y) => y.h - x.h);
+      const nomC = o => o.client ? esc(o.client.nom) : "client inconnu";
+      const quoi = o => `<span style="min-width:0"><b>${nomC(o)}</b> <span class="muted small">· ${esc(o.act || "activité ?")} · ${heures(o.h * 60)}</span></span>`;
+      if (raison === "prix client" || raison.startsWith("prix client trop bas")) return `<h3 style="margin:12px 0 4px">${raison === "prix client" ? "Prix de l'heure du client manquant" : "Prix du client trop bas pour la mise à disposition"}</h3>
+        <p class="muted small" style="margin:0 0 6px">À mettre dans la fiche du client › Prestataires › « Ce que rapporte ce client » (ou sur ses lignes de l'Excel).</p>
+        ${lignes.map(o => `<div class="ligne">${quoi(o)}${o.client ? `<button class="btn primary small" data-mq-client="${esc(o.client.id)}">${ico("euro")} Mettre son prix</button>` : ""}</div>`).join("")}`;
+      if (raison === "tarif du presta") return `<h3 style="margin:12px 0 4px">Tarif à l'heure de ${esc(nomPers(p))} manquant</h3>
+        <p class="muted small" style="margin:0 0 6px">Pour ${lignes.map(o => `${nomC(o)} (${esc(o.act || "?")})`).join(", ")}.</p>
+        <div class="row"><button class="btn primary small" data-mq-tarif="1">${ico("euro")} Ouvrir ses tarifs à l'heure</button></div>`;
+      if (raison === "commission d'OIKOS pour sa société") { const eqs = [...new Map(lignes.filter(o => o.equipe).map(o => [o.equipe.id, o.equipe])).values()];
+        return `<h3 style="margin:12px 0 4px">Commission d'OIKOS pas réglée</h3>${eqs.map(e => `<div class="ligne"><span>Équipe de <b>${esc(e.cheffe_nom)}</b></span><button class="btn primary small" data-eq-modif="${e.id}">${ico("stylo")} Régler sa commission</button></div>`).join("")}`; }
+      if (raison === "mise à disposition") return `<h3 style="margin:12px 0 4px">Mise à disposition à faire</h3>
+        ${lignes.map(o => `<div class="ligne">${quoi(o)}<button class="btn primary small" data-dispo="${p.id}" data-vers="${o.equipe ? o.equipe.id : ""}" data-depuis="${o.debut}">${ico("mission")} Mettre à disposition</button></div>`).join("")}`;
+      return `<h3 style="margin:12px 0 4px">${esc(raison)}</h3>${lignes.map(o => `<div class="ligne">${quoi(o)}</div>`).join("")}`; }).join("");
+    fenetre(`<h2 style="margin:0">${ico("alerte")} À régler pour ${esc(nomPers(p))}</h2>
+      <p class="muted small" style="margin:4px 0 0">${r.h > r.hc ? heures((r.h - r.hc) * 60) + " ne sont pas comptées ce mois-ci tant que ce n'est pas réglé." : "Tout est compté, mais un point est à revoir."} Une fois réglé, reviens ici : le calcul se refait à l'ouverture de la page.</p>
+      ${blocs || `<p class="muted">Détail pas disponible : recharge la page.</p>`}
+      <div class="row" style="margin-top:12px"><button class="btn flat" data-fermer>Fermer</button></div>`, (f, fermer) => {
+      f.onclick = ev => { const b = ev.target.closest("button"); if (!b) return;
+        if (b.dataset.mqClient) { fermer(); return ficheClient(b.dataset.mqClient, "presta"); }
+        if (b.dataset.mqTarif) { fermer(); pliOuvert.tarifs = true; return ficheIntervenante(p.id); }
+        if (b.dataset.eqModif) { fermer(); return ficheCheffe(equipeDe(b.dataset.eqModif)); }
+        if (b.dataset.dispo) { fermer(); return miseADisposition(cacheProfils.find(x => x.id === b.dataset.dispo), b.dataset.vers || "oikos", b.dataset.depuis); } };
+    }); };
   const dispoHtml = r => r.dispoH ? `<br><span class="muted small">${ico("mission")} ${heures(r.dispoH * 60)} mis à disposition par ${esc([...r.dispoDe].join(", "))}${r.dispo ? " · " + suEuros(r.dispo) + " à verser à son réseau" : " · part gardée par OIKOS"}</span>` : "";
   const prestaCell = r => `<button class="lien-pc" data-p="${r.presta.id}">${esc(nomPers(r.presta))}</button>${dispoHtml(r)}${manqueHtml(r)}`;
   const sortantsHtml = k => { const l = Object.values(res.sortants[k] || {}); if (!l.length) return "";
@@ -6419,7 +6452,11 @@ async function beneficePresta(boite, p, attrib) {
   const nav = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="btn" data-bn="-1" aria-label="Mois précédent">‹</button>
       <b style="text-transform:capitalize">${m0.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
       <button class="btn" data-bn="1" aria-label="Mois suivant" ${m1 > auj ? "disabled" : ""}>›</button></div>`;
-  boite.onclick = e => { const b = e.target.closest("[data-bn]"); if (!b) return; e.stopPropagation();
+  boite.onclick = e => {
+    /* Messages orange : « sans prix client » → la fiche du client (Prestataires) ; « sans tarif » → le pli Tarifs à l'heure de cette fiche */
+    const bp = e.target.closest("[data-bn-prix]"); if (bp) { e.stopPropagation(); if (bp.dataset.bnPrix) { const f = boite.closest(".fenetre"), x = f && f.querySelector("[data-fermer]"); if (x) x.click(); ficheClient(bp.dataset.bnPrix, "presta"); } return; }
+    const bt = e.target.closest("[data-bn-tarif]"); if (bt) { e.stopPropagation(); const d = (boite.closest(".fenetre") || document).querySelector('details[data-pli="tarifs"]'); if (d) { d.open = true; pliOuvert.tarifs = true; d.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
+    const b = e.target.closest("[data-bn]"); if (!b) return; e.stopPropagation();
     bnMois[id] = new Date(m0.getFullYear(), m0.getMonth() + +b.dataset.bn, 1); beneficePresta(boite, p, attrib).catch(x => { boite.innerHTML = `<p class="err">${esc(x.message || x)}</p>`; }); };
   boite.innerHTML = nav + `<p class="muted small">Calcul…</p>`;
   const tarifs = await chargerTarifs();
@@ -6446,7 +6483,7 @@ async function beneficePresta(boite, p, attrib) {
     if (t.taux > 0 && prix) { r.hc += h; r.fact += h * prix; r.paye += h * t.taux; }
   });
   const ligneHtml = r => `<tr><td>${esc(nomClient(r.client))} <span class="muted small">· ${esc(r.act)}</span>
-      ${r.sansTarif ? `<br><span class="tag warn">${heures(r.sansTarif * 60)} sans tarif : ${esc(r.pourquoi)}</span>` : ""}${r.sansPrix ? `<br><span class="tag warn">${heures(r.sansPrix * 60)} sans prix client</span>` : ""}</td>
+      ${r.sansTarif ? `<br><button type="button" class="tag warn em-va" style="border:0;font:inherit;text-align:left;white-space:normal" data-bn-tarif="1" title="Clique pour ouvrir ses tarifs à l'heure">${heures(r.sansTarif * 60)} sans tarif : ${esc(r.pourquoi)}</button>` : ""}${r.sansPrix ? `<br><button type="button" class="tag warn em-va" style="border:0;font:inherit;text-align:left;white-space:normal" data-bn-prix="${esc(r.client || "")}" title="Clique pour mettre le prix de l'heure de ce client">${heures(r.sansPrix * 60)} sans prix client</button>` : ""}</td>
       <td class="n">${heures(r.h * 60)}</td><td class="n">${r.hc ? suEuros(r.fact) : "—"}</td><td class="n">${r.hc ? suEuros(r.paye) : "—"}</td><td class="n"><b>${r.hc ? suEuros(r.fact - r.paye) : "—"}</b></td></tr>`;
   const bloc = (k, titre) => {
     const rs = Object.values(groupes[k]).sort((x, y) => norm(nomClient(x.client)) < norm(nomClient(y.client)) ? -1 : 1); if (!rs.length) return "";
